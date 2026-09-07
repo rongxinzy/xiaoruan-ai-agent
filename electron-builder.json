@@ -237,6 +237,7 @@
     ]
   },
   "linux": {
+    "maintainer": "rongxinzy",
     "target": [
       "AppImage",
       "deb"
