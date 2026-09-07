@@ -51,7 +51,7 @@ jobs:
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$SOURCE_COMMIT" origin/main || { echo 'Candidate source commit is not reachable from origin/main' >&2; exit 1; }
       - name: Verify candidate workflow run provenance
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           EXPECTED_RUN_ID: ${{ inputs.candidate_run_id }}
         with:
