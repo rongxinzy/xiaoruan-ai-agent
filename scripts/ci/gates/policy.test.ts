@@ -128,7 +128,8 @@ function workflow(name: string) {
 
 test('CI waits for every selected reusable check and always runs the merge gate', () => {
   const ci = workflow('ci.yml');
-  expect(ci.on).toHaveProperty(CiEvent.PullRequest);
+  expect(ci.on).toHaveProperty('workflow_dispatch');
+  expect(ci.on).not.toHaveProperty(CiEvent.PullRequest);
   const gate = ci.jobs['merge-gate'];
   expect(gate.if).toBe('always()');
   expect(gate.needs).toEqual(
@@ -161,7 +162,7 @@ test('candidate checks bind the source commit and block packaging before memory 
   const payload = steps.findIndex(step => step.name === 'Assemble Linux candidate payload');
   expect(install).toBeGreaterThan(-1);
   expect(payload).toBeGreaterThan(install);
-  expect(steps[install].run).toContain("'/opt/知远/知远'");
+  expect(steps[install].run).toContain("'/opt/晓软AI智能体/晓软AI智能体'");
   expect(workflow('memory-leak-nightly.yml').jobs[HeavyJob.Memory].uses).toBe(memoryJob.uses);
   expect(workflow('memory-leak-nightly.yml').jobs[HeavyJob.Memory].with?.['analyze-heap']).toBe(
     true,

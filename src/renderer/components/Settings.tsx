@@ -41,7 +41,6 @@ import {
   ProviderName,
   ProviderRegistry,
 } from '../../shared/providers';
-import { type AppUpdateRuntimeState, AppUpdateStatus } from '../../shared/appUpdate/constants';
 import {
   type AppConfig,
   defaultConfig,
@@ -73,7 +72,6 @@ import {
   PasswordEncryptedPayload,
 } from '../services/encryption';
 import { i18nService, LanguageType } from '../services/i18n';
-import { normalizeError } from '../services/errorNormalization';
 import { imService } from '../services/im';
 import { reconcileDefaultModelConfig } from '../services/modelConfigReconciliation';
 import { mergeDiscoveredProviderModels } from '../services/providerModelDiscovery';
@@ -179,7 +177,6 @@ interface SettingsProps extends SettingsOpenOptions {
     ui?: Record<string, 'hide' | 'disable' | 'readonly'>;
     disableUpdate?: boolean;
   } | null;
-  appUpdateState?: AppUpdateRuntimeState;
   managedModelsOnly?: boolean;
 }
 
@@ -196,11 +193,10 @@ const CUSTOM_PROVIDER_KEYS = [
   'custom_9',
 ] as const;
 
-const OFFICIAL_WEBSITE_URL = 'https://www.rongxzyai.com';
 
 const providerKeys = [
   ...Object.values(ProviderName).filter(
-    id => id !== ProviderName.Custom && id !== ProviderName.Zhiyuan,
+    id => id !== ProviderName.Custom,
   ),
   ...CUSTOM_PROVIDER_KEYS,
 ] as const;
@@ -657,7 +653,6 @@ const Settings: React.FC<SettingsProps> = ({
   noticeI18nKey,
   noticeExtra,
   enterpriseConfig,
-  appUpdateState,
   managedModelsOnly = false,
 }) => {
   // 状态
@@ -5156,28 +5151,21 @@ const Settings: React.FC<SettingsProps> = ({
         return <IMSettings />;
 
       case 'about': {
-        const update = appUpdateState;
-        const progress = update?.progress;
-        const isDownloading = update?.status === AppUpdateStatus.Downloading;
-        const formatBytes = (value: number) =>
-          value < 1024 * 1024
-            ? `${Math.round(value / 1024)} KB`
-            : `${(value / (1024 * 1024)).toFixed(1)} MB`;
         return (
           <div className="flex min-h-full flex-col items-center pt-6 pb-3">
             {/* Logo & App Name */}
             <img
-              src="zhiyuan-logo-light.svg"
-              alt="知远"
+              src="xiaoruan-logo-light.svg"
+              alt="晓软AI智能体"
               className="logo-light h-16 w-auto mb-3 select-none"
             />
             <img
-              src="zhiyuan-logo-dark.svg"
-              alt="知远"
+              src="xiaoruan-logo-dark.svg"
+              alt="晓软AI智能体"
               className="logo-dark h-16 w-auto mb-3 select-none"
             />
             <span className="text-xs text-muted-foreground mt-1">v{appVersion}</span>
-            <span className="text-xs text-muted-foreground mt-0.5">开放源码，汇聚智慧</span>
+            <span className="text-xs text-muted-foreground mt-0.5">{i18nService.t('appTitle')}</span>
 
             {/* Info Card */}
             <div className="w-full mt-8 rounded-xl border border-border overflow-hidden">
@@ -5187,167 +5175,15 @@ const Settings: React.FC<SettingsProps> = ({
                   <span className="text-sm text-muted-foreground">{appVersion}</span>
                 </div>
               </div>
-              <div className="px-4 py-3 border-b border-border space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-foreground">
-                    {i18nService.t('updateSectionTitle')}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {update?.status === AppUpdateStatus.Checking
-                      ? i18nService.t('updateChecking')
-                      : update?.status === AppUpdateStatus.UpToDate
-                        ? i18nService.t('updateUpToDate')
-                        : update?.status === AppUpdateStatus.Error
-                          ? i18nService.t('updateCheckFailed')
-                          : update?.info?.latestVersion
-                            ? `v${update.info.latestVersion}`
-                            : i18nService.t('updateNotChecked')}
-                  </span>
-                </div>
-                {isDownloading ? (
-                  <>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={`h-full bg-primary transition-[width] duration-200 ${progress?.percent === undefined ? 'w-1/3 animate-pulse' : ''}`}
-                        style={{
-                          width:
-                            progress?.percent === undefined
-                              ? undefined
-                              : `${Math.min(100, Math.max(0, progress.percent * 100))}%`,
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>
-                        {progress
-                          ? `${formatBytes(progress.received)}${progress.total ? ` / ${formatBytes(progress.total)}` : ''}`
-                          : i18nService.t('updateDownloading')}
-                      </span>
-                      <span>
-                        {progress?.percent !== undefined
-                          ? `${Math.round(progress.percent * 100)}%`
-                          : ''}
-                        {progress?.speed ? ` · ${formatBytes(progress.speed)}/s` : ''}
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => void window.electron.appUpdate.cancelDownload()}
-                      >
-                        {i18nService.t('updateDownloadCancel')}
-                      </Button>
-                    </div>
-                  </>
-                ) : update?.status === AppUpdateStatus.Ready ? (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      void window.electron.appUpdate.installReady().then(result => {
-                        if (!result.success) {
-                          window.dispatchEvent(
-                            new CustomEvent('app:showToast', {
-                              detail: {
-                                message: normalizeError(result.error || i18nService.t('updateInstallFailed')),
-                                isError: true,
-                              },
-                            }),
-                          );
-                        }
-                      });
-                    }}
-                  >
-                    {i18nService.t('updateReadyConfirm')}
-                  </Button>
-                ) : update?.status === AppUpdateStatus.Error && update.info ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs text-destructive">
-                      {update.errorMessage || i18nService.t('updateDownloadFailed')}
-                    </span>
-                    <Button
-                      size="sm"
-                      onClick={() => void window.electron.appUpdate.retryDownload()}
-                    >
-                      {i18nService.t('updateRetry')}
-                    </Button>
-                  </div>
-                ) : update?.status === AppUpdateStatus.Available ? (
-                  <div className="space-y-2">
-                    {update.info?.manualDownloadOnly ? (
-                      <div className="text-xs text-muted-foreground">
-                        {i18nService.t('updateManualOnly')}
-                      </div>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      onClick={() => void window.electron.appUpdate.retryDownload()}
-                    >
-                      {i18nService.t(
-                        update.info?.manualDownloadOnly
-                          ? 'updateOpenDownloadPage'
-                          : 'updateDownloadNow',
-                      )}
-                    </Button>
-                  </div>
-                ) : update?.status !== AppUpdateStatus.Checking &&
-                  update?.status !== AppUpdateStatus.UpToDate ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void window.electron.appUpdate.checkNow({ manual: true })}
-                  >
-                    {i18nService.t('updateCheckNow')}
-                  </Button>
-                ) : null}
-                {update?.status === AppUpdateStatus.Error && !update.info ? (
-                  <div className="text-xs text-destructive">
-                    {update.errorMessage || i18nService.t('updateCheckFailed')}
-                  </div>
-                ) : null}
-                {update?.lastCheckedAt ? (
-                  <div className="text-xs text-muted-foreground">
-                    {i18nService.t('updateLastChecked')}
-                    {new Date(update.lastCheckedAt).toLocaleString()}
-                  </div>
-                ) : null}
-              </div>
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <span className="text-sm text-foreground">GitHub</span>
                 <a
-                  href="https://github.com/rongxinzy/RongxinAI"
+                  href="https://github.com/rongxinzy/xiaoruan-ai-agent"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-muted-foreground hover:text-primary hover:underline transition-colors"
                 >
                   {i18nService.t('mcpViewOnGithub')}
-                </a>
-              </div>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <span className="text-sm text-foreground">
-                  {i18nService.t('aboutOfficialWebsite')}
-                </span>
-                <a
-                  href={OFFICIAL_WEBSITE_URL}
-                  onClick={event => {
-                    event.preventDefault();
-                    void window.electron.shell.openExternal(OFFICIAL_WEBSITE_URL);
-                  }}
-                  rel="noopener noreferrer"
-                  className="text-sm text-muted-foreground hover:text-primary hover:underline transition-colors"
-                >
-                  {OFFICIAL_WEBSITE_URL}
-                </a>
-              </div>
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm text-foreground">关于我们</span>
-                <a
-                  href="http://www.rongxzy.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-muted-foreground hover:text-primary hover:underline transition-colors"
-                >
-                  北京容芯致远科技有限公司
                 </a>
               </div>
             </div>

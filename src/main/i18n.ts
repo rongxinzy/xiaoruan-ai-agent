@@ -8,7 +8,7 @@
  * Usage:
  *   import { t, setLanguage } from './i18n';
  *   setLanguage('en');
- *   const label = t('trayShowWindow'); // "Open 知远"
+ *   const label = t('trayShowWindow'); // "Open 晓软AI智能体"
  *   const msg = t('imMissingCredentials', { fields: 'appId, appSecret' });
  */
 
@@ -20,7 +20,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     todoReminderTitle: '待办提醒',
     todoReminderBody: '该完成：{title}',
     // Tray menu
-    trayShowWindow: '打开知远',
+    trayShowWindow: '打开晓软AI智能体',
     trayNewTask: '新建任务',
     traySettings: '设置',
     trayQuit: '退出',
@@ -116,7 +116,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     llamacppModelLaunchLogWindowTitle: '模型启动日志',
     localInferenceImportRuntimeDialogTitle: '选择本地推理 backend',
     localInferenceImportRuntimeDialogMessage:
-      '请选择本地推理 backend 主包压缩包（zip 或 tar.gz）；如果已经解压，请进入目录后选择其中任意文件。知远智能体 会校验平台和 backend 类型后导入。',
+      '请选择本地推理 backend 主包压缩包（zip 或 tar.gz）；如果已经解压，请进入目录后选择其中任意文件。晓软AI智能体 会校验平台和 backend 类型后导入。',
     coworkErrorUnknown: '任务执行出错，请重试。如果问题持续出现，请检查模型配置。',
     imErrorPrefix: '处理消息时出错',
 
@@ -308,14 +308,6 @@ const translations: Record<LanguageType, Record<string, string>> = {
     emailTestSuccess: '连接测试成功！',
     emailTestFailed: '连接测试失败：{error}',
 
-    // Community account authentication
-    communityAuthLoginIncomplete: '登录未完成，请重试。',
-    communityAuthServiceUnavailable: '登录服务暂时不可用，请稍后重试。',
-    modelPoolLoginRequired: '请先登录知远账号后使用免费模型。',
-    modelPoolEntitlementRequired: '当前账号没有免费模型权益。',
-    modelPoolQuotaExceeded: '今日免费模型额度已用完，请明日再试。',
-    modelPoolServiceUnavailable: '免费模型服务暂时不可用，请稍后重试。',
-
     'enterprise.updateBlocked': '版本更新由企业统一管理',
   },
   en: {
@@ -324,7 +316,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     scheduledTaskDeliveryAccountMismatch:
       'The channel account does not match the selected conversation',
     // Tray menu
-    trayShowWindow: 'Open 知远',
+    trayShowWindow: 'Open 晓软AI智能体',
     trayNewTask: 'New Task',
     traySettings: 'Settings',
     trayQuit: 'Quit',
@@ -443,7 +435,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     llamacppModelLaunchLogWindowTitle: 'Model startup logs',
     localInferenceImportRuntimeDialogTitle: 'Select local inference Backend',
     localInferenceImportRuntimeDialogMessage:
-      'Select a local inference backend archive (zip or tar.gz). If it is already extracted, open that directory and choose any file inside it. ZhiYuan Agent will validate the platform and backend type before importing it.',
+      'Select a local inference backend archive (zip or tar.gz). If it is already extracted, open that directory and choose any file inside it. Xiaoruan AI Agent will validate the platform and backend type before importing it.',
     coworkErrorUnknown:
       'Task failed due to an unexpected error. Please retry. If the issue persists, check your model configuration.',
     imErrorPrefix: 'Error processing message',
@@ -664,16 +656,6 @@ const translations: Record<LanguageType, Record<string, string>> = {
     testConnection: 'Test Connection',
     emailTestSuccess: 'Connection test successful!',
     emailTestFailed: 'Connection test failed: {error}',
-
-    // Community account authentication
-    communityAuthLoginIncomplete: 'Login was not completed. Please try again.',
-    communityAuthServiceUnavailable:
-      'The login service is temporarily unavailable. Please try again later.',
-    modelPoolLoginRequired: 'Sign in to your ZhiYuan account to use the free model.',
-    modelPoolEntitlementRequired: 'This account is not entitled to use the free model.',
-    modelPoolQuotaExceeded: 'Your free model quota is exhausted for today. Try again tomorrow.',
-    modelPoolServiceUnavailable:
-      'The free model service is temporarily unavailable. Please try again later.',
 
     'enterprise.updateBlocked': 'Updates are managed by enterprise',
   },

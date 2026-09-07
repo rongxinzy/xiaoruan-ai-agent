@@ -317,7 +317,7 @@ jobs:
           debs=(release/*.deb)
           [[ ${#debs[@]} -eq 1 ]] || { echo 'Expected exactly one Linux deb package' >&2; exit 1; }
           sudo apt-get install -y "$(realpath "${debs[0]}")"
-          node scripts/verify-linux-renderer.mjs '/opt/知远/知远' release/linux-deb-install-smoke.png
+          node scripts/verify-linux-renderer.mjs '/opt/晓软AI智能体/晓软AI智能体' release/linux-deb-install-smoke.png
       - name: Upload Linux candidate startup diagnostics
         if: ${{ always() && matrix.platform == 'linux' }}
         uses: actions/upload-artifact@v6

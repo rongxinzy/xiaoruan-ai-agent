@@ -1,12 +1,12 @@
-# Contributing to ZhiYuan Agent
+# Contributing to Xiaoruan AI Agent
 
-Thank you for your interest in contributing to ZhiYuan Agent. Contributions of all sizes are welcome, including bug reports, documentation improvements, tests, UI refinements, and new features.
+Thank you for your interest in contributing to Xiaoruan AI Agent. Contributions of all sizes are welcome, including bug reports, documentation improvements, tests, UI refinements, and new features.
 
 Please read this guide and [`AGENTS.md`](AGENTS.md) before making a code change. `AGENTS.md` contains the repository's detailed architecture and implementation rules.
 
 ## Before You Start
 
-- Search the existing [issues](https://github.com/rongxinzy/RongxinAI/issues) and pull requests before opening a new one.
+- Search the existing [issues](https://github.com/rongxinzy/xiaoruan-ai-agent/issues) and pull requests before opening a new one.
 - Use the bug report or feature request issue template and include enough context for others to reproduce or evaluate the request.
 - For a large feature, architectural change, or breaking change, open an issue first so the approach can be discussed before implementation.
 - Never include API keys, credentials, private documents, personal data, or other sensitive information in an issue, log, screenshot, or test fixture.
@@ -24,8 +24,8 @@ Windows release builds also require PortableGit. Native dependencies such as `be
 ### Install and Run
 
 ```bash
-git clone https://github.com/rongxinzy/RongxinAI.git ZhiYuanAgent
-cd ZhiYuanAgent
+git clone https://github.com/rongxinzy/xiaoruan-ai-agent.git XiaoruanAgent
+cd XiaoruanAgent
 bun install
 ```
 
@@ -50,7 +50,7 @@ Use Bun for dependency installation and commit changes to `bun.lock` when depend
 | `MCPs/`               | Bundled MCP integrations                                   |
 | `scripts/`            | Development, runtime, and packaging scripts                |
 
-ZhiYuan Agent uses Electron process isolation. Renderer code must not access Node.js or Electron APIs directly; use the typed preload and IPC boundary.
+Xiaoruan AI Agent uses Electron process isolation. Renderer code must not access Node.js or Electron APIs directly; use the typed preload and IPC boundary.
 
 ## Making a Change
 
@@ -69,7 +69,7 @@ When changing behavior:
 - Add or update co-located Vitest tests where practical.
 - Preserve process isolation and update all affected IPC types, constants, preload methods, handlers, and callers together.
 - Add user-visible text to both the Chinese and English i18n dictionaries. Do not hardcode UI copy.
-- Use the public product name **ZhiYuan Agent** in English-facing product copy.
+- Use the public product name **Xiaoruan AI Agent** in English-facing product copy.
 - Update relevant documentation when setup, configuration, or user behavior changes.
 
 ## Code Style

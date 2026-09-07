@@ -29,7 +29,7 @@ const showToast = (message: string) => {
 
 /**
  * 「创建项目」dialog: creates a new empty project directory under a base path
- * (default: <Documents>/ZhiYuanAgent/Workspaces) and hands the new path back
+ * (default: <Documents>/XiaoruanAgent/Workspaces) and hands the new path back
  * to the folder-selection flow.
  */
 const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({

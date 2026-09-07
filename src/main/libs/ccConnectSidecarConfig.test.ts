@@ -4,7 +4,7 @@ import { serializeCcConnectSidecarConfig } from './ccConnectSidecarConfig';
 import { SchedulerClockAccount } from '../../scheduledTask/ccConnectCronClient';
 
 const base = {
-  dataDir: 'C:\\Users\\test\\AppData\\Local\\ZhiYuanAgent\\cc-connect',
+  dataDir: 'C:\\Users\\test\\AppData\\Local\\XiaoruanAgent\\cc-connect',
   bridgeUrl: 'http://127.0.0.1:34567',
   bridgeToken: 'secret',
   cronControlListen: '127.0.0.1:0',

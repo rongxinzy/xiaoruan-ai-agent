@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Expert Initializer for ZhiYuan Agent.
+ * Expert Initializer for Xiaoruan AI Agent.
  *
  * Creates a new expert package directory from template, compatible with
- * ZhiYuan Agent's Cowork runtime.
+ * Xiaoruan AI Agent's Cowork runtime.
  *
  * Usage:
  *   node init_expert.js <expert-name> --type agent|team [--path <output-dir>]
  *
- * Output directory defaults to the ZhiYuan Agent user data directory.
+ * Output directory defaults to the Xiaoruan AI Agent user data directory.
  */
 
 const fs = require('fs');
@@ -19,14 +19,14 @@ function getDefaultExpertPackagesDir() {
   const platform = process.platform;
   let base;
   if (platform === 'win32') {
-    // The app stores user data under %APPDATA%\ZhiYuanAgent (Roaming), not Local.
+    // The app stores user data under %APPDATA%\XiaoruanAgent (Roaming), not Local.
     base = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'));
   } else if (platform === 'darwin') {
     base = path.join(os.homedir(), 'Library', 'Application Support');
   } else {
     base = path.join(os.homedir(), '.config');
   }
-  return path.join(base, 'ZhiYuanAgent', 'expert-packages');
+  return path.join(base, 'XiaoruanAgent', 'expert-packages');
 }
 
 function titleCase(name) {

@@ -1,8 +1,6 @@
 name: Clean online update storage
 
 on:
-  schedule:
-    - cron: '37 3 * * *'
   workflow_dispatch:
 
 concurrency:

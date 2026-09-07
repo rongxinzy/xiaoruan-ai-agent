@@ -18,10 +18,10 @@ describe('ProviderName constants', () => {
 });
 
 describe('ProviderRegistry', () => {
-  test('providerIds returns 18 providers (no custom or legacy server)', () => {
+  test('providerIds returns 17 providers (no custom or legacy server)', () => {
     const ids = ProviderRegistry.providerIds;
-    expect(ids.length).toBe(18);
-    expect(ids).toContain(ProviderName.Zhiyuan);
+    expect(ids.length).toBe(17);
+    expect(ids).not.toContain('zhiyuan');
     expect(ids).not.toContain(ProviderName.Custom);
     expect(ids).not.toContain('zhiyuan-server');
   });
@@ -394,10 +394,10 @@ describe('ProviderRegistry', () => {
     expect(ProviderRegistry.supportsCodingPlan('unknown')).toBe(false);
   });
 
-  test('idsByRegion china returns 12 providers', () => {
+  test('idsByRegion china returns 11 providers', () => {
     const china = ProviderRegistry.idsByRegion('china');
-    expect(china.length).toBe(12);
-    expect(china).toContain(ProviderName.Zhiyuan);
+    expect(china.length).toBe(11);
+    expect(china).not.toContain('zhiyuan');
     expect(china).toContain(ProviderName.DeepSeek);
     expect(china).toContain(ProviderName.Qianfan);
     expect(china).toContain(ProviderName.LlamaCpp);

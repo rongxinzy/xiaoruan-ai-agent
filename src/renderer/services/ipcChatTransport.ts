@@ -15,7 +15,7 @@ import {
   providerRequiresApiKey,
   shouldUseOpenAIResponsesApi,
 } from './apiConfigResolver';
-import { buildAnthropicMessagesUrl, ProviderName } from '../../shared/providers';
+import { buildAnthropicMessagesUrl } from '../../shared/providers';
 
 interface StreamBridge {
   start(requestId: string): Promise<{ ok: boolean; status: number; error?: string }>;
@@ -98,21 +98,6 @@ export class IpcChatTransport implements ChatTransport<UIMessage> {
   } & ChatRequestOptions): Promise<ReadableStream<UIMessageChunk>> {
     const modelId = this.options.model || detectModel(messages);
     const provider = this.options.provider || detectProvider(modelId);
-    if (provider === ProviderName.Zhiyuan) {
-      const { body } = this.buildOpenAICompatibleRequest(messages, '', '', modelId, provider);
-      return this.streamOverBridge(chatId, abortSignal, 'openai', {
-        start: requestId => window.electron.modelPool.stream({ requestId, body }),
-        cancel: requestId => window.electron.modelPool.cancelStream(requestId),
-        onData: (requestId, callback) =>
-          window.electron.modelPool.onStreamData(requestId, callback),
-        onDone: (requestId, callback) =>
-          window.electron.modelPool.onStreamDone(requestId, callback),
-        onError: (requestId, callback) =>
-          window.electron.modelPool.onStreamError(requestId, callback),
-        onAbort: (requestId, callback) =>
-          window.electron.modelPool.onStreamAbort(requestId, callback),
-      });
-    }
     const config = this.options.apiKey
       ? {
           apiKey: this.options.apiKey,

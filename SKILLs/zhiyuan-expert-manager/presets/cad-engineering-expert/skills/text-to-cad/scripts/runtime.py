@@ -39,11 +39,11 @@ def default_cache_root() -> Path:
     system = platform.system().lower()
     if system == "windows":
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-        return base / "ZhiYuanAgent" / "Cache" / "text-to-cad"
+        return base / "XiaoruanAgent" / "Cache" / "text-to-cad"
     if system == "darwin":
-        return Path.home() / "Library" / "Caches" / "ZhiYuanAgent" / "text-to-cad"
+        return Path.home() / "Library" / "Caches" / "XiaoruanAgent" / "text-to-cad"
     base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return base / "ZhiYuanAgent" / "text-to-cad"
+    return base / "XiaoruanAgent" / "text-to-cad"
 
 
 def archive_digest() -> str:

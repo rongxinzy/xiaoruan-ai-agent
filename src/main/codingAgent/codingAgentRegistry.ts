@@ -41,7 +41,7 @@ export class CodingAgentRegistry extends EventEmitter {
     super();
     this.profiles.set(CodingAgentProfileId.Builtin, {
       id: CodingAgentProfileId.Builtin,
-      name: '知远编程 Agent',
+      name: '晓软AI智能体编程 Agent',
       description: '无需安装外部 Agent',
       driverKind: CodingAgentDriverKind.Builtin,
       status: CodingAgentProfileStatus.Ready,

@@ -81,7 +81,7 @@ function Wait-ForUninstallCompletion {
       Write-Host '[WindowsInstallerSmoke] Uninstaller processes before timeout:'
       Get-CimInstance Win32_Process | Where-Object {
         $_.Name -like 'Uninstall*.exe' -or $_.Name -like 'Un_*.exe' -or
-        $_.CommandLine -like '*ZhiYuanAgent*' -or $_.CommandLine -like '*zhiyuan-agent*'
+        $_.CommandLine -like '*XiaoruanAgent*' -or $_.CommandLine -like '*zhiyuan-agent*'
       } | Select-Object ProcessId, ParentProcessId, Name, CommandLine |
         Format-Table -Wrap | Out-String | Write-Host
       throw "Background uninstall did not remove the managed roots within $TimeoutSeconds seconds"
@@ -100,8 +100,8 @@ if ($installers.Count -ne 1) {
 
 $installer = $installers[0].FullName
 $installRoot = Join-Path $env:LOCALAPPDATA 'Programs\zhiyuan-agent'
-$runtimeRoot = Join-Path $env:LOCALAPPDATA 'ZhiYuanAgent\runtimes'
-$timingLog = Join-Path $env:APPDATA 'ZhiYuanAgent\install-timing.log'
+$runtimeRoot = Join-Path $env:LOCALAPPDATA 'XiaoruanAgent\runtimes'
+$timingLog = Join-Path $env:APPDATA 'XiaoruanAgent\install-timing.log'
 $componentKeys = @('channel-runtime', 'skills', 'mcps', 'portable-git', 'python', 'skill-python', 'uv')
 
 try {

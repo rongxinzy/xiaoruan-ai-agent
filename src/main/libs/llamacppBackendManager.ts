@@ -135,7 +135,7 @@ function resolveBundledManifestUrl(): string {
 
 async function fetchManifestFromUrl(manifestUrl: string): Promise<LlamaCppBackendManifest> {
   const response = await fetch(manifestUrl, {
-    headers: { 'User-Agent': 'ZhiYuanAgent/llamacpp-backend-manager' },
+    headers: { 'User-Agent': 'XiaoruanAgent/llamacpp-backend-manager' },
     // Listing must fall back promptly when the optional remote manifest is unavailable.
     signal: AbortSignal.timeout(LLAMACPP_BACKEND_MANIFEST_FETCH_TIMEOUT_MS),
   });
@@ -439,7 +439,7 @@ async function resolveRemoteContentLength(
   try {
     const response = await fetch(url, {
       method: 'HEAD',
-      headers: { 'User-Agent': 'ZhiYuanAgent/llamacpp-backend-manager' },
+      headers: { 'User-Agent': 'XiaoruanAgent/llamacpp-backend-manager' },
     });
     const size = Number(response.headers.get('content-length'));
     if (!response.ok || !Number.isFinite(size) || size <= 0) return undefined;
@@ -1117,7 +1117,7 @@ function validateBackendForMachine(
     return 'Vulkan backend will validate device availability after installation.';
   }
   if (entry.backend === 'win-x64-hip') {
-    return 'HIP backend requires a Windows x64 machine with AMD HIP/ROCm support. ZhiYuanAgent will validate device availability after installation.';
+    return 'HIP backend requires a Windows x64 machine with AMD HIP/ROCm support. XiaoruanAgent will validate device availability after installation.';
   }
   if (entry.backend === 'win-arm64-opencl-adreno') {
     if (normalizePlatform(platform) !== 'win32' || normalizeArch(arch) !== 'arm64') {

@@ -73,7 +73,7 @@ const MODELSCOPE_SKILL_MARKETPLACE = {
   SourceName: 'ModelScope',
   BaseUrl: 'https://modelscope.cn',
   SkillsApiPath: '/openapi/v1/skills',
-  UserAgent: 'ZhiYuanAgent/skill-marketplace',
+  UserAgent: 'XiaoruanAgent/skill-marketplace',
   DefaultPageNumber: 1,
   DefaultPageSize: 8,
   MaximumPageSize: 100,

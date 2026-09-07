@@ -1,4 +1,4 @@
-export const APP_NAME = '知远智能体';
-export const APP_ID = 'zhiyuan';
-export const EXPORT_FORMAT_TYPE = 'zhiyuan.providers';
-export const EXPORT_PASSWORD = 'zhiyuan-APP';
+export const APP_NAME = '晓软AI智能体';
+export const APP_ID = 'xiaoruan-ai-agent';
+export const EXPORT_FORMAT_TYPE = 'xiaoruan.providers';
+export const EXPORT_PASSWORD = 'xiaoruan-APP';

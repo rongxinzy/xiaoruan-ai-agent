@@ -47,7 +47,6 @@ import { SidebarAnimatedPanelLeftCloseIcon } from './icons/SidebarAnimatedPanelL
 import { toggleBatchSelection, toggleVisibleBatchSelection } from './agentSidebar/batchSelection';
 import MyAgentSidebarTree from './agentSidebar/MyAgentSidebarTree';
 import { sortAgentSidebarTasks, toAgentSidebarTaskNode } from './agentSidebar/useAgentSidebarState';
-import LoginButton from './LoginButton';
 import type { PrefetchableFeatureView } from './featureViewPrefetch';
 import { SidebarNavigationControls, type SidebarActiveView } from './SidebarNavigationControls';
 
@@ -68,8 +67,6 @@ interface SidebarProps {
   onNewChat: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-  updateEntry?: React.ReactNode;
-  hideLogin?: boolean;
   managedModelsOnly?: boolean;
   /** Warms the lazily loaded chunk for a view on hover/focus intent. */
   onPrefetchView?: (view: PrefetchableFeatureView) => void;
@@ -94,8 +91,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   onNewChat,
   isCollapsed,
   onToggleCollapse,
-  updateEntry,
-  hideLogin,
   managedModelsOnly = false,
   onPrefetchView,
 }) => {
@@ -401,13 +396,13 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div className="draggable sidebar-header-drag h-8 flex items-center justify-between px-3">
               <div className={`flex items-center gap-2 ${isMac ? 'pl-[68px]' : ''}`}>
                 <img
-                  src="zhiyuan-logo-light.svg"
-                  alt="知远"
+                  src="xiaoruan-logo-light.svg"
+                  alt="晓软AI智能体"
                   className="logo-light h-5 w-auto select-none"
                 />
                 <img
-                  src="zhiyuan-logo-dark.svg"
-                  alt="知远"
+                  src="xiaoruan-logo-dark.svg"
+                  alt="晓软AI智能体"
                   className="logo-dark h-5 w-auto select-none"
                 />
               </div>
@@ -608,15 +603,17 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             <div className="space-y-1 px-3 pb-3 pt-1">
-              {updateEntry}
-              {!hideLogin ? (
-                <LoginButton
-                  onShowSettings={() => {
-                    onPrefetchView?.('settings');
-                    onShowSettings();
-                  }}
-                />
-              ) : null}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={() => {
+                  onPrefetchView?.('settings');
+                  onShowSettings();
+                }}
+              >
+                {i18nService.t('settings')}
+              </Button>
             </div>
           )}
           <DestructiveConfirmDialog

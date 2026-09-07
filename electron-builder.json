@@ -1,7 +1,7 @@
 {
-  "appId": "com.zhiyuanagent.app",
-  "productName": "知远",
-  "executableName": "知远",
+  "appId": "com.xiaoruan.agent",
+  "productName": "晓软AI智能体",
+  "executableName": "晓软AI智能体",
   "directories": {
     "output": "release"
   },
@@ -14,12 +14,18 @@
     {
       "from": "dist",
       "to": "dist",
-      "filter": ["**/*", "!**/*.map"]
+      "filter": [
+        "**/*",
+        "!**/*.map"
+      ]
     },
     {
       "from": "dist-electron",
       "to": "dist-electron",
-      "filter": ["**/*", "!**/*.map"]
+      "filter": [
+        "**/*",
+        "!**/*.map"
+      ]
     },
     "!**/*.map",
     "!**/*.d.ts",
@@ -69,12 +75,16 @@
     {
       "from": "resources/tray",
       "to": "tray",
-      "filter": ["**/*"]
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "resources/llamacpp-backends",
       "to": "llamacpp-backends",
-      "filter": ["**/*"]
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "resources/modelscope.tokens.local.json",
@@ -87,22 +97,18 @@
     {
       "from": "vendor/engram-runtime/current",
       "to": "memory",
-      "filter": ["engram", "engram.exe", "runtime-build-info.json", "LICENSE"]
-    }
-  ],
-  "protocols": [
-    {
-      "name": "知远",
-      "schemes": ["zhiyuan"]
+      "filter": [
+        "engram",
+        "engram.exe",
+        "runtime-build-info.json",
+        "LICENSE"
+      ]
     }
   ],
   "mac": {
-    "target": ["dmg", "zip"],
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "https://updates.rongxzyai.com/v2/electron/stable/darwin/arm64/default"
-      }
+    "target": [
+      "dmg",
+      "zip"
     ],
     "icon": "build/icons/mac/icon.icns",
     "category": "public.app-category.productivity",
@@ -112,15 +118,17 @@
     "entitlementsInherit": "build/entitlements.mac.plist",
     "extendInfo": {
       "CFBundleIconName": "icon",
-      "NSCalendarsUsageDescription": "知远需要访问您的日历来帮助您查看和管理日程安排，例如查找事件、创建会议等。",
-      "NSRemindersUsageDescription": "知远需要访问您的提醒事项来帮助您管理待办事项。",
-      "NSAppleEventsUsageDescription": "知远需要使用 Apple Events 来控制 Calendar 应用执行自动化操作。"
+      "NSCalendarsUsageDescription": "晓软AI智能体需要访问您的日历来帮助您查看和管理日程安排，例如查找事件、创建会议等。",
+      "NSRemindersUsageDescription": "晓软AI智能体需要访问您的提醒事项来帮助您管理待办事项。",
+      "NSAppleEventsUsageDescription": "晓软AI智能体需要使用 Apple Events 来控制 Calendar 应用执行自动化操作。"
     },
     "extraResources": [
       {
         "from": "MCPs",
         "to": "MCPs",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "SKILLs",
@@ -158,17 +166,23 @@
       {
         "from": "resources/uv-mac",
         "to": "uv-mac",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "resources/python-mac",
         "to": "python-mac",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "resources/skill-python",
         "to": "skill-python",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "vendor/channel-runtime/current",
@@ -205,12 +219,8 @@
     "sign": false
   },
   "win": {
-    "target": ["nsis"],
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "https://updates.rongxzyai.com/v2/electron/stable/win32/x64/lite"
-      }
+    "target": [
+      "nsis"
     ],
     "icon": "build/icons/win/icon.ico",
     "requestedExecutionLevel": "asInvoker",
@@ -227,14 +237,11 @@
     ]
   },
   "linux": {
-    "target": ["AppImage", "deb"],
-    "syncDesktopName": true,
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "https://updates.rongxzyai.com/v2/electron/stable/linux/x64/appimage"
-      }
+    "target": [
+      "AppImage",
+      "deb"
     ],
+    "syncDesktopName": true,
     "icon": "build/icons/png",
     "category": "Utility",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
@@ -242,22 +249,30 @@
       {
         "from": "MCPs",
         "to": "MCPs",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "resources/uv-linux",
         "to": "uv-linux",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "resources/python-linux",
         "to": "python-linux",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "resources/skill-python",
         "to": "skill-python",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "SKILLs",
@@ -335,7 +350,16 @@
     "artifactName": "${productName}-Setup-${version}.${ext}"
   },
   "electronVersion": "40.2.1",
-  "electronLanguages": ["en-US", "zh-CN", "zh-TW", "ja", "ko", "fr", "es", "es-419"],
+  "electronLanguages": [
+    "en-US",
+    "zh-CN",
+    "zh-TW",
+    "ja",
+    "ko",
+    "fr",
+    "es",
+    "es-419"
+  ],
   "electronUpdaterCompatibility": ">=6.0.0",
   "detectUpdateChannel": false,
   "generateUpdatesFilesForAllChannels": false,
@@ -350,5 +374,6 @@
     "node_modules/node-pty/**",
     "node_modules/npm/**"
   ],
-  "asar": true
+  "asar": true,
+  "publish": null
 }

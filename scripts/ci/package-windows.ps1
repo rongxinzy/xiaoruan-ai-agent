@@ -182,7 +182,7 @@ if ($exe) {
 
   Write-Host "Package: $($exe.FullName) ($([math]::Round($exe.Length / 1MB, 1)) MB)"
   $encodedName = [uri]::EscapeDataString($exe.Name)
-  $uploadUrl = "http://172.18.5.249:8081/artifactory/ZhiYuanAgent/windows/$encodedName"
+  $uploadUrl = "http://172.18.5.249:8081/artifactory/XiaoruanAgent/windows/$encodedName"
   Write-Host "Uploading to $uploadUrl ..."
 
   if ($env:ARTIFACTORY_USER -and $env:ARTIFACTORY_PASSWORD) {

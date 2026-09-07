@@ -38,9 +38,9 @@ describe('published update smoke helpers', () => {
 
   test('compares redirects after URL normalization for Unicode filenames', () => {
     const signedUrl =
-      'https://downloads.rongxzyai.com/releases/2026.8.6-build.6/win32-x64-lite/知远-Setup-2026.8.6-build.6.exe';
+      'https://downloads.rongxzyai.com/releases/2026.8.6-build.6/win32-x64-lite/晓软AI智能体-Setup-2026.8.6-build.6.exe';
     const encodedLocation =
-      'https://downloads.rongxzyai.com/releases/2026.8.6-build.6/win32-x64-lite/%E7%9F%A5%E8%BF%9C-Setup-2026.8.6-build.6.exe';
+      'https://downloads.rongxzyai.com/releases/2026.8.6-build.6/win32-x64-lite/%E6%99%93%E8%BD%AFAI%E6%99%BA%E8%83%BD%E4%BD%93-Setup-2026.8.6-build.6.exe';
 
     expect(redirectMatches(encodedLocation, new URL('https://updates.rongxzyai.com/'), signedUrl)).toBe(
       true,

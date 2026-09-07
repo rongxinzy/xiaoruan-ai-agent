@@ -2,21 +2,21 @@
 
 ## Testing the Complete Integration
 
-This guide walks through testing the entire Web Search Skill integration with ZhiYuan Agent.
+This guide walks through testing the entire Web Search Skill integration with Xiaoruan AI Agent.
 
 ## Prerequisites
 
-1. ZhiYuan Agent built and ready to run
+1. Xiaoruan AI Agent built and ready to run
 2. Google Chrome installed
 3. Internet connection available
 
 ## Test 1: Service Auto-Start
 
-**Objective:** Verify that the Bridge Server starts automatically with ZhiYuan Agent.
+**Objective:** Verify that the Bridge Server starts automatically with Xiaoruan AI Agent.
 
 **Steps:**
 
-1. Start ZhiYuan Agent in development mode:
+1. Start Xiaoruan AI Agent in development mode:
 
    ```bash
    npm run electron:dev
@@ -49,7 +49,7 @@ This guide walks through testing the entire Web Search Skill integration with Zh
    }
    ```
 
-**Expected Result:** ✅ Bridge Server starts automatically within 3 seconds of ZhiYuan Agent launch.
+**Expected Result:** ✅ Bridge Server starts automatically within 3 seconds of Xiaoruan AI Agent launch.
 
 ## Test 2: CLI Search from Terminal
 
@@ -57,7 +57,7 @@ This guide walks through testing the entire Web Search Skill integration with Zh
 
 **Steps:**
 
-1. Open a terminal while ZhiYuan Agent is running
+1. Open a terminal while Xiaoruan AI Agent is running
 
 2. Execute a search:
 
@@ -79,7 +79,7 @@ This guide walks through testing the entire Web Search Skill integration with Zh
 
 **Steps:**
 
-1. Start ZhiYuan Agent
+1. Start Xiaoruan AI Agent
 2. Create a new Cowork session
 3. Send the following message:
 
@@ -119,11 +119,11 @@ This guide walks through testing the entire Web Search Skill integration with Zh
 
 ## Test 5: Service Cleanup on Exit
 
-**Objective:** Verify graceful shutdown of services when ZhiYuan Agent quits.
+**Objective:** Verify graceful shutdown of services when Xiaoruan AI Agent quits.
 
 **Steps:**
 
-1. With ZhiYuan Agent running and searches completed, quit the application
+1. With Xiaoruan AI Agent running and searches completed, quit the application
 2. Check console output for:
 
    ```
@@ -153,7 +153,7 @@ This guide walks through testing the entire Web Search Skill integration with Zh
 
 **Steps:**
 
-1. Start ZhiYuan Agent
+1. Start Xiaoruan AI Agent
 2. Manually stop the Bridge Server:
 
    ```bash
@@ -185,7 +185,7 @@ This guide walks through testing the entire Web Search Skill integration with Zh
 
 **Steps:**
 
-1. Start ZhiYuan Agent (ensure headless is false in config)
+1. Start Xiaoruan AI Agent (ensure headless is false in config)
 2. Execute a search via CLI or Cowork
 3. Observe:
    - Chrome window appears
@@ -328,7 +328,7 @@ rm SKILLs/web-search/.connection
 
 All tests pass when:
 
-- ✅ Server auto-starts with ZhiYuan Agent
+- ✅ Server auto-starts with Xiaoruan AI Agent
 - ✅ Searches complete in < 3 seconds
 - ✅ Claude uses skill automatically when appropriate
 - ✅ Connection caching improves performance

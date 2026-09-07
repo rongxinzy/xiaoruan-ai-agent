@@ -13,7 +13,7 @@ const allowedTechnicalIdentifiers = [
 
 describe('brand identity', () => {
   test('uses the current product name in the renderer title', () => {
-    expect(fs.readFileSync('index.html', 'utf8')).toContain('<title>ZhiYuan Agent</title>');
+    expect(fs.readFileSync('index.html', 'utf8')).toContain('<title>Xiaoruan AI Agent</title>');
   });
 
   test('keeps the retired product name out of tracked copy', () => {

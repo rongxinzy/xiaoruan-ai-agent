@@ -1,5 +1,4 @@
 import type { CoworkError } from '../../common/coworkError';
-import type { AppUpdateCheckResult, AppUpdateRuntimeState } from '../../shared/appUpdate/constants';
 import type { ActivityRun } from '../../shared/activity/types';
 import type { NvidiaSmiSnapshot, SystemMemorySnapshot } from '../../shared/hardware';
 import type {
@@ -1198,19 +1197,6 @@ interface IElectronAPI {
     consumePendingLocalInferenceInstall: () => Promise<string | null>;
     relaunch: () => Promise<void>;
   };
-  appUpdate: {
-    getState: () => Promise<AppUpdateRuntimeState>;
-    checkNow: (options?: {
-      manual?: boolean;
-      userId?: string | null;
-    }) => Promise<AppUpdateCheckResult>;
-    retryDownload: () => Promise<{ success: boolean; state: AppUpdateRuntimeState }>;
-    pauseDownload: () => Promise<{ success: boolean; state: AppUpdateRuntimeState }>;
-    resumeDownload: () => Promise<{ success: boolean; state: AppUpdateRuntimeState }>;
-    cancelDownload: () => Promise<{ success: boolean; state: AppUpdateRuntimeState }>;
-    installReady: () => Promise<{ success: boolean; state: AppUpdateRuntimeState; error?: string }>;
-    onStateChanged: (callback: (data: AppUpdateRuntimeState) => void) => () => void;
-  };
   log: {
     getPath: () => Promise<string>;
     openFolder: () => Promise<void>;
@@ -1425,37 +1411,6 @@ interface IElectronAPI {
       status?: string;
       error?: string;
     }>;
-  };
-  auth: {
-    communityLogin: () => Promise<{ success: boolean; error?: string }>;
-    getCommunityUser: () => Promise<{ success: boolean; user?: { id: string; email: string } }>;
-    communityLogout: () => Promise<{ success: boolean }>;
-    onCommunityCallback: (
-      callback: (data: {
-        success: boolean;
-        user?: { id: string; email: string; name: string };
-        error?: string;
-      }) => void,
-    ) => () => void;
-  };
-  modelPool: {
-    listModels: () => Promise<{
-      ok: boolean;
-      status: number;
-      models: string[];
-      error?: string;
-    }>;
-    stream: (input: { requestId: string; body: Record<string, unknown> }) => Promise<{
-      ok: boolean;
-      status: number;
-      statusText: string;
-      error?: string;
-    }>;
-    cancelStream: (requestId: string) => Promise<boolean>;
-    onStreamData: (requestId: string, callback: (data: string) => void) => () => void;
-    onStreamDone: (requestId: string, callback: () => void) => () => void;
-    onStreamError: (requestId: string, callback: (error: string) => void) => () => void;
-    onStreamAbort: (requestId: string, callback: () => void) => () => void;
   };
   enterprise: {
     getConfig: () => Promise<{

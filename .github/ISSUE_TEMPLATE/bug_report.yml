@@ -1,6 +1,6 @@
 # bug_report.yml
 name: Bug Report
-description: Create a report to help us improve ZhiYuan Agent
+description: Create a report to help us improve Xiaoruan AI Agent
 title: '[Bug] '
 labels: ['bug']
 body:
@@ -56,11 +56,11 @@ body:
       description: |
         Please provide the following information:
         - OS: [e.g., macOS 14, Windows 11, Ubuntu 22.04]
-        - ZhiYuanAgent Version: [e.g., 2026.3.19]
+        - XiaoruanAgent Version: [e.g., 2026.3.19]
         - Node.js Version: [e.g., 24.0.0]
       placeholder: |
-        - OS: 
-        - ZhiYuanAgent Version: 
+        - OS:
+        - XiaoruanAgent Version:
         - Node.js Version:
     validations:
       required: true

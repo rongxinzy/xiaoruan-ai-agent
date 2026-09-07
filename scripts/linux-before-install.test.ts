@@ -21,8 +21,8 @@ describe('Linux deb upgrade pre-install hook', () => {
   test('stops both current and legacy package paths before dpkg replaces files', () => {
     const script = fs.readFileSync(scriptPath, 'utf8');
 
-    expect(script).toContain("DEB_INSTALL_PATTERN='/opt/(知远|ZhiYuanAgent)(/|$)'");
-    expect(script).toContain("APPIMAGE_MOUNT_PATTERN='\\.mount_(知远|ZhiYuanAgent)'");
+    expect(script).toContain("DEB_INSTALL_PATTERN='/opt/(晓软AI智能体|XiaoruanAgent)(/|$)'");
+    expect(script).toContain("APPIMAGE_MOUNT_PATTERN='\\.mount_(晓软AI智能体|XiaoruanAgent)'");
     expect(script).toContain('pkill -f "$DEB_INSTALL_PATTERN"');
     expect(script).toContain('pkill -f "$APPIMAGE_MOUNT_PATTERN"');
     expect(script).toContain('while [ "$i" -lt 10 ]');

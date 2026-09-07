@@ -4,19 +4,19 @@
 >
 > 最后更新：2026-08-27
 >
-> 产品名称：知远智能体
+> 产品名称：晓软AI智能体
 >
 > 入口：工作模式 → 编程
 
 ## 1. 文档目的
 
-本文档定义知远智能体“编程”模式的产品边界、底层架构、Agent 发现与接入、多 Agent 协作、工作区安全、数据模型、UI 草图、实施阶段和验收标准。
+本文档定义晓软AI智能体“编程”模式的产品边界、底层架构、Agent 发现与接入、多 Agent 协作、工作区安全、数据模型、UI 草图、实施阶段和验收标准。
 
 后续实现应以本文档为基线。若实现过程中需要改变本文档中的协议边界、任务模型、写入隔离或交互语义，应先更新设计并重新评审，不应直接在代码中形成隐式新方案。
 
 ## 2. 一句话定义
 
-“编程”是知远智能体内置的统一编程工作台：用户即使没有安装任何外部编程 Agent，也能使用内置的知远编程 Agent 完成任务；安装了 Claude Code、Codex、OpenCode 等 Agent 后，知远通过 ACP 发现、连接并组织它们协作，但不接管或注入这些 Agent 的模型与账号。
+“编程”是晓软AI智能体内置的统一编程工作台：用户即使没有安装任何外部编程 Agent，也能使用内置的晓软AI智能体编程 Agent 完成任务；安装了 Claude Code、Codex、OpenCode 等 Agent 后，晓软AI智能体通过 ACP 发现、连接并组织它们协作，但不接管或注入这些 Agent 的模型与账号。
 
 ## 3. 已确认决策
 
@@ -32,24 +32,24 @@
 
 ### 3.2 Agent 边界
 
-- 内置知远编程 Agent 永远是第一方、一等能力。
+- 内置晓软AI智能体编程 Agent 永远是第一方、一等能力。
 - 外部 Agent 是可选增强项，不是使用编程模式的前置条件。
 - 外部 Agent 通过 ACP 接入。
-- 知远不向外部 Agent 注入自己的 API Key、Provider URL、模型名称、系统提示词或内置运行时配置。
+- 晓软AI智能体不向外部 Agent 注入自己的 API Key、Provider URL、模型名称、系统提示词或内置运行时配置。
 - 每个外部 Agent 保留自己的账号、模型、配置、工具和记忆。
-- 知远只使用 Agent 通过 ACP 明确声明的能力。
+- 晓软AI智能体只使用 Agent 通过 ACP 明确声明的能力。
 
 ### 3.3 多 Agent 边界
 
 - ACP 解决的是 Client 与 Agent 之间的连接，不直接定义 Agent 与 Agent 的协作协议。
-- 多 Agent 协作由知远的 Coding Room Orchestrator 组织。
+- 多 Agent 协作由晓软AI智能体的 Coding Room Orchestrator 组织。
 - 每个 Agent 拥有独立的连接、会话、状态、事件流和权限上下文。
 - Agent 之间通过显式交接包协作，不共享隐式可变上下文。
 - 第一版核心流程不得依赖私有 ACP 方法。
 
 ### 3.4 用户可见命名
 
-- UI 显示“知远编程 Agent”，不显示内部运行时名称。
+- UI 显示“晓软AI智能体编程 Agent”，不显示内部运行时名称。
 - ACP、运行时、适配器等实现细节只在诊断或开发文档中出现。
 - 外部 Agent 使用其公开产品名称，例如 Claude Code、Codex、OpenCode。
 
@@ -115,7 +115,7 @@ flowchart LR
 
 ### 5.1 为什么不让内置运行时通过 ACP 自连接
 
-ACP 是外部 Agent 的稳定集成边界，不必强制成为知远内部所有调用的唯一协议。
+ACP 是外部 Agent 的稳定集成边界，不必强制成为晓软AI智能体内部所有调用的唯一协议。
 
 让内置运行时先实现 ACP Server，再由应用启动 ACP Client 连接自身，会带来额外的序列化、子进程生命周期、认证和错误恢复成本，却不增加用户价值。
 
@@ -129,7 +129,7 @@ CodingAgentDriver
     └── 通过 ACP SDK 连接外部 Agent
 ```
 
-如果未来需要让第三方编辑器连接知远编程 Agent，可以另行提供 ACP Server Adapter，但这不属于第一阶段。
+如果未来需要让第三方编辑器连接晓软AI智能体编程 Agent，可以另行提供 ACP Server Adapter，但这不属于第一阶段。
 
 ## 6. CodingAgentDriver
 
@@ -202,20 +202,20 @@ UI 必须按能力渐进增强：
 - Agent 通过 `available_commands_update` 发布命令时，Composer 输入 `/` 后展示该会话的实时命令快照。
 - Agent 不支持会话恢复时，提供“新建会话并发送交接摘要”。
 - Agent 不支持计划时，不显示空计划面板。
-- 知远不能硬编码某个外部 Agent 一定支持某项能力。
+- 晓软AI智能体不能硬编码某个外部 Agent 一定支持某项能力。
 
-`available_commands_update` 按 ACP 语义是某个 Session 的完整替换快照，不是增量事件。知远按
+`available_commands_update` 按 ACP 语义是某个 Session 的完整替换快照，不是增量事件。晓软AI智能体按
 Session 持久化 `name`、`description`、`input.hint` 和 `_meta`，后续更新整体覆盖旧值；切换 Lane
 时只显示当前 Agent 当前 Session 声明的命令，不能把一个 Agent 的命令泄漏到另一个 Agent。
 
-斜杠命令是外部 Agent 暴露其 MCP、Skill 和自身操作入口的标准 UI 通道。知远不解析或复制外部
-Agent 的私有 Skill/MCP 配置，也不把知远的模型、Skill 或 MCP 注入外部 Agent。比如 Codex 或
+斜杠命令是外部 Agent 暴露其 MCP、Skill 和自身操作入口的标准 UI 通道。晓软AI智能体不解析或复制外部
+Agent 的私有 Skill/MCP 配置，也不把晓软AI智能体的模型、Skill 或 MCP 注入外部 Agent。比如 Codex 或
 Claude Code Adapter 声明 `/mcp`、`/skills` 或具体 Skill 命令时，Composer 原样呈现并将用户选中
 后的文本通过 `session/prompt` 发回原 Agent；Agent 自己负责执行与返回 Tool Call 更新。
 
 ### 6.4 Codex 与 Claude Code 的内置 ACP 桥接
 
-Codex 与 Claude Code 作为首批一等外部 Agent，采用“用户安装 Agent、知远内置桥接”的交付方式：
+Codex 与 Claude Code 作为首批一等外部 Agent，采用“用户安装 Agent、晓软AI智能体内置桥接”的交付方式：
 
 - 应用固定打包 `@agentclientprotocol/codex-acp@1.6.2` 与 `@agentclientprotocol/claude-agent-acp@0.70.0`，运行时不执行 `npx`，不联网下载 Adapter。
 - 发现层只被动查找用户设备上的 `codex` 与 `claude`；应用依赖目录中由 Adapter 带入的 CLI 不算作用户安装。
@@ -224,11 +224,11 @@ Codex 与 Claude Code 作为首批一等外部 Agent，采用“用户安装 Age
 - 旧版 `needs_adapter` Profile 原地升级并保留 Profile ID，避免已有 Lane 失去引用；Adapter 版本或 CLI 路径变化后重新 Probe。
 - UI 只展示用户安装的 Agent 路径和“检测连接”，不暴露桥接器安装概念。
 
-## 7. 内置知远编程 Agent
+## 7. 内置晓软AI智能体编程 Agent
 
 ### 7.1 定位
 
-知远编程 Agent 是默认 Agent，而不是外部 Agent 不可用时才出现的降级入口。
+晓软AI智能体编程 Agent 是默认 Agent，而不是外部 Agent 不可用时才出现的降级入口。
 
 它必须支持：
 
@@ -243,12 +243,12 @@ Codex 与 Claude Code 作为首批一等外部 Agent，采用“用户安装 Age
 
 - 不要求用户安装 Claude Code、Codex、OpenCode 或 ACP Adapter。
 - 用户已配置可用模型时，可以直接开始任务。
-- 如果知远本身尚未配置任何可用模型，菜单仍显示内置 Agent，但状态为“需要配置模型”，并引导用户完成知远自身配置。
+- 如果晓软AI智能体本身尚未配置任何可用模型，菜单仍显示内置 Agent，但状态为“需要配置模型”，并引导用户完成晓软AI智能体自身配置。
 - 外部 Agent 的认证状态不得影响内置 Agent。
 
 ### 7.3 配置边界
 
-- 内置 Agent 使用知远现有模型、权限、Skills、MCP 和本地推理配置。
+- 内置 Agent 使用晓软AI智能体现有模型、权限、Skills、MCP 和本地推理配置。
 - 这些配置不复制给外部 Agent。
 - 外部 Agent 只使用自己的账号、模型、工具和 ACP Config Options。
 
@@ -256,7 +256,7 @@ Codex 与 Claude Code 作为首批一等外部 Agent，采用“用户安装 Age
 
 ### 8.1 ACP 映射
 
-| ACP 能力                          | 知远内部对象                            |
+| ACP 能力                          | 晓软AI智能体内部对象                            |
 | --------------------------------- | --------------------------------------- |
 | `initialize`                      | Agent Profile、协议和能力快照           |
 | `authenticate`                    | Agent 认证流程                          |
@@ -289,7 +289,7 @@ Codex 与 Claude Code 作为首批一等外部 Agent，采用“用户安装 Age
 
 第一版只支持当前稳定的本地 stdio 传输：
 
-- 知远按需启动外部 Agent 或 Adapter 子进程。
+- 晓软AI智能体按需启动外部 Agent 或 Adapter 子进程。
 - stdin/stdout 承载换行分隔的 UTF-8 JSON-RPC。
 - stderr 只用于诊断日志，绝不进入协议解析。
 - 使用精确 executable 和 argv，禁止通过拼接 shell 字符串启动。
@@ -307,7 +307,7 @@ Codex 与 Claude Code 作为首批一等外部 Agent，采用“用户安装 Age
 - 崩溃检测和有限重启。
 - App 退出时的资源释放。
 
-一个 Agent Profile 的连接可以承载多个 ACP Session。每个 Session 必须有知远本地 ID 与远端 opaque session ID 的映射。
+一个 Agent Profile 的连接可以承载多个 ACP Session。每个 Session 必须有晓软AI智能体本地 ID 与远端 opaque session ID 的映射。
 
 ## 9. Agent 发现与管理
 
@@ -318,7 +318,7 @@ Codex 与 Claude Code 作为首批一等外部 Agent，采用“用户安装 Age
 - 永远出现在 Agent Picker 第一组。
 - 不参加本机扫描。
 - 不依赖 ACP Probe。
-- 状态只取决于知远自身模型和运行时是否可用。
+- 状态只取决于晓软AI智能体自身模型和运行时是否可用。
 
 ### 9.2 外部 Agent 两阶段发现
 
@@ -455,7 +455,7 @@ Agent 间交接使用不可变交接包：
 - Composer 默认只向当前选中的 Agent 发送消息。
 - 切换 Agent 不自动广播消息或交接上下文。
 - 添加协作者和交接都必须是显式用户动作或用户启用的协作预设动作。
-- 知远不使用自己的模型在幕后替用户决定哪个外部 Agent 应该做什么；协作编排按确定性规则或用户选择执行。
+- 晓软AI智能体不使用自己的模型在幕后替用户决定哪个外部 Agent 应该做什么；协作编排按确定性规则或用户选择执行。
 
 ### 11.2 协作预设
 
@@ -493,7 +493,7 @@ sequenceDiagram
 
 ### 11.3 内置 Agent 的协作地位
 
-知远编程 Agent 可以承担任何角色：
+晓软AI智能体编程 Agent 可以承担任何角色：
 
 - 单独完成任务。
 - 作为主 Agent 分配审查或验证工作。
@@ -575,8 +575,8 @@ ACP `terminal/create` 表示启动非交互命令并返回输出，不等同于 
 
 禁止默认批量继承：
 
-- 知远 Provider Key。
-- 知远模型配置。
+- 晓软AI智能体 Provider Key。
+- 晓软AI智能体模型配置。
 - 与目标 Agent 无关的云服务凭据。
 - 主进程的完整环境变量集合。
 
@@ -595,7 +595,7 @@ ACP Permission 只能治理 Agent 通过 ACP Client 请求的操作。如果外�
 
 ### 14.3 能力声明
 
-知远只在真正完成某个 Client Capability 时才向 Agent 声明支持，不能为了通过握手虚假声明文件系统、终端、认证或 Elicitation 能力。
+晓软AI智能体只在真正完成某个 Client Capability 时才向 Agent 声明支持，不能为了通过握手虚假声明文件系统、终端、认证或 Elicitation 能力。
 
 ## 15. UI 信息架构
 
@@ -605,14 +605,14 @@ ACP Permission 只能治理 Agent 通过 ACP Client 请求的操作。如果外�
 
 ```text
 ┌──────────────────────┬────────────────────────────────────┬───────────────────┐
-│ 工作 / 对话          │ 知远智能体 · Codex                │ Changes / Files   │
+│ 工作 / 对话          │ 晓软AI智能体 · Codex                │ Changes / Files   │
 │ 新建任务             ├────────────────────────────────────┤ / Terminal        │
 │ 本地推理             │                                    │                   │
 │ 编程                 │ 当前 Session 的结构化事件流         │ Diff Preview      │
 │ 自动化               │ Message / Plan / Tool / Permission │                   │
 │                      │ / Terminal / Handoff                │                   │
 │ 编程工作区        ＋ │                                    │                   │
-│ ▼ 知远智能体      …  │                                    │                   │
+│ ▼ 晓软AI智能体      …  │                                    │                   │
 │   Fix login · Codex  ├────────────────────────────────────┤                   │
 │   Review · Claude    │ 发给当前 Agent…              发送   │                   │
 │ + 添加工作区         │                                    │                   │
@@ -631,7 +631,7 @@ ACP Permission 只能治理 Agent 通过 ACP Client 请求的操作。如果外�
 
 ### 15.3 Workspace 与 Session 创建
 
-Workspace 创建/编辑 Dialog 包含显示名称、默认 Agent 和一个或多个 SourceFolder。默认 Agent 是新建 Session 草稿的首选项，不会改变已有 Session 的绑定。添加文件夹只挂载现有目录；移除 Workspace 只删除知远中的编程记录，永远不删除磁盘文件。
+Workspace 创建/编辑 Dialog 包含显示名称、默认 Agent 和一个或多个 SourceFolder。默认 Agent 是新建 Session 草稿的首选项，不会改变已有 Session 的绑定。添加文件夹只挂载现有目录；移除 Workspace 只删除晓软AI智能体中的编程记录，永远不删除磁盘文件。
 
 每个 Workspace 行的 `＋` 创建 Session：
 
@@ -650,7 +650,7 @@ Workspace 创建/编辑 Dialog 包含显示名称、默认 Agent 和一个或多
 ┌──────────────────────────────┐
 │ 内置                         │
 │                              │
-│ ✦ 知远编程 Agent        可用 │
+│ ✦ 晓软AI智能体编程 Agent        可用 │
 │   无需安装外部 Agent         │
 ├──────────────────────────────┤
 │ 外部 Agent                   │
@@ -679,7 +679,7 @@ Workspace 创建/编辑 Dialog 包含显示名称、默认 Agent 和一个或多
 ```text
 ┌──────────────────────────────┐
 │ 内置                         │
-│ ✦ 知远编程 Agent        可用 │
+│ ✦ 晓软AI智能体编程 Agent        可用 │
 ├──────────────────────────────┤
 │ 外部 Agent                   │
 │ 尚未检测到外部 Agent         │
@@ -689,7 +689,7 @@ Workspace 创建/编辑 Dialog 包含显示名称、默认 Agent 和一个或多
 ```
 
 - 不出现阻塞式安装引导。
-- 首次进入时可以直接用知远编程 Agent 创建 Session。
+- 首次进入时可以直接用晓软AI智能体编程 Agent 创建 Session。
 - 扫描外部 Agent 在后台进行，不能阻塞内置 Agent。
 
 ### 15.6 新建 Session 与添加协作者
@@ -752,7 +752,7 @@ Workspace 创建/编辑 Dialog 包含显示名称、默认 Agent 和一个或多
 ```text
 选择 CodingWorkspace / SourceFolder
   ↓
-选择知远编程 Agent
+选择晓软AI智能体编程 Agent
   ↓
 创建 Agent 绑定不可变的 CodingSession / CodingMission
   ↓
@@ -991,10 +991,10 @@ src/renderer/store/slices/
 
 ### 20.7 第一版完成定义
 
-- 用户不安装任何外部 Agent，也能用知远编程 Agent 完成编程任务。
+- 用户不安装任何外部 Agent，也能用晓软AI智能体编程 Agent 完成编程任务。
 - 能正确区分并展示外部 Agent 的发现、连接、认证和兼容状态。
 - 切换 Agent 不丢失会话。
-- 没有知远模型配置被注入外部 Agent。
+- 没有晓软AI智能体模型配置被注入外部 Agent。
 - 多 Agent 写入不会未经隔离作用于同一物理目录。
 - 外部 Agent 崩溃不影响内置 Agent 和其他 Lane。
 - Mission 完成需要验证或用户验收，不由单次 ACP Turn 自动决定。
@@ -1003,7 +1003,7 @@ src/renderer/store/slices/
 
 第一版明确不做：
 
-- 把知远模型注入 Claude Code、Codex 或 OpenCode。
+- 把晓软AI智能体模型注入 Claude Code、Codex 或 OpenCode。
 - 用 WebView 嵌入外部 Agent 的 CLI TUI。
 - 默认广播 Prompt 给所有 Agent。
 - 在运行时下载或安装任何外部 Agent；Codex 与 Claude Code 的固定版本 ACP 桥接器随应用交付。
@@ -1029,6 +1029,6 @@ src/renderer/store/slices/
 
 最终产品结构不是“一个 ACP 外壳”，而是：
 
-> 内置知远编程 Agent 保证零外部安装可用；ACP 负责连接用户已有的外部 Agent；Zed 式 Agent Picker 负责统一切入；Coding Room 负责会话、任务、权限、工作区和多 Agent 协作。
+> 内置晓软AI智能体编程 Agent 保证零外部安装可用；ACP 负责连接用户已有的外部 Agent；Zed 式 Agent Picker 负责统一切入；Coding Room 负责会话、任务、权限、工作区和多 Agent 协作。
 
 这一结构既保留 ACP 的能力边界，也避免产品在用户没有安装外部 Agent 时变成空壳。

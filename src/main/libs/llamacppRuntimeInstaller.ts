@@ -341,7 +341,7 @@ async function downloadFile(
 
   for (const attemptUrl of attempts) {
     const response = await fetch(attemptUrl, {
-      headers: { 'User-Agent': 'ZhiYuanAgent/llamacpp-runtime-installer' },
+      headers: { 'User-Agent': 'XiaoruanAgent/llamacpp-runtime-installer' },
     });
     if (!response.ok || !response.body) {
       errors.push(`HTTP ${response.status} ${response.statusText} (${attemptUrl})`);

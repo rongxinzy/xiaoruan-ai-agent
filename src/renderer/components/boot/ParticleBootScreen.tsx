@@ -4,7 +4,7 @@ import { i18nService } from '../../services/i18n';
 
 /**
  * Boot splash: dust particles drift in from a scattered field, assemble into
- * the ZhiYuan logo, hold while the app initializes, then disperse outward
+ * the Xiaoruan logo, hold while the app initializes, then disperse outward
  * before the main shell mounts. Honors prefers-reduced-motion with a static
  * logo fallback.
  */
@@ -56,7 +56,7 @@ const resolveIsDark = (): boolean =>
   document.documentElement.dataset.theme === 'classic-dark';
 
 const logoSourceForTheme = (isDark: boolean): string =>
-  isDark ? 'zhiyuan-logo-dark-1600.png' : 'zhiyuan-logo-light-1600.png';
+  isDark ? 'xiaoruan-logo-dark-1600.png' : 'xiaoruan-logo-light-1600.png';
 
 const loadSampledLogo = (src: string): Promise<SampledLogo> =>
   new Promise((resolve, reject) => {
@@ -354,7 +354,7 @@ export const ParticleBootScreen: React.FC<ParticleBootScreenProps> = ({
         <div className="flex h-full flex-col items-center justify-center gap-8">
           <img
             src={logoSourceForTheme(isDark)}
-            alt="知远"
+            alt="晓软AI智能体"
             className="w-[min(42vw,320px)] select-none"
             draggable={false}
           />

@@ -163,6 +163,7 @@ export default defineConfig(async ({ command }) => {
     ],
     base: process.env.NODE_ENV === 'development' ? '/' : './',
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@shared': path.resolve(projectRoot, './src/shared'),
         '@': path.resolve(projectRoot, './src/renderer'),

@@ -325,7 +325,6 @@ function getEffectiveProviderApiFormat(
 
 function providerRequiresApiKey(providerName: string): boolean {
   return (
-    providerName !== ProviderName.Zhiyuan &&
     providerName !== ProviderName.Ollama &&
     providerName !== ProviderName.LlamaCpp
   );
@@ -333,7 +332,6 @@ function providerRequiresApiKey(providerName: string): boolean {
 
 function resolveEffectiveApiKey(providerName: string, apiKey: string): string {
   if (apiKey) return apiKey;
-  if (providerName === ProviderName.Zhiyuan) return 'sk-zhiyuan-managed';
   return providerRequiresApiKey(providerName) ? '' : 'sk-zhiyuan-local';
 }
 

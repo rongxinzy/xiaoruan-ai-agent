@@ -1,7 +1,6 @@
 import {
   type ModelCapabilities,
   type ProviderConfig,
-  ProviderName,
   ProviderRegistry,
 } from '@shared/providers';
 
@@ -11,7 +10,6 @@ import { WorkMode, type WorkMode as WorkModeValue } from './store/workMode/const
 export interface AppConfig {
   migrations?: {
     providerModelCatalog: number;
-    modelPoolProvider?: number;
   };
   // API 配置
   api: {
@@ -70,7 +68,7 @@ const buildDefaultProviders = (): AppConfig['providers'] => {
   for (const id of ProviderRegistry.providerIds) {
     const def = ProviderRegistry.get(id)!;
     providers[id] = {
-      enabled: id === ProviderName.Zhiyuan,
+      enabled: false,
       apiKey: '',
       baseUrl: def.defaultBaseUrl,
       apiFormat: def.defaultApiFormat,
@@ -89,7 +87,6 @@ const buildDefaultProviders = (): AppConfig['providers'] => {
 export const defaultConfig: AppConfig = {
   migrations: {
     providerModelCatalog: 1,
-    modelPoolProvider: 1,
   },
   api: {
     key: '',
@@ -132,9 +129,9 @@ export const GLOBAL_PROVIDERS = ProviderRegistry.idsByRegion('global');
 
 export const getVisibleProviders = (language: 'zh' | 'en'): readonly string[] => {
   if (language === 'zh') {
-    return CHINA_PROVIDERS.filter(provider => provider !== ProviderName.Zhiyuan);
+    return CHINA_PROVIDERS;
   }
-  return ProviderRegistry.idsForEnLocale().filter(provider => provider !== ProviderName.Zhiyuan);
+  return ProviderRegistry.idsForEnLocale();
 };
 
 /**

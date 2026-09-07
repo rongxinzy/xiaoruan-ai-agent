@@ -1,9 +1,7 @@
 name: Publish online update
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 concurrency:
   group: zhiyuan-online-update-production

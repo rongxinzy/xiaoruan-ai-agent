@@ -2,7 +2,7 @@
 
 /*
  * Builds the small, 24-bit BMP assets required by NSIS from the same light
- * product language as www.rongxzyai.com. Keep this script with the source
+ * product language as the custom edition. Keep this script with the source
  * application mark so future brand changes are deterministic rather than manual.
  */
 const fs = require('node:fs');

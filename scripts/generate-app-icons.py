@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SOURCE_LOGO = PROJECT_ROOT / "public" / "zhiyuan-logo-light-1600.png"
+SOURCE_LOGO = PROJECT_ROOT / "public" / "xiaoruan-logo-light-1600.png"
 PNG_DIR = PROJECT_ROOT / "build" / "icons" / "png"
 WINDOWS_ICON = PROJECT_ROOT / "build" / "icons" / "win" / "icon.ico"
 MAC_ICON = PROJECT_ROOT / "build" / "icons" / "mac" / "icon.icns"

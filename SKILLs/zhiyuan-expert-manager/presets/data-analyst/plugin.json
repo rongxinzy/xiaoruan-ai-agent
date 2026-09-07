@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "Decision-oriented data analysis expert: data quality review, metric diagnostics, KPI reporting, chart selection, and executive-ready analysis reports.",
   "author": {
-    "name": "ZhiYuanAgent",
+    "name": "XiaoruanAgent",
     "email": "dev@zhiyuan.com"
   },
   "expertType": "agent",
