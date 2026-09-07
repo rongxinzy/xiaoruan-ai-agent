@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Expert Register for Xiaoruan AI Agent.
+ * Expert Register for Xiaoruan Government Office Agent.
  *
- * Validates an expert package and registers its agents into the Xiaoruan AI Agent
+ * Validates an expert package and registers its agents into the Xiaoruan Government Office Agent
  * SQLite database so they appear in the Agent list.
  *
  * Usage:
  *   node register_expert.js <path/to/expert-dir> [--db-path <sqlite.db>] [--session-id <id>]
  *
- * If --db-path is omitted, the script looks for the default Xiaoruan AI Agent SQLite
+ * If --db-path is omitted, the script looks for the default Xiaoruan Government Office Agent SQLite
  * database in the user's app data directory.
  */
 
@@ -27,7 +27,7 @@ function getDefaultDbPath() {
   const platform = process.platform;
   let base;
   if (platform === 'win32') {
-    // Electron's app.getPath('userData') resolves to the Xiaoruan AI Agent directory on Windows.
+    // Electron's app.getPath('userData') resolves to the Xiaoruan Government Office Agent directory on Windows.
     base = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
   } else if (platform === 'darwin') {
     base = path.join(os.homedir(), 'Library', 'Application Support');
@@ -93,11 +93,11 @@ function generateUuid() {
 
 function loadBetterSqlite3() {
   try {
-    // When running inside the Xiaoruan AI Agent source tree, prefer project's better-sqlite3.
+    // When running inside the Xiaoruan Government Office Agent source tree, prefer project's better-sqlite3.
     return require('better-sqlite3');
   } catch (e) {
     throw new Error(
-      'better-sqlite3 is not available. Make sure to run this script from the Xiaoruan AI Agent project directory.',
+      'better-sqlite3 is not available. Make sure to run this script from the Xiaoruan Government Office Agent project directory.',
     );
   }
 }

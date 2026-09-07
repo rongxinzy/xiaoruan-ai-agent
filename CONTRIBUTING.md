@@ -1,6 +1,6 @@
-# Contributing to Xiaoruan AI Agent
+# Contributing to Xiaoruan Government Office Agent
 
-Thank you for your interest in contributing to Xiaoruan AI Agent. Contributions of all sizes are welcome, including bug reports, documentation improvements, tests, UI refinements, and new features.
+Thank you for your interest in contributing to Xiaoruan Government Office Agent. Contributions of all sizes are welcome, including bug reports, documentation improvements, tests, UI refinements, and new features.
 
 Please read this guide and [`AGENTS.md`](AGENTS.md) before making a code change. `AGENTS.md` contains the repository's detailed architecture and implementation rules.
 
@@ -50,7 +50,7 @@ Use Bun for dependency installation and commit changes to `bun.lock` when depend
 | `MCPs/`               | Bundled MCP integrations                                   |
 | `scripts/`            | Development, runtime, and packaging scripts                |
 
-Xiaoruan AI Agent uses Electron process isolation. Renderer code must not access Node.js or Electron APIs directly; use the typed preload and IPC boundary.
+Xiaoruan Government Office Agent uses Electron process isolation. Renderer code must not access Node.js or Electron APIs directly; use the typed preload and IPC boundary.
 
 ## Making a Change
 
@@ -69,7 +69,7 @@ When changing behavior:
 - Add or update co-located Vitest tests where practical.
 - Preserve process isolation and update all affected IPC types, constants, preload methods, handlers, and callers together.
 - Add user-visible text to both the Chinese and English i18n dictionaries. Do not hardcode UI copy.
-- Use the public product name **Xiaoruan AI Agent** in English-facing product copy.
+- Use the public product name **Xiaoruan Government Office Agent** in English-facing product copy.
 - Update relevant documentation when setup, configuration, or user behavior changes.
 
 ## Code Style

@@ -11,7 +11,7 @@ const THEME_IDS: Record<'light' | 'dark', string> = {
 
 class ThemeService {
   private mediaQuery: MediaQueryList | null = null;
-  private currentTheme: ThemeType = 'system';
+  private currentTheme: ThemeType = 'light';
   private initialized = false;
   private mediaQueryListener: ((event: MediaQueryListEvent) => void) | null = null;
   private manager: ThemeManager;
@@ -21,7 +21,7 @@ class ThemeService {
       this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     }
     this.manager = new ThemeManager(allThemes, {
-      storageKey: 'zhiyuan-theme-id',
+      storageKey: 'xiaoruan-theme-id',
       defaultTheme: THEME_IDS.light,
       followSystem: false,
     });
@@ -49,7 +49,7 @@ class ThemeService {
       }
     } catch (error) {
       console.error('Failed to initialize theme:', error);
-      this.setTheme('system');
+      this.setTheme('light');
     }
   }
 

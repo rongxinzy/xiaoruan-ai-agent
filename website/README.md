@@ -1,6 +1,6 @@
-# 晓软AI智能体 Official Website
+# 晓软政务办公智能体 Official Website
 
-This directory contains the official product website for **晓软AI智能体 (Xiaoruan AI Agent)**, a local-first AI Agent workspace with a fully self-developed stack.
+This directory contains the official product website for **晓软政务办公智能体 (Xiaoruan Government Office Agent)**, a local-first AI Agent workspace with a fully self-developed stack.
 
 ## Tech
 

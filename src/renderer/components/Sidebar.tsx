@@ -1,3 +1,4 @@
+import { ProductBrand } from './ProductBrand';
 import { AgentId } from '@shared/agent';
 import { Button } from '@shared/components/ui/button';
 import { Checkbox } from '@shared/components/ui/checkbox';
@@ -394,17 +395,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className={cn('pt-3', workMode === WorkMode.Chat ? 'pb-0' : 'pb-3')}>
             <div className="draggable sidebar-header-drag h-8 flex items-center justify-between px-3">
-              <div className={`flex items-center gap-2 ${isMac ? 'pl-[68px]' : ''}`}>
-                <img
-                  src="xiaoruan-logo-light.svg"
-                  alt="晓软AI智能体"
-                  className="logo-light h-5 w-auto select-none"
-                />
-                <img
-                  src="xiaoruan-logo-dark.svg"
-                  alt="晓软AI智能体"
-                  className="logo-dark h-5 w-auto select-none"
-                />
+              <div className={`flex min-w-0 items-center gap-2 ${isMac ? 'pl-[68px]' : ''}`}>
+                <ProductBrand compact />
               </div>
               <ShellIconButton
                 onClick={onToggleCollapse}

@@ -24,7 +24,7 @@
 
   <rect width="1120" height="880" fill="#fff"/>
 
-  <text x="560" y="50" text-anchor="middle" class="t0">Xiaoruan AI Agent — Local AI Agent Workspace</text>
+  <text x="560" y="50" text-anchor="middle" class="t0">Xiaoruan Government Office Agent — Local AI Agent Workspace</text>
   <text x="560" y="80" text-anchor="middle" class="t1">Fully self-developed stack &#183; agent runtime and local inference built in-house &#183; Electron owns the desktop security boundary</text>
 
   <!-- Electron Main Process -->

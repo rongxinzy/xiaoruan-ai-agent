@@ -1,6 +1,14 @@
 # DESIGN.md
 
-晓软AI智能体前端设计标准。本文件是**项目级约束**：所有新增和修改的 UI 代码必须遵守。与 `AGENTS.md` 的组件库规则配套使用。
+晓软政务办公智能体前端设计标准。本文件是**项目级约束**：所有新增和修改的 UI 代码必须遵守。与 `AGENTS.md` 的组件库规则配套使用。
+
+## 定制版品牌
+
+- 产品名统一为「晓软政务办公智能体」，英文为 Xiaoruan Government Office Agent。
+- 使用用户提供的晓软科技 R 形标志；应用内使用白底标志，保留金红渐变。原始图片保存在 `public/brand/xiaoruan-source.jpg`，应用标志为 `public/xiaoruan-mark.png`。
+- 默认外观为浅色政务红：白色办公画布、深红主动作。深色和跟随系统仍可选，两套外观共用政务红强调色，不新增主题选择维度。
+- 启动欢迎页展示标志、完整产品名与加载状态。入场复用 `fade-in-up`，就绪后 200ms 淡出；减少动态效果时立即进入工作台，不设置额外品牌停留时间。
+- 侧栏采用标志与两行产品名，关于页与首页采用标志与完整名称，避免长字标缩小后难以阅读。
 
 ## 技能参考
 
@@ -41,7 +49,7 @@
 颜色只允许通过语义 token 使用。当前存在**两层变量，值同步**：
 
 1. **shadcn 语义层** —— `src/renderer/theme/css/shadcn-token-bridge.css`
-   `:root` / `.dark`（并挂 `[data-theme]` 别名）直写 oklch。这是与标准 shadcn 语义表逐值一致的真源，含 `--sidebar-primary` 品牌蓝、`--chart-1..5`、`--radius: 0.625rem`。
+   `:root` / `.dark`（并挂 `[data-theme]` 别名）直写 oklch。这是与标准 shadcn 语义表逐值一致的真源，含 `--sidebar-primary` 政务红、`--chart-1..5`、`--radius: 0.625rem`。
 2. **项目兼容层** —— `src/renderer/theme/css/themes.css` 的 `--zy-*`（oklch）
    供仍使用 `var(--zy-*)` / `bg-surface` 等的存量组件消费；`tokens/contract.ts`、`themes/classic-light.ts`、`themes/classic-dark.ts` 与之同步。
 
@@ -67,17 +75,17 @@ Tailwind 工具类经 `index.css` 中 `@theme` 块桥接：`--color-background: 
 | 次文本   | `text-secondary` / `text-muted-foreground`    | 辅助说明、时间戳、占位符、搜索无匹配结果及紧凑空态     |
 | 弱文本   | `text-muted`                                  | 禁用态、最次要信息                                     |
 | 边框     | `border` / `border-subtle`                    | 分隔线、控件描边                                       |
-| 强调     | `primary` / `primary-hover` / `primary-muted` / `primary-strong` | 唯一的品牌强调色（品牌蓝），用于主按钮、激活态、链接、focus ring；`primary-strong` 为按钮实色档，深色主题下保证白字 AA 对比度 |
+| 强调     | `primary` / `primary-hover` / `primary-muted` / `primary-strong` | 唯一的品牌强调色（政务红），用于主按钮、激活态、链接、focus ring；`primary-strong` 为按钮实色档，深色主题下保证白字 AA 对比度 |
 | 状态     | `destructive` / `success` / `warning`         | 仅用于语义状态，不作装饰                               |
-| 技能着色 | `skill-blue`（`--zy-skill-blue-foreground/background`） | 已挂载技能胶囊（ActiveSkillBadge）的文字与 hover 底色；唯一的功能性蓝色例外，不推广到其他元素 |
+| 技能着色 | `skill-blue`（`--zy-skill-blue-foreground/background`） | 已挂载技能胶囊（ActiveSkillBadge）的文字与 hover 底色；沿用兼容 token 名，颜色同步政务红 |
 
 ### 当前色值参考（Light）
 
 | Token | oklch | 等效 RGB |
 |-------|-------|----------|
-| `--zy-primary` / `--zy-primary-strong` | `oklch(0.564 0.218 259.8)` | ≈ `#0F6BF2` |
-| `--zy-primary-hover` | `oklch(0.514 0.207 260.5)` | ≈ `#0A5CDB` |
-| `--zy-primary-muted` | `oklch(0.95 0.025 258)` | ≈ `#E8F0FD` |
+| `--zy-primary` / `--zy-primary-strong` | `oklch(0.48 0.18 25)` | 深红 |
+| `--zy-primary-hover` | `oklch(0.43 0.16 25)` | 深红 hover |
+| `--zy-primary-muted` | `oklch(0.96 0.018 25)` | 淡红背景 |
 | `--zy-foreground` / `--zy-text-primary` | `oklch(0.366 0.008 253)` | `rgb(60, 63, 67)` |
 | `--zy-text-secondary` / `--zy-text-muted` | `oklch(0.553 0.013 58.071)` | ≈ `rgb(128, 125, 119)` |
 | `--zy-background` | `oklch(1 0 0)` | `#ffffff` |
@@ -85,7 +93,7 @@ Tailwind 工具类经 `index.css` 中 `@theme` 块桥接：`--color-background: 
 | `--zy-border` | `oklch(0.923 0.003 48.717)` | ≈ `#e7e5e4` |
 | `--zy-destructive` | `oklch(0.577 0.245 27.325)` | ≈ `#ef4444` |
 
-> 品牌蓝取自 logo 圆点采样值 `#1376FE`，为满足白字 WCAG AA（4.5:1）微调明度至 `#0F6BF2`。深色主题中 `primary` 提亮为 `oklch(0.68 0.18 259)` 保证文字/图标可读性，实色按钮仍用 `primary-strong`（明暗同值）。
+> 政务红采用深红实色 `oklch(0.48 0.18 25)`，浅色文字/按钮强调统一。深色文字和图标提亮为 `oklch(0.74 0.13 25)`；实色按钮仍用 `primary-strong`。
 >
 > `foreground`、`text-primary` 同值（`rgb(60,63,67)`，冷灰偏蓝），是 2026-07-28 验收后确定的统一文本主色。
 
@@ -98,7 +106,7 @@ Tailwind 工具类经 `index.css` 中 `@theme` 块桥接：`--color-background: 
 规则：
 
 1. **强调色唯一。** 一个屏幕内，`primary` 只出现在一个主要动作和少数激活态上。禁止用强调色给普通图标、普通文本"提色"。
-2. **状态色不装饰。** 红/绿/黄只表达危险、成功、警告。
+2. **状态色不装饰。** 危险/成功/警告 token 只表达对应状态；品牌红由 primary 单独管理，危险操作仍配明确文案和图标。
 3. **层级公式：** 背景每浮起一层（background → surface → surface-raised → overlay），明暗差异缩小一档；不要跳档制造高反差色块。
 4. 明暗主题共用同一套 token 名，组件代码不得出现 `dark:` 前缀的单独配色——差异必须在 token 层解决。个别结构性例外（如纯黑遮罩 `bg-black/40`、nav 悬浮的透明度叠加 `hover:bg-black/3 dark:hover:bg-white/4`）允许保留。
 5. **搜索空结果使用次文本。** 关键词无匹配、无可选项等紧凑空态使用 `text-sm text-muted-foreground`，不使用主文本、状态色或额外边框；完整空状态页面再按空状态组件规范处理。
@@ -136,7 +144,7 @@ Tailwind 工具类经 `index.css` 中 `@theme` 块桥接：`--color-background: 
 | 500  | `font-medium`   | 按钮、选中态、需要轻微突出的标签             |
 | 600  | `font-semibold` | 标题、当前激活项（如侧边栏模式切换的选中侧） |
 
-禁止 `font-bold`（700）及以上，唯一例外是品牌字标（如侧边栏"晓软AI智能体"）。**用 500/600 区分层级，不要用字号跳变或颜色。**
+禁止 `font-bold`（700）及以上，唯一例外是品牌字标（如侧边栏"晓软政务办公智能体"）。**用 500/600 区分层级，不要用字号跳变或颜色。**
 
 ### 行高
 

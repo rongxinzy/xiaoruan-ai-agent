@@ -1,3 +1,4 @@
+import { ProductBrand } from './ProductBrand';
 import { Button } from '@shared/components/ui/button';
 import { FluidTabs } from '@shared/components/ui/fluid-tabs';
 import { Input } from '@shared/components/ui/input';
@@ -3021,7 +3022,7 @@ const Settings: React.FC<SettingsProps> = ({
     <div className="space-y-8">
       <div>
         <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--zy-text-primary)' }}>
-          {i18nService.t('appearance')}
+          {i18nService.t('brandTheme')}
         </h4>
 
         <div className="grid grid-cols-3 gap-3 mb-4">
@@ -5154,18 +5155,9 @@ const Settings: React.FC<SettingsProps> = ({
         return (
           <div className="flex min-h-full flex-col items-center pt-6 pb-3">
             {/* Logo & App Name */}
-            <img
-              src="xiaoruan-logo-light.svg"
-              alt="晓软AI智能体"
-              className="logo-light h-16 w-auto mb-3 select-none"
-            />
-            <img
-              src="xiaoruan-logo-dark.svg"
-              alt="晓软AI智能体"
-              className="logo-dark h-16 w-auto mb-3 select-none"
-            />
+            <ProductBrand />
             <span className="text-xs text-muted-foreground mt-1">v{appVersion}</span>
-            <span className="text-xs text-muted-foreground mt-0.5">{i18nService.t('appTitle')}</span>
+            <span className="text-sm text-muted-foreground mt-2">{i18nService.t('brandPurpose')}</span>
 
             {/* Info Card */}
             <div className="w-full mt-8 rounded-xl border border-border overflow-hidden">
@@ -5200,7 +5192,6 @@ const Settings: React.FC<SettingsProps> = ({
                     void handleExportLogs();
                   }}
                   disabled={isExportingLogs}
-                  className="text-muted-foreground hover:text-primary"
                 >
                   {isExportingLogs
                     ? i18nService.t('aboutExportingLogs')

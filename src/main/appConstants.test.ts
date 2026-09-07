@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { APP_DATA_DIR_NAME, APP_ID, APP_NAME, DB_FILENAME } from './appConstants';
 
 test('uses a separate product and storage identity', () => {
-  expect(APP_NAME).toBe('晓软AI智能体');
+  expect(APP_NAME).toBe('晓软政务办公智能体');
   expect(APP_ID).toBe('xiaoruan-ai-agent');
   expect(APP_DATA_DIR_NAME).toBe('XiaoruanAgent');
   expect(DB_FILENAME).toBe('xiaoruan.sqlite');

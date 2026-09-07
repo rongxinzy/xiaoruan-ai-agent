@@ -98,7 +98,7 @@ export const defaultConfig: AppConfig = {
     defaultModelProvider: 'deepseek',
   },
   providers: buildDefaultProviders(),
-  theme: 'system',
+  theme: 'light',
   language: 'zh',
   workMode: WorkMode.Work,
   useSystemProxy: false,

@@ -2,7 +2,7 @@
   "name": "zhiyuan-presentation-studio",
   "private": true,
   "version": "1.0.0",
-  "description": "Native DeckSpec compiler dependencies for Xiaoruan AI Agent.",
+  "description": "Native DeckSpec compiler dependencies for Xiaoruan Government Office Agent.",
   "scripts": {
     "test": "node scripts/test-validator.mjs"
   },

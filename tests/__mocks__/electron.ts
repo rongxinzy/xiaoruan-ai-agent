@@ -7,7 +7,7 @@ if (!process.resourcesPath) {
 
 export const app = {
   getPath: () => '',
-  getName: () => 'Xiaoruan AI Agent',
+  getName: () => 'Xiaoruan Government Office Agent',
   getVersion: () => '0.0.0',
   isPackaged: true,
   on: () => {},

@@ -52,7 +52,7 @@ Var /GLOBAL localInferenceLabel
 !macroend
 
 !macro customWelcomePage
-  !define MUI_WELCOMEPAGE_TITLE "欢迎使用晓软AI智能体"
+  !define MUI_WELCOMEPAGE_TITLE "欢迎使用晓软政务办公智能体"
   !define MUI_WELCOMEPAGE_TEXT "安装程序将在本地准备离线运行环境，完成后即可使用。本地推理组件可在首次启动后按需下载。$\r$\n$\r$\n点击“下一步”继续。"
   !insertmacro MUI_PAGE_WELCOME
 !macroend
@@ -105,14 +105,14 @@ FunctionEnd
   FileWrite $8 "phase=custom-init-start tick_ms=$9 instdir=$INSTDIR$\r$\n"
   FileClose $8
 
-  DetailPrint "[Installer] Stopping running 晓软AI智能体 processes"
+  DetailPrint "[Installer] Stopping running 晓软政务办公智能体 processes"
   System::Call 'kernel32::GetTickCount()i .r7'
   nsExec::ExecToLog 'powershell -NoProfile -NonInteractive -Command "\
-    Stop-Process -Name 晓软AI智能体 -Force -ErrorAction SilentlyContinue;\
-    Get-Process node -ErrorAction SilentlyContinue | Where-Object { $$_.Path -like \"*XiaoruanAgent*\" -or $$_.Path -like \"*晓软AI智能体*\" } | Stop-Process -Force -ErrorAction SilentlyContinue;\
+    Stop-Process -Name 晓软政务办公智能体 -Force -ErrorAction SilentlyContinue;\
+    Get-Process node -ErrorAction SilentlyContinue | Where-Object { $$_.Path -like \"*XiaoruanAgent*\" -or $$_.Path -like \"*晓软政务办公智能体*\" } | Stop-Process -Force -ErrorAction SilentlyContinue;\
     for ($$i = 0; $$i -lt 15; $$i++) {\
-      $$appProcesses = @(Get-Process -Name 晓软AI智能体 -ErrorAction SilentlyContinue);\
-      $$nodeProcesses = @(Get-Process node -ErrorAction SilentlyContinue | Where-Object { $$_.Path -like \"*XiaoruanAgent*\" -or $$_.Path -like \"*晓软AI智能体*\" });\
+      $$appProcesses = @(Get-Process -Name 晓软政务办公智能体 -ErrorAction SilentlyContinue);\
+      $$nodeProcesses = @(Get-Process node -ErrorAction SilentlyContinue | Where-Object { $$_.Path -like \"*XiaoruanAgent*\" -or $$_.Path -like \"*晓软政务办公智能体*\" });\
       if (($$appProcesses.Count + $$nodeProcesses.Count) -eq 0) { break };\
       Start-Sleep -Milliseconds 500;\
     }"'
@@ -474,7 +474,7 @@ FunctionEnd
       !insertmacro OpenTimingLogForAppend $2
       FileWrite $2 "phase=vc-runtime-install-failed exit=$0 output=$1$\r$\n"
       FileClose $2
-      MessageBox MB_OK|MB_ICONEXCLAMATION "Microsoft Visual C++ Runtime 未能自动安装。晓软AI智能体仍会完成安装，但部分本地组件可能暂时不可用。"
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Microsoft Visual C++ Runtime 未能自动安装。晓软政务办公智能体仍会完成安装，但部分本地组件可能暂时不可用。"
   VcRuntimeReady:
 
   ; Local inference remains optional. The user chose on the custom options page
@@ -559,8 +559,8 @@ FunctionEnd
 
 !macro customUnInit
   nsExec::ExecToLog 'powershell -NoProfile -NonInteractive -Command "\
-    Stop-Process -Name 晓软AI智能体 -Force -ErrorAction SilentlyContinue;\
-    Get-Process node -ErrorAction SilentlyContinue | Where-Object { $$_.Path -like \"*XiaoruanAgent*\" -or $$_.Path -like \"*晓软AI智能体*\" } | Stop-Process -Force -ErrorAction SilentlyContinue"'
+    Stop-Process -Name 晓软政务办公智能体 -Force -ErrorAction SilentlyContinue;\
+    Get-Process node -ErrorAction SilentlyContinue | Where-Object { $$_.Path -like \"*XiaoruanAgent*\" -or $$_.Path -like \"*晓软政务办公智能体*\" } | Stop-Process -Force -ErrorAction SilentlyContinue"'
   Pop $0
 !macroend
 

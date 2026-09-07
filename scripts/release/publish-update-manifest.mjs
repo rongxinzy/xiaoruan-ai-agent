@@ -164,8 +164,8 @@ const manifests = installerArtifacts.map(({ platform, arch, variant, filename, s
     minimumSupportedVersion: '2026.7.1',
     mandatory: false,
     releaseNotes: {
-      zh: { title: `晓软AI智能体 ${releaseVersion}`, items: ['修复若干问题'] },
-      en: { title: `Xiaoruan AI Agent ${releaseVersion}`, items: ['Bug fixes'] },
+      zh: { title: `晓软政务办公智能体 ${releaseVersion}`, items: ['修复若干问题'] },
+      en: { title: `Xiaoruan Government Office Agent ${releaseVersion}`, items: ['Bug fixes'] },
     },
     artifact: {
       platform,

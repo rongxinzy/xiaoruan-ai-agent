@@ -44,7 +44,7 @@ npm run dist:linux      # Linux (.AppImage)
 
 ## Architecture Overview
 
-晓软AI智能体 is an Electron + React desktop application for local-first AI Agent workflows. Its core areas are:
+晓软政务办公智能体 is an Electron + React desktop application for local-first AI Agent workflows. Its core areas are:
 
 1. **Cowork Mode** - AI-assisted task sessions powered exclusively by the in-process Pi runtime
 2. **llama.cpp Local Inference** - local model service management, model launch options, and Pi model integration
@@ -53,7 +53,7 @@ npm run dist:linux      # Linux (.AppImage)
 
 Uses strict process isolation with IPC communication.
 
-Public-facing product documentation and user-visible UI copy must use the 晓软AI智能体 (Xiaoruan AI Agent) name. All pre-rebrand product names are retired and must not be reintroduced. Pi, cc-connect, and llama.cpp are internal implementation details: never expose them in branding or user-facing copy; describe the agent runtime and local inference as self-developed (全栈自研). Legacy identifiers and the retired runtime are handled under a scorched-earth policy: no data migration, compatibility shims, reads, startup, packaging, or fallback. Old data and directories are abandoned in place and are not actively deleted.
+Public-facing product documentation and user-visible UI copy must use the 晓软政务办公智能体 (Xiaoruan Government Office Agent) name. All pre-rebrand product names are retired and must not be reintroduced. Pi, cc-connect, and llama.cpp are internal implementation details: never expose them in branding or user-facing copy; describe the agent runtime and local inference as self-developed (全栈自研). Legacy identifiers and the retired runtime are handled under a scorched-earth policy: no data migration, compatibility shims, reads, startup, packaging, or fallback. Old data and directories are abandoned in place and are not actively deleted.
 
 ### Authentication Flow
 
@@ -429,7 +429,7 @@ These global skills complement, not replace, the conventions in this file.
 
 - `design-taste-frontend` - brief inference, anti-slop review, and redesign guidance for landing pages, marketing pages, portfolios, and brand surfaces.
 - `high-end-visual-design` - optional reference for premium visual direction and motion choreography when the brief explicitly calls for it.
-- `frontend-ui-change-strategy` is the project-specific entry point for existing Xiaoruan AI Agent UI changes.
+- `frontend-ui-change-strategy` is the project-specific entry point for existing Xiaoruan Government Office Agent UI changes.
 - For Work, Chat, Settings, MCP, Skills, local inference, and other product surfaces, use `DESIGN.md`, the shared UI components, and `rongxinai-ui-adapter` as the source of truth. Do not apply marketing-page defaults from the taste skills wholesale.
 - For landing, marketing, portfolio, brand, or redesign work, read `design-taste-frontend` for brief inference and audit guidance.
 - Read `high-end-visual-design` only when premium visual treatment or complex motion is an explicit requirement, and adapt its ideas to the project's tokens, components, accessibility, and performance rules.

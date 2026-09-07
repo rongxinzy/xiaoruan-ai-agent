@@ -5,31 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/x-icon" href="./xiaoruan-icon-primary.ico" />
     <link rel="icon" type="image/png" sizes="32x32" href="./xiaoruan-icon-primary-32.png" />
-    <title>Xiaoruan AI Agent</title>
+    <title>Xiaoruan Government Office Agent</title>
     <script>
       // 在页面加载前预设主题，避免闪烁
       (function () {
         try {
           const savedConfig = localStorage.getItem('app_config');
-          if (savedConfig) {
-            const config = JSON.parse(savedConfig);
-            const theme = config.theme || 'system';
+          {
+            const config = savedConfig ? JSON.parse(savedConfig) : {};
+            const theme = config.theme || 'light';
 
             if (theme === 'dark') {
               document.documentElement.classList.add('dark');
-              document.documentElement.style.backgroundColor = '#0F1117';
+              document.documentElement.style.backgroundColor = '#0c0a09';
             } else if (theme === 'light') {
               document.documentElement.classList.add('light');
-              document.documentElement.style.backgroundColor = '#F8F9FB';
+              document.documentElement.style.backgroundColor = '#ffffff';
             } else {
               // 跟随系统
               const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
               if (prefersDark) {
                 document.documentElement.classList.add('dark');
-                document.documentElement.style.backgroundColor = '#0F1117';
+                document.documentElement.style.backgroundColor = '#0c0a09';
               } else {
                 document.documentElement.classList.add('light');
-                document.documentElement.style.backgroundColor = '#F8F9FB';
+                document.documentElement.style.backgroundColor = '#ffffff';
               }
             }
           }

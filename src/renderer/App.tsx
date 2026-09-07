@@ -17,7 +17,7 @@ import type { CodingSidebarSelection } from './components/coding/CodingWorkspace
 import type { McpRegistryId } from './components/mcp/constants';
 import type { SettingsOpenOptions } from './components/Settings';
 import { prefetchFeatureView } from './components/featureViewPrefetch';
-import { ParticleBootScreen } from './components/boot/ParticleBootScreen';
+import { BrandBootScreen } from './components/boot/BrandBootScreen';
 import { LazyChunkErrorBoundary } from './components/LazyChunkErrorBoundary';
 import Sidebar from './components/Sidebar';
 import Toast from './components/Toast';
@@ -770,7 +770,7 @@ const App: React.FC = () => {
     return (
       <div className="h-screen overflow-hidden flex flex-col">
         {windowsStandaloneTitleBar}
-        <ParticleBootScreen
+        <BrandBootScreen
           exiting={isInitialized}
           onExitComplete={() => setBootScreenVisible(false)}
         />

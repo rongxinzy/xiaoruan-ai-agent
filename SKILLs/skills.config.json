@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Default skill configuration for Xiaoruan AI Agent",
+  "description": "Default skill configuration for Xiaoruan Government Office Agent",
   "retired": ["pptx"],
   "defaults": {
     "docx": { "order": 10, "enabled": true },

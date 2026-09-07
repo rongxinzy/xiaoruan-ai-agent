@@ -1,3 +1,4 @@
+import { ProductBrand } from '../ProductBrand';
 import { cn } from '@shared/lib/utils';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -848,10 +849,9 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         workMode === WorkMode.Chat &&
         isChatAgentExecution &&
         isChatSkillShortcutSelection(sessionSkillIds);
-      const sessionPermissionMode =
-        shouldAutoAllowChatSkill
-          ? resolveChatSkillShortcutPermissionMode(sessionSkillIds, config.permissionMode)
-          : config.permissionMode;
+      const sessionPermissionMode = shouldAutoAllowChatSkill
+        ? resolveChatSkillShortcutPermissionMode(sessionSkillIds, config.permissionMode)
+        : config.permissionMode;
       console.log('[CoworkView] creating session:', {
         modelId: currentAgentSelectedModel?.id,
         providerKey: currentAgentSelectedModel?.providerKey,
@@ -1459,9 +1459,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
       dispatch(clearActiveSkills());
     }
     window.setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent('cowork:focus-input', { detail: { clear: true } }),
-      );
+      window.dispatchEvent(new CustomEvent('cowork:focus-input', { detail: { clear: true } }));
     }, 0);
   };
 
@@ -1609,16 +1607,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         <div className="relative mx-auto flex min-h-full w-full max-w-5xl min-w-[320px] flex-col items-center justify-center gap-10 px-4 py-8">
           {/* Welcome Section - staggered entrance animation */}
           <div className="flex min-h-28 flex-col items-center justify-center gap-5 text-center">
-            <img
-              src="xiaoruan-logo-light.svg"
-              alt="logo"
-              className="logo-light h-16 w-auto mx-auto animate-fade-in-up"
-            />
-            <img
-              src="xiaoruan-logo-dark.svg"
-              alt="logo"
-              className="logo-dark h-16 w-auto mx-auto animate-fade-in-up"
-            />
+            <ProductBrand />
             <p
               className={cn(
                 'min-h-5 max-w-md px-2 text-sm text-muted-foreground animate-fade-in-up',
