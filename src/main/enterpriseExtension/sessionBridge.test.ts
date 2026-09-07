@@ -12,7 +12,7 @@ describe('Zhiyuan enterprise session bridge', () => {
       ok: false,
       error: {
         code: 'UNAVAILABLE',
-        message: 'Zhiyuan enterprise session is unavailable.',
+        message: 'Enterprise session is unavailable.',
       },
     });
   });
@@ -100,7 +100,7 @@ describe('Zhiyuan enterprise session bridge', () => {
       ok: false,
       error: {
         code: 'OPERATION_FAILED',
-        message: 'Zhiyuan enterprise session operation failed.',
+        message: 'Enterprise session operation failed.',
       },
     });
     expect(JSON.stringify(result)).not.toContain('sensitive detail');

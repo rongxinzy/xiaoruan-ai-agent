@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { buildScheduledTaskEnginePrompt } from '../../scheduledTask/enginePrompt';
 import { applyCoworkLanguagePrompt } from '../coworkLanguagePrompt';
 import { composeCoworkSystemPrompt } from './composer';
-import { ZhiyuanIdentityPrompt } from './constants';
+import { ProductIdentityPrompt } from '../productIdentity';
 
 const countOccurrences = (value: string, target: string): number => value.split(target).length - 1;
 
@@ -17,7 +17,7 @@ test('keeps managed prompt sections idempotent across repeated composition', () 
     prompt = composeCoworkSystemPrompt({ basePrompt: prompt, language: 'zh' });
   }
 
-  expect(countOccurrences(prompt, ZhiyuanIdentityPrompt)).toBe(1);
+  expect(countOccurrences(prompt, ProductIdentityPrompt)).toBe(1);
   expect(countOccurrences(prompt, buildScheduledTaskEnginePrompt())).toBe(1);
   expect(countOccurrences(prompt, '<cowork-response-language>')).toBe(1);
   expect(countOccurrences(prompt, 'User-configured instructions.')).toBe(1);
@@ -51,7 +51,7 @@ test('keeps the selected expert SOP exactly once', () => {
   });
 
   expect(countOccurrences(prompt, selectedExpert.promptSnapshot)).toBe(1);
-  expect(prompt).not.toContain(ZhiyuanIdentityPrompt);
+  expect(prompt).not.toContain(ProductIdentityPrompt);
 });
 
 test('places the expert block before the base prompt with identity precedence', () => {
@@ -86,5 +86,5 @@ test('removes the previous expert SOP when the selected expert changes', () => {
 
   expect(nextPrompt).not.toContain(previousExpert.promptSnapshot);
   expect(nextPrompt).toContain(nextExpert.promptSnapshot);
-  expect(nextPrompt).not.toContain(ZhiyuanIdentityPrompt);
+  expect(nextPrompt).not.toContain(ProductIdentityPrompt);
 });

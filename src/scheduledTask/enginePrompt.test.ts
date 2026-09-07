@@ -2,13 +2,13 @@ import { expect, test } from 'vitest';
 
 import { buildScheduledTaskEnginePrompt } from './enginePrompt';
 
-test('prompt keeps scheduled task ownership in ZhiYuan SQLite', () => {
+test('prompt keeps scheduled task ownership in application SQLite', () => {
   const prompt = buildScheduledTaskEnginePrompt();
 
-  expect(prompt).toMatch(/ZhiYuan scheduled-task API/i);
+  expect(prompt).toMatch(/application scheduled-task API/i);
   expect(prompt).toMatch(/Never call a legacy runtime cron RPC or CLI/i);
   expect(prompt).toMatch(/active conversation context/i);
-  expect(prompt).toMatch(/follow the ZhiYuan scheduled-task schema/i);
+  expect(prompt).toMatch(/follow the application scheduled-task schema/i);
   expect(prompt).toMatch(
     /one-time reminders .*future iso timestamp with an explicit timezone offset/i,
   );
@@ -23,7 +23,7 @@ test('prompt keeps scheduled task ownership in ZhiYuan SQLite', () => {
     /do not use `sessions_spawn`, `subagents`, or ad-hoc background workflows as a substitute for the scheduler/i,
   );
   expect(prompt).toMatch(/never emulate reminders .*bash.*sleep.*legacy runtime CLIs/i);
-  expect(prompt).toMatch(/if the ZhiYuan scheduler is unavailable/i);
+  expect(prompt).toMatch(/if the application scheduler is unavailable/i);
 
   // Message delivery guard for cron sessions
   expect(prompt).toMatch(/do NOT.*call the `message` tool directly/i);

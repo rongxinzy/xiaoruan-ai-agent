@@ -33,7 +33,7 @@ export class ZhiyuanEnterpriseSessionBridge implements ZhiyuanEnterpriseSessionH
   registerProvider(provider: ZhiyuanEnterpriseSessionProvider): () => void {
     validateProvider(provider);
     if (this.#provider) {
-      throw new Error('A Zhiyuan enterprise session provider is already registered.');
+      throw new Error('An enterprise session provider is already registered.');
     }
     this.#provider = provider;
     let registered = true;
@@ -71,7 +71,7 @@ export class ZhiyuanEnterpriseSessionBridge implements ZhiyuanEnterpriseSessionH
   ): Promise<EnterpriseSessionResult> {
     const provider = this.#provider;
     if (!provider) {
-      return failure('UNAVAILABLE', 'Zhiyuan enterprise session is unavailable.');
+      return failure('UNAVAILABLE', 'Enterprise session is unavailable.');
     }
     try {
       return Object.freeze({
@@ -80,7 +80,7 @@ export class ZhiyuanEnterpriseSessionBridge implements ZhiyuanEnterpriseSessionH
       });
     } catch (error) {
       this.#logError('[EnterpriseSession] Session operation failed:', error);
-      return failure('OPERATION_FAILED', 'Zhiyuan enterprise session operation failed.');
+      return failure('OPERATION_FAILED', 'Enterprise session operation failed.');
     }
   }
 }
@@ -122,7 +122,7 @@ function normalizeSnapshot(value: unknown): EnterpriseSessionSnapshot {
     return Object.freeze({ status: snapshot.status });
   }
   if (snapshot?.status !== 'authenticated') {
-    throw new Error('Zhiyuan enterprise session provider returned an invalid snapshot.');
+    throw new Error('Enterprise session provider returned an invalid snapshot.');
   }
   return Object.freeze({
     status: 'authenticated',
@@ -146,7 +146,7 @@ function normalizeIdentity(value: unknown): EnterpriseSessionIdentity {
     typeof identity?.passwordChangeRequired !== 'boolean' ||
     !isOptionalEmail(user?.email)
   ) {
-    throw new Error('Zhiyuan enterprise session provider returned an invalid identity.');
+    throw new Error('Enterprise session provider returned an invalid identity.');
   }
   return Object.freeze({
     user: Object.freeze({
@@ -172,12 +172,12 @@ function validateProvider(provider: ZhiyuanEnterpriseSessionProvider): void {
     typeof candidate.changePassword !== 'function' ||
     typeof candidate.logout !== 'function'
   ) {
-    throw new Error('Zhiyuan enterprise session provider is incomplete.');
+    throw new Error('Enterprise session provider is incomplete.');
   }
 }
 
 function invalidInput(): EnterpriseSessionResult {
-  return failure('INVALID_INPUT', 'Zhiyuan enterprise session input is invalid.');
+  return failure('INVALID_INPUT', 'Enterprise session input is invalid.');
 }
 
 function failure(

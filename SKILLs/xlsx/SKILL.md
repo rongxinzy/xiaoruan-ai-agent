@@ -14,12 +14,12 @@ metadata:
 
 Handle the request directly. Do NOT spawn sub-agents. Always write the output file the user requests.
 
-## ZhiYuan/Pi execution
+## Inside the application
 
-When this skill is run inside ZhiYuan, invoke bundled scripts with the `run_skill_script` tool.
+When this skill is run inside the application, invoke bundled scripts with the `run_skill_script` tool.
 Pass script arguments as an array; never construct a shell command or call `python3` directly.
 The direct `python3` commands later in this document are CLI-reference examples only; inside
-ZhiYuan, translate each such invocation to `run_skill_script` so the packaged XLSX runtime is used.
+the application, translate each such invocation to `run_skill_script` so the packaged XLSX runtime is used.
 The application supplies its managed Python/uv runtime and the skill's `requirements.txt`, then
 returns distinct errors for a missing script, a missing runtime, and a non-zero script exit.
 

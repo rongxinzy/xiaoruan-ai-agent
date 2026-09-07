@@ -28,7 +28,7 @@ export class ZhiyuanEnterpriseSkillBridge implements ZhiyuanEnterpriseSkillHostC
 
   constructor(options: ZhiyuanEnterpriseSkillBridgeOptions) {
     if (!path.isAbsolute(options.userDataPath)) {
-      throw new Error('Zhiyuan enterprise user data path must be absolute.');
+      throw new Error('Enterprise user data path must be absolute.');
     }
     this.#managedDirectory = path.join(
       path.resolve(options.userDataPath),
@@ -42,7 +42,7 @@ export class ZhiyuanEnterpriseSkillBridge implements ZhiyuanEnterpriseSkillHostC
 
   registerManagedRoot(): ZhiyuanEnterpriseManagedSkillRegistration {
     if (this.#registered) {
-      throw new Error('A Zhiyuan enterprise managed Skill root is already registered.');
+      throw new Error('An enterprise managed Skill root is already registered.');
     }
     fs.mkdirSync(this.#managedDirectory, { recursive: true });
     const unregisterRoot = this.#registerSkillRoot(this.#managedDirectory);

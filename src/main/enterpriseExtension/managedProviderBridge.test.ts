@@ -5,8 +5,21 @@ import type { ProviderConfig } from '../../shared/providers';
 import type { ZhiyuanManagedProviderSource } from './contract';
 import { EnterpriseExtensionStoreKey, LegacyManagedProviderKey } from './constants';
 import { ZhiyuanManagedProviderBridge } from './managedProviderBridge';
+import { APP_NAME } from '../appConstants';
 
 describe('Zhiyuan managed provider bridge', () => {
+  test('uses the custom product name when the source has no display name', async () => {
+    const bridge = new ZhiyuanManagedProviderBridge(() => () => {});
+    const unregister = bridge.registerSource({
+      providerKey: LegacyManagedProviderKey.Enterprise,
+      exclusive: true,
+      snapshot: async () => providerConfig({ displayName: undefined }),
+    });
+    bridge.attachStore(new MemoryStore({}));
+    await bridge.refresh();
+    expect(bridge.catalog()[0].providerDisplayName).toBe(APP_NAME);
+    unregister();
+  });
   test('projects a managed source into the existing custom provider configuration', async () => {
     const store = new MemoryStore({
       [EnterpriseExtensionStoreKey.AppConfig]: {

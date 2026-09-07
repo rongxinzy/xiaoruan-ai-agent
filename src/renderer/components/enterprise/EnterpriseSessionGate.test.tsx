@@ -5,6 +5,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { EnterpriseSessionResult } from '../../../shared/enterpriseSession';
+import { APP_NAME } from '../../constants/app';
 import { EnterpriseSessionGate } from './EnterpriseSessionGate';
 import { publishEnterpriseSessionResult } from '../../services/enterpriseSessionEvents';
 
@@ -56,7 +57,7 @@ describe('EnterpriseSessionGate', () => {
       </EnterpriseSessionGate>,
     );
 
-    const frame = await screen.findByTitle('Zhiyuan');
+    const frame = await screen.findByTitle(APP_NAME);
     expect(frame).toHaveAttribute('sandbox', 'allow-forms allow-scripts');
     expect(frame).toHaveAttribute('src', 'zhiyuan-enterprise-ui://renderer/index.html');
     expect(screen.queryByText('application')).not.toBeInTheDocument();
@@ -73,7 +74,7 @@ describe('EnterpriseSessionGate', () => {
     );
 
     expect(await screen.findByText('application')).toBeInTheDocument();
-    expect(screen.queryByTitle('Zhiyuan')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(APP_NAME)).not.toBeInTheDocument();
   });
 
   test('keeps the gate open while a password change is required', async () => {
@@ -86,7 +87,7 @@ describe('EnterpriseSessionGate', () => {
       </EnterpriseSessionGate>,
     );
 
-    await waitFor(() => expect(screen.getByTitle('Zhiyuan')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTitle(APP_NAME)).toBeInTheDocument());
     expect(screen.queryByText('application')).not.toBeInTheDocument();
   });
 
@@ -103,7 +104,7 @@ describe('EnterpriseSessionGate', () => {
 
     act(() => publishEnterpriseSessionResult({ ok: true, snapshot: { status: 'signed-out' } }));
 
-    expect(await screen.findByTitle('Zhiyuan')).toBeInTheDocument();
+    expect(await screen.findByTitle(APP_NAME)).toBeInTheDocument();
     expect(screen.queryByText('application')).not.toBeInTheDocument();
   });
 });

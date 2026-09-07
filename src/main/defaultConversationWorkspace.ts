@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 
 export const getDefaultConversationWorkspacePath = (): string => {
-  return path.join(os.homedir(), '.zhiyuan', 'scratch');
+  return path.join(os.homedir(), '.xiaoruan', 'scratch');
 };
 
 export const ensureDefaultConversationWorkspacePath = (): string => {

@@ -831,7 +831,6 @@ const translations: Record<LanguageType, Record<string, string>> = {
     imageVisionHint:
       '当前模型未启用图片输入，图片将以文件路径形式发送。若该模型本身支持图片理解，可在模型配置中开启图片输入选项。',
     copied: '已复制',
-    copyrightHolder: '容芯致远',
     noModelsAvailable: '暂无可用模型',
     testConnection: '测试连接',
     connectionTestResult: '连接测试结果',
@@ -4140,7 +4139,6 @@ const translations: Record<LanguageType, Record<string, string>> = {
     imageVisionHint:
       'Image input is not enabled for the current model. Images will be sent as file paths. If the model supports vision, you can enable image input in the model configuration.',
     copied: 'Copied',
-    copyrightHolder: 'Rongxin Zhiyuan. All rights reserved.',
     noModelsAvailable: 'No models available',
     testConnection: 'Test Connection',
     connectionTestResult: 'Connection Test Result',

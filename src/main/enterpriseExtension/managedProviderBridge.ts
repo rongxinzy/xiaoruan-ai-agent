@@ -21,6 +21,7 @@ import {
   type PiOpenAICompatTokenRefresher,
 } from '../libs/agentEngine/piOpenAICompatProxy';
 import { EnterpriseExtensionStoreKey, LegacyManagedProviderKey } from './constants';
+import { APP_NAME } from '../appConstants';
 
 const MANAGED_PROVIDER_KEY_PATTERN = /^custom_[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$/;
 const MAX_MODELS = 256;
@@ -72,7 +73,7 @@ export class ZhiyuanManagedProviderBridge implements ZhiyuanManagedProviderHostC
   }
 
   registerSource(source: ZhiyuanManagedProviderSource): () => void {
-    if (this.#source) throw new Error('A Zhiyuan managed provider source is already registered.');
+    if (this.#source) throw new Error('A managed provider source is already registered.');
     validateSource(source);
     this.#source = source;
     this.#disposeSourceListener = source.onDidChange?.(() => void this.refresh()) ?? null;
@@ -118,7 +119,7 @@ export class ZhiyuanManagedProviderBridge implements ZhiyuanManagedProviderHostC
   catalog(): readonly ManagedProviderCatalogModel[] {
     const snapshot = this.#snapshot;
     if (!snapshot) return Object.freeze([]);
-    const providerDisplayName = snapshot.config.displayName?.trim() || 'Zhiyuan';
+    const providerDisplayName = snapshot.config.displayName?.trim() || APP_NAME;
     return Object.freeze(
       (snapshot.config.models ?? []).map((model, index) =>
         Object.freeze({
@@ -170,7 +171,7 @@ export class ZhiyuanManagedProviderBridge implements ZhiyuanManagedProviderHostC
 
   async #syncSnapshot(source: ZhiyuanManagedProviderSource): Promise<ManagedProviderSnapshot> {
     if (!this.#store || source !== this.#source) {
-      throw new Error('Zhiyuan managed provider source is unavailable.');
+      throw new Error('Managed provider source is unavailable.');
     }
     const snapshot = normalizeSnapshot(
       source.providerKey,
@@ -178,7 +179,7 @@ export class ZhiyuanManagedProviderBridge implements ZhiyuanManagedProviderHostC
       await source.snapshot(),
     );
     if (source !== this.#source) {
-      throw new Error('Zhiyuan managed provider source changed during refresh.');
+      throw new Error('Managed provider source changed during refresh.');
     }
     this.#snapshot = snapshot;
     this.#writeSnapshot(snapshot);
@@ -334,10 +335,10 @@ function providerContainsModel(
 
 function validateSource(source: ZhiyuanManagedProviderSource): void {
   if (!source || typeof source !== 'object' || typeof source.snapshot !== 'function') {
-    throw new Error('Zhiyuan managed provider source is invalid.');
+    throw new Error('Managed provider source is invalid.');
   }
   if (source.onDidChange !== undefined && typeof source.onDidChange !== 'function') {
-    throw new Error('Zhiyuan managed provider change subscription is invalid.');
+    throw new Error('Managed provider change subscription is invalid.');
   }
   if (!MANAGED_PROVIDER_KEY_PATTERN.test(source.providerKey)) {
     throw new Error('Managed provider key must use the custom provider namespace.');
@@ -366,7 +367,7 @@ function normalizeConfig(value: ProviderConfig): ProviderConfig {
     apiKey: normalizeText(value.apiKey, MAX_TEXT_LENGTH),
     baseUrl: normalizeHttpUrl(value.baseUrl),
     apiFormat: 'openai',
-    displayName: normalizeText(value.displayName ?? 'Zhiyuan', 128),
+    displayName: normalizeText(value.displayName ?? APP_NAME, 128),
     models: models.map(model => ({
       id: normalizeText(model.id, 256),
       name: normalizeText(model.name, 128),

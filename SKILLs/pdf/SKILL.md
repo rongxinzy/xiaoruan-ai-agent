@@ -24,9 +24,9 @@ Three tasks. One skill.
 
 ## Read `design/design.md` before any CREATE or REFORMAT work.
 
-## ZhiYuan/Pi execution
+## Inside the application
 
-When this skill is run inside ZhiYuan, call `run_skill_script` for the bundled `.py`, `.js`,
+When this skill is run inside the application, call `run_skill_script` for the bundled `.py`, `.js`,
 and `.sh` pipeline steps. Pass each argument separately in `args`; do not call `python3`,
 `uv`, or `bash` directly. The application chooses the managed Python/uv/Node/Git Bash runtime
 and returns a structured runtime error instead of misreporting the input PDF as missing.

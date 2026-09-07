@@ -19,3 +19,11 @@
 产品名称为「晓软政务办公智能体」。应用、托盘、启动页和安装器使用用户提供的晓软科技 R 形标志。原图保存在 `public/brand/xiaoruan-source.jpg`；`public/xiaoruan-mark.png` 是去除底部文字后的白底应用标志。运行 `node scripts/generate-xiaoruan-brand.cjs` 可重新生成各平台图标与字标，需通过 `XIAORUAN_BRAND_FONT` 指定中文字体（macOS 默认使用黑体）。
 
 默认采用浅色政务红，深色与跟随系统仍可选。主题源文件位于 `src/renderer/theme/themes/`，修改后运行 `bun src/renderer/theme/scripts/generate-css.ts`，同时同步 `css/shadcn-token-bridge.css`。启动欢迎页无需登录，展示完整产品名，就绪后淡出；减少动态效果时立即退出。
+
+## 身份文案与交付工作区
+
+任务、IM 对话/任务及新建工作区的默认身份统一由 `src/main/productIdentity.ts` 管理。自我介绍只使用本产品名称，公司归属依据经核实的交付信息回答，不从源码、仓库或依赖推断。随包系统提示词和技能说明已去除上游品牌宣传；网站仅在法律版权行保留上游作者署名。
+
+新建默认对话目录为 `~/.xiaoruan/scratch`，任务目录标识为 `.xiaoruan-tasks`，缺少项目路径的记录使用 `~/xiaoruan/project`。不迁移或删除原版目录；已有用户指定路径继续保留。
+
+已有客户自定义系统提示词、`IDENTITY.md` 和历史会话不会被自动重写。交付新客户应使用新工作区；曾运行旧测试版本的工作区可能保留当时保存的身份文案。协议名、数据库表名、依赖目录等内部标识，以及上述资源服务域名继续保留。

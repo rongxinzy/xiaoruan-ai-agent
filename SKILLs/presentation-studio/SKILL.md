@@ -46,7 +46,7 @@ Create an isolated project directory:
 
 ## Tooling
 
-Inside ZhiYuan/Pi, use `run_skill_script` for the validator and compiler so PowerPoint export
+Inside the application, use `run_skill_script` for the validator and compiler so PowerPoint export
 does not depend on a user-installed Node.js. The skill's local `node_modules` remains the
 dependency boundary; the app supplies the Node-compatible runtime.
 
