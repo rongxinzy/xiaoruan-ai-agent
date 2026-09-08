@@ -20,11 +20,13 @@ test('uses a separate product and storage identity', () => {
 test('does not expose product authentication, free-model or updater bridges', () => {
   const preload = fs.readFileSync('src/main/preload.ts', 'utf8');
   const main = fs.readFileSync('src/main/main.ts', 'utf8');
-  for (const text of [preload, main]) {
+  const settings = fs.readFileSync('src/renderer/components/Settings.tsx', 'utf8');
+  for (const text of [preload, main, settings]) {
     expect(text).not.toMatch(/CommunityAuth|ModelPoolIpc|AppUpdateIpc/);
     expect(text).not.toMatch(
       /account\.rongxzyai\.com|model\.rongxzyai\.com|updates\.rongxzyai\.com/,
     );
   }
   expect(preload).not.toMatch(/^  (auth|modelPool|appUpdate):/m);
+  expect(settings).not.toMatch(/appUpdate|checkForUpdate|updateSectionTitle/);
 });

@@ -27,10 +27,10 @@ const compressionAction = './.github/actions/verify-windows-compression';
 const windows = workflow('windows-installer-pr.yml');
 const steps = windows.jobs['package-and-install'].steps;
 
-test('PRs defer compression qualification while manual and scheduled builds retain it', () => {
-  expect(windows.on).toHaveProperty('schedule');
+test('pull request packaging defers compression qualification', () => {
   expect(windows.on).toHaveProperty('workflow_dispatch');
   expect(windows.on).toHaveProperty('workflow_call');
+  expect(windows.on).not.toHaveProperty('schedule');
   expect(steps.find(step => step.uses === compressionAction)?.if).toBe(
     "${{ github.event_name != 'pull_request' }}",
   );
@@ -65,18 +65,18 @@ test('PRs restore without saving; verified main runs publish the same cache grap
   expect(install?.if).toBeUndefined();
 });
 
-test.each([
-  ['release-candidate.yml', 'build-candidate', 'Assemble Windows candidate payload'],
-  ['online-update-release.yml', 'build-platforms', 'Upload Windows immutable artifact to R2'],
-])('compression qualification blocks the publication path in %s', (file, job, publishName) => {
-  const releaseSteps = workflow(file).jobs[job].steps;
-  const index = releaseSteps.findIndex(step => step.uses === compressionAction);
-  expect(index).toBeGreaterThan(-1);
-  expect(releaseSteps[index].if).toBe("${{ matrix.platform == 'windows' }}");
-  expect(releaseSteps[index]['continue-on-error']).toBeUndefined();
-  const publishIndex = releaseSteps.findIndex(step => step.name === publishName);
-  expect(publishIndex).toBeGreaterThan(index);
-  expect(releaseSteps[publishIndex].if).toBe("${{ matrix.platform == 'windows' }}");
+test('the private package workflow builds Windows x64 and uploads only after it succeeds', () => {
+  const privateBuild = workflow('build-platforms.yml');
+  expect(privateBuild.on).toHaveProperty('workflow_dispatch');
+  expect(privateBuild.on).not.toHaveProperty('schedule');
+  expect(privateBuild.on).not.toHaveProperty('push');
+  expect(privateBuild.on).not.toHaveProperty('release');
+  expect(privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win')).toBe(true);
+  expect(privateBuild.jobs['build-platforms'].steps.some(step => step.run?.includes('windows-runtime-smoke.ps1'))).toBe(true);
+  expect(privateBuild.jobs['upload-packages'].uses).toBe('./.github/workflows/upload-custom-packages.yml');
+  expect(privateBuild.jobs['upload-packages'].needs).toEqual([
+    'build-platforms',
+  ]);
 });
 
 test('shared qualification fails on thresholds and retains reports without hiding failure', () => {
