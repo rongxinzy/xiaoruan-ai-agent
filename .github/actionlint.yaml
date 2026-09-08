@@ -1,0 +1,12 @@
+# These inherited workflows are deliberately inert. The isolation test requires
+# every job to retain this constant-false guard; all other lint checks remain on.
+paths:
+  .github/workflows/online-update-release.yml:
+    ignore:
+      - 'constant expression "false" in condition'
+  .github/workflows/release-candidate-promotion.yml:
+    ignore:
+      - 'constant expression "false" in condition'
+  .github/workflows/online-update-cleanup.yml:
+    ignore:
+      - 'constant expression "false" in condition'

@@ -1,0 +1,51 @@
+name: Store Xiaoruan packages in private R2
+
+on:
+  workflow_call:
+    inputs:
+      artifact-pattern:
+        required: true
+        type: string
+      expected-artifacts:
+        required: true
+        type: number
+      source-commit:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: xiaoruan-release
+    timeout-minutes: 30
+    env:
+      R2_BUCKET: xiaoruan-releases
+      PACKAGE_SOURCE_COMMIT: ${{ inputs.source-commit || github.sha }}
+      XIAORUAN_R2_ACCOUNT_ID: ${{ vars.XIAORUAN_R2_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+      - name: Check dedicated storage configuration
+        run: node --input-type=module -e "import { uploadIdentity } from './scripts/release/upload-custom-packages.mjs'; uploadIdentity(process.env)"
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ inputs.artifact-pattern }}
+          path: packages
+      - name: Verify and store installers
+        env:
+          EXPECTED_ARTIFACTS: ${{ inputs.expected-artifacts }}
+        run: node scripts/release/upload-custom-packages.mjs packages "$EXPECTED_ARTIFACTS"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: xiaoruan-r2-upload-receipt
+          path: custom-upload-receipt/packages.json
+          if-no-files-found: error
+          retention-days: 30

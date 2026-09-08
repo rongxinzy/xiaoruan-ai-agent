@@ -1,4 +1,4 @@
-name: Build platform artifacts (manual)
+name: Build Xiaoruan packages to private R2 (manual)
 
 on:
   workflow_dispatch:
@@ -27,9 +27,11 @@ env:
 
 jobs:
   plan-platforms:
+    if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
     steps:
       - id: plan
         env:
@@ -54,17 +56,36 @@ jobs:
           fi
 
           matrix+=']}'
+          count="$(jq '.include | length' <<< "$matrix")"
+          [[ "$count" -gt 0 ]] || { echo 'Select at least one platform' >&2; exit 1; }
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+  storage-config:
+    needs: plan-platforms
+    runs-on: ubuntu-latest
+    environment: xiaoruan-release
+    steps:
+      - name: Require dedicated R2 credentials before building
+        env:
+          ACCOUNT_ID: ${{ vars.XIAORUAN_R2_ACCOUNT_ID }}
+          ACCESS_KEY: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
+          SECRET_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
+        run: |
+          [[ -n "$ACCOUNT_ID" && -n "$ACCESS_KEY" && -n "$SECRET_KEY" ]] || {
+            echo 'Configure XIAORUAN_R2_ACCOUNT_ID and dedicated R2 secrets in xiaoruan-release' >&2
+            exit 1
+          }
 
   build-platforms:
-    needs: plan-platforms
+    needs: [plan-platforms, storage-config]
     strategy:
       # A manual platform build is a single release unit; cancel sibling builds
       # as soon as one selected platform fails.
       fail-fast: true
       matrix: ${{ fromJSON(needs.plan-platforms.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
-    environment: release
+    environment: xiaoruan-release
     # A release build may download upstream runtimes, but it must never consume
     # a runner indefinitely when an upstream command stalls.
     timeout-minutes: 90
@@ -152,13 +173,16 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: release/*.dmg
+          if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v6
         if: ${{ matrix.platform == 'windows' }}
         with:
           name: ${{ matrix.artifact }}
           path: release/*.exe
+          if-no-files-found: error
           retention-days: 7
+
       - uses: actions/upload-artifact@v6
         if: ${{ always() && matrix.platform == 'linux' }}
         with:
@@ -168,3 +192,10 @@ jobs:
             release/*.deb
             release/linux-render-smoke.png
           retention-days: 7
+
+  upload-packages:
+    needs: [plan-platforms, build-platforms]
+    uses: ./.github/workflows/upload-custom-packages.yml
+    with:
+      artifact-pattern: '*-build'
+      expected-artifacts: ${{ fromJSON(needs.plan-platforms.outputs.count) }}

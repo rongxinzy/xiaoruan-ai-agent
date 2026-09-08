@@ -1,4 +1,5 @@
 name: Publish online update
+# Disabled: private package publication uses the dedicated path in build-platforms.yml.
 
 on:
   workflow_dispatch:
@@ -15,6 +16,7 @@ env:
 
 jobs:
   prepare-release:
+    if: ${{ false }}
     needs: quality
     runs-on: ubuntu-latest
     outputs:
@@ -50,9 +52,11 @@ jobs:
           echo "commit=$tag_commit" >> "$GITHUB_OUTPUT"
 
   quality:
+    if: ${{ false }}
     uses: ./.github/workflows/ci.yml
 
   supply-chain-gate:
+    if: ${{ false }}
     needs: prepare-release
     runs-on: ubuntu-latest
     permissions:
@@ -97,6 +101,7 @@ jobs:
         run: bun run check:supply-chain-inputs
 
   build-platforms:
+    if: ${{ false }}
     needs: [prepare-release, supply-chain-gate]
     strategy:
       # A release is only valid when every platform artifact is available.
@@ -390,6 +395,7 @@ jobs:
           retention-days: 7
 
   publish:
+    if: ${{ false }}
     needs: [prepare-release, build-platforms]
     runs-on: ubuntu-latest
     environment: release

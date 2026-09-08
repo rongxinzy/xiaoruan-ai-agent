@@ -436,7 +436,15 @@ jobs:
             echo "- source commit: \`${{ needs.prepare-candidate.outputs.commit }}\`"
             echo "- candidate run ID: \`${{ github.run_id }}\`"
             echo '- retention: 7 days'
-            echo '- R2/Cloudflare upload: not performed'
+            echo '- R2 upload: dedicated xiaoruan-releases job follows verification'
             echo
-            echo 'Use the candidate run ID for the promotion workflow after the exact installers have been validated.'
+            echo 'Installers are stored privately; official-site promotion is disabled in this edition.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  upload-packages:
+    needs: [prepare-candidate, verify-candidate]
+    uses: ./.github/workflows/upload-custom-packages.yml
+    with:
+      artifact-pattern: release-candidate-${{ needs.prepare-candidate.outputs.version }}-*
+      expected-artifacts: 3
+      source-commit: ${{ needs.prepare-candidate.outputs.commit }}
