@@ -33,4 +33,4 @@ jobs:
       - name: Verify custom edition boundaries
         run: npm test -- src/renderer/index.test.ts src/renderer/services/availableModels.test.ts src/shared/providers/constants.test.ts src/main/libs/agentEngine/piRuntimeAdapter.test.ts src/main/appConstants.test.ts src/main/productIdentity.test.ts src/main/coworkPrompt/composer.test.ts src/main/im/imChatHandler.test.ts src/main/im/imCoworkHandler.test.ts src/scheduledTask/enginePrompt.test.ts tests/brandIdentity.test.ts
       - name: Verify isolated package storage
-        run: bunx vitest run scripts/release/upload-custom-packages.test.ts tests/customReleaseIsolation.test.ts
+        run: bunx vitest run scripts/release/upload-custom-packages.test.ts scripts/release/verify-windows-artifact-source.test.ts tests/customReleaseIsolation.test.ts

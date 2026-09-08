@@ -109,6 +109,7 @@ export async function uploadCustomPackages({ root, expectedArtifacts, env = proc
     repository: env.GITHUB_REPOSITORY,
     commit: identity.sourceCommit,
     runId: env.GITHUB_RUN_ID,
+    sourceRunId: env.SOURCE_BUILD_RUN_ID || env.GITHUB_RUN_ID,
     runAttempt: env.GITHUB_RUN_ATTEMPT,
     bucket: CUSTOM_BUCKET,
     objects,
