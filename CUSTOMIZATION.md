@@ -5,7 +5,7 @@
 - 手动运行 `Build Xiaoruan Windows package to private R2 (manual)`，当前仅构建 Windows x64；普通 push/PR 继续只做质量验证。
 - 如构建已完成但上传中断，可手动运行 `Store Xiaoruan packages in private R2`，填写原构建的 `source-run-id`；校验来源及 Windows 构建、运行时检查和制品保存步骤成功后，仅复用 `windows-build` 上传。
 - 打包验证通过后，安装包上传到独立私有 R2 桶 `xiaoruan-releases`，路径为 `builds/<commit>/<run-id>/<attempt>/<artifact>/<filename>`。同目录 `packages.json` 记录大小和 SHA-256，上传后复核远端元数据。GitHub Actions 保留临时制品供排查。
-- 上游 `release-candidate.yml`、官网发布、候选晋级和官网 R2 清理工作流全部禁用；普通构建只保留 Windows x64，不写官网桶、stable 清单、更新 feed 或 Pages。
+- 候选构建、候选晋级、官网发布和官网 R2 清理工作流已删除。打包流程仅两步：Windows x64 构建并检查 → 直接上传独立 R2，无需晋级；不写官网桶、stable 清单、更新 feed 或 Pages。
 - GitHub Environment `xiaoruan-release` 仅允许 main 分支。变量 `XIAORUAN_R2_ACCOUNT_ID` 指定账户；Secrets `XIAORUAN_R2_ACCESS_KEY_ID`、`XIAORUAN_R2_SECRET_ACCESS_KEY` 必须是只允许 `xiaoruan-releases` 的 Object Read & Write 凭据。禁止复用原官网存储凭据。
 - 不启用 r2.dev 公开访问或官网域名。通过 R2 控制台或经过授权的 S3 客户端取包。缺少专用凭据时，普通打包工作流在构建前报错，不回退到其他存储。
 

@@ -11,27 +11,14 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  plan-platforms:
+  build-platforms:
     if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-      count: ${{ steps.plan.outputs.count }}
-    steps:
-      - id: plan
-        shell: bash
-        run: |
-          matrix='{"include":[{"platform":"windows","runner":"windows-latest","artifact":"windows-build","runtime_target":"win-x64"}]}'
-          count=1
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-
-  storage-config:
-    needs: plan-platforms
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     environment: xiaoruan-release
+    timeout-minutes: 90
     steps:
       - name: Require dedicated R2 credentials before building
+        shell: bash
         env:
           ACCOUNT_ID: ${{ vars.XIAORUAN_R2_ACCOUNT_ID }}
           ACCESS_KEY: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
@@ -42,18 +29,6 @@ jobs:
             exit 1
           }
 
-  build-platforms:
-    needs: [plan-platforms, storage-config]
-    strategy:
-      # Keep the matrix contract with exactly one Windows x64 target.
-      fail-fast: true
-      matrix: ${{ fromJSON(needs.plan-platforms.outputs.matrix) }}
-    runs-on: ${{ matrix.runner }}
-    environment: xiaoruan-release
-    # A release build may download upstream runtimes, but it must never consume
-    # a runner indefinitely when an upstream command stalls.
-    timeout-minutes: 90
-    steps:
       - uses: actions/checkout@v6
       - name: Enforce retired runtime decoupling
         run: node scripts/ci/check-openclaw-decoupling.mjs
@@ -75,16 +50,16 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
             vendor/engram-runtime
             vendor/channel-runtime
-          key: packaging-${{ runner.os }}-${{ matrix.runtime_target }}-node24-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'scripts/**') }}
+          key: packaging-${{ runner.os }}-win-x64-node24-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'scripts/**') }}
           restore-keys: |
-            packaging-${{ runner.os }}-${{ matrix.runtime_target }}-node24-bun1.4.0-
+            packaging-${{ runner.os }}-win-x64-node24-bun1.4.0-
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run apply:patches
       - name: Set up Windows runtimes
         run: |
           bun run setup:uv-runtime
           bun run setup:python-runtime
-          bun run engram:runtime:${{ matrix.runtime_target }}
+          bun run engram:runtime:win-x64
       - name: Build Windows
         run: bun run dist:win
         env:
@@ -99,14 +74,12 @@ jobs:
           -ProjectRoot ${{ github.workspace }}
       - uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.artifact }}
+          name: windows-build
           path: release/*.exe
           if-no-files-found: error
           retention-days: 7
 
   upload-packages:
-    needs: [plan-platforms, build-platforms]
+    needs: [build-platforms]
     uses: ./.github/workflows/upload-custom-packages.yml
-    with:
-      artifact-pattern: windows-build
-      expected-artifacts: 1
+    secrets: inherit

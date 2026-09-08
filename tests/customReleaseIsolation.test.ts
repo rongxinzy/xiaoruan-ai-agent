@@ -17,16 +17,14 @@ function workflow(name: string) {
   };
 }
 
-test('every job in inherited official publishing and cleanup workflows is disabled', () => {
+test('candidate and official publishing workflows are removed', () => {
   for (const name of [
     'online-update-release',
     'release-candidate-promotion',
     'online-update-cleanup',
     'release-candidate',
   ]) {
-    const jobs = Object.values(workflow(name).jobs);
-    expect(jobs.length).toBeGreaterThan(0);
-    for (const job of jobs) expect(job.if, name).toBe('${{ false }}');
+    expect(fs.existsSync(`.github/workflows/${name}.yml`), name).toBe(false);
   }
 });
 
@@ -39,10 +37,11 @@ test('the normal package workflow uploads only after its build dependency passes
 
 test('the normal private package build is Windows x64 only', () => {
   const content = fs.readFileSync('.github/workflows/build-platforms.yml', 'utf8');
-  expect(content).toContain('"artifact":"windows-build"');
-  expect(content).toContain('"runtime_target":"win-x64"');
-  expect(content).toContain('artifact-pattern: windows-build');
-  expect(content).toContain('expected-artifacts: 1');
+  expect(content).toContain('runs-on: windows-latest');
+  expect(content).toContain('engram:runtime:win-x64');
+  expect(content).toContain('name: windows-build');
+  expect(content).not.toContain('plan-platforms');
+  expect(content).not.toContain('matrix:');
   expect(content).not.toContain('build_macos:');
   expect(content).not.toContain('build_linux:');
   expect(content).not.toContain('Build macOS');
@@ -60,6 +59,8 @@ test('the custom upload job uses only dedicated storage and main-branch credenti
   const content = fs.readFileSync('.github/workflows/upload-custom-packages.yml', 'utf8');
   expect(content).toContain('secrets.XIAORUAN_R2_ACCESS_KEY_ID');
   expect(content).toContain('secrets.XIAORUAN_R2_SECRET_ACCESS_KEY');
+  expect(content).toContain('name: windows-build');
+  expect(content).toContain('path: packages/windows-build');
   expect(content).not.toMatch(
     /zhiyuan-releases|rongxzyai\.com|secrets\.R2_ACCESS_KEY_ID|publish-update-manifest|wrangler pages/,
   );
