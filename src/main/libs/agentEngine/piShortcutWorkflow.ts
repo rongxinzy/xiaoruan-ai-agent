@@ -57,7 +57,7 @@ export class PiShortcutWorkflowController {
     this.workspaceRoot = fs.realpathSync(path.resolve(options.workspaceRoot));
     this.runDirectory = path.join(
       this.workspaceRoot,
-      '.zhiyuan',
+      '.xiaoruan',
       'shortcut-workflows',
       options.sessionId,
     );
