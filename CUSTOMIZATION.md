@@ -1,6 +1,6 @@
 # 定制版说明
 
-本仓库是晓软政务办公智能体的公开定制版本，源自知远智能体。上游版权、许可证及第三方运行时来源不因换牌而转移。
+本仓库是晓软AI智能体的公开定制版本，源自知远智能体。上游版权、许可证及第三方运行时来源不因换牌而转移。
 
 ## 已移除
 
@@ -16,7 +16,7 @@
 
 ## 品牌资源
 
-产品名称为「晓软政务办公智能体」。应用、托盘、启动页和安装器使用用户提供的晓软科技 R 形标志。原图保存在 `public/brand/xiaoruan-source.jpg`；`public/xiaoruan-mark.png` 是去除底部文字后的白底应用标志。运行 `node scripts/generate-xiaoruan-brand.cjs` 可重新生成各平台图标与字标，需通过 `XIAORUAN_BRAND_FONT` 指定中文字体（macOS 默认使用黑体）。
+产品名称为「晓软AI智能体」。应用、托盘、启动页和安装器使用用户提供的晓软科技 R 形标志。原图保存在 `public/brand/xiaoruan-source.jpg`；`public/xiaoruan-mark.png` 是去除底部文字后的白底应用标志。运行 `node scripts/generate-xiaoruan-brand.cjs` 可重新生成各平台图标与字标，需通过 `XIAORUAN_BRAND_FONT` 指定中文字体（macOS 默认使用黑体）。
 
 默认采用浅色政务红，深色与跟随系统仍可选。主题源文件位于 `src/renderer/theme/themes/`，修改后运行 `bun src/renderer/theme/scripts/generate-css.ts`，同时同步 `css/shadcn-token-bridge.css`。启动欢迎页无需登录，展示完整产品名，就绪后淡出；减少动态效果时立即退出。
 

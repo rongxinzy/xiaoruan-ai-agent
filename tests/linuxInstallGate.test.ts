@@ -19,7 +19,7 @@ test('selected pull requests install and start the generated Ubuntu package', ()
   assert.match(workflow, /bun run dist:linux/);
   assert.match(workflow, /sudo apt-get install -y/);
   assert.match(workflow, /realpath/);
-  assert.match(workflow, /'\/opt\/晓软政务办公智能体\/晓软政务办公智能体'/);
+  assert.match(workflow, /'\/opt\/晓软AI智能体\/晓软AI智能体'/);
   assert.match(workflow, /verify-linux-renderer\.mjs/);
   assert.match(workflow, /linux-deb-install-smoke\.png/);
   assert.match(workflow, /actions\/upload-artifact@v6/);

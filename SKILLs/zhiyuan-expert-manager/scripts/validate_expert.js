@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Expert Validator for Xiaoruan Government Office Agent.
+ * Expert Validator for Xiaoruan AI Agent.
  *
- * Validates an expert package against the Xiaoruan Government Office Agent expert specification.
+ * Validates an expert package against the Xiaoruan AI Agent expert specification.
  *
  * Usage:
  *   node validate_expert.js <path/to/expert-dir>

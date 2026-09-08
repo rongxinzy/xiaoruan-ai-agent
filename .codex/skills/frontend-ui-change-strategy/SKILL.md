@@ -1,11 +1,11 @@
 ---
 name: frontend-ui-change-strategy
-description: Analyze and implement narrowly scoped frontend UI changes in the Xiaoruan Government Office Agent project. Use when a user requests a visual or layout adjustment, especially when they require code to be read first, a modification strategy to be proposed, and implementation to wait for explicit approval.
+description: Analyze and implement narrowly scoped frontend UI changes in the Xiaoruan AI Agent project. Use when a user requests a visual or layout adjustment, especially when they require code to be read first, a modification strategy to be proposed, and implementation to wait for explicit approval.
 ---
 
 # Frontend UI Change Strategy
 
-Use this skill for existing Xiaoruan Government Office Agent frontend pages and components. Follow the repository's `AGENTS.md` and `DESIGN.md` rules, preserve unrelated worktree changes, and keep visual changes narrowly scoped.
+Use this skill for existing Xiaoruan AI Agent frontend pages and components. Follow the repository's `AGENTS.md` and `DESIGN.md` rules, preserve unrelated worktree changes, and keep visual changes narrowly scoped.
 
 ## Design Skill Routing
 
@@ -23,7 +23,7 @@ Use this skill as the project-specific entry point, then route to the optional v
 
 Before changing code:
 
-- Read `AGENTS.md` and `DESIGN.md` when the task concerns Xiaoruan Government Office Agent UI.
+- Read `AGENTS.md` and `DESIGN.md` when the task concerns Xiaoruan AI Agent UI.
 - Inspect the page entry point, relevant parent layout, target component, shared UI components, i18n keys, and tests.
 - Use `rg` to locate visible copy, state, event handlers, and style classes.
 - Check `git status --short` and inspect existing diffs for files that may be modified by the user.
@@ -86,7 +86,7 @@ Run the narrowest relevant verification first:
 
 Report passed checks and any verification that could not be run. Do not claim visual verification without actually performing it.
 
-## Xiaoruan Government Office Agent UI Guardrails
+## Xiaoruan AI Agent UI Guardrails
 
 - Follow `DESIGN.md`: semantic tokens, system fonts, approved type scale and weights, standard spacing, 1px borders, restrained shadows, and short `opacity`/`transform` transitions.
 - Prefer `bg-background`, `bg-card`, `bg-muted`, `text-foreground`, `text-muted-foreground`, `border-border`, and project `--zy-*` tokens over literal colors.

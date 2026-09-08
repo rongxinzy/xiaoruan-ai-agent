@@ -25,7 +25,7 @@ const { width, height } = deck.canvas;
 const pres = new pptxgen();
 pres.defineLayout({ name: 'DECKSPEC', width: width / 96, height: height / 96 });
 pres.layout = 'DECKSPEC';
-pres.author = 'Xiaoruan Government Office Agent Presentation Studio';
+pres.author = 'Xiaoruan AI Agent Presentation Studio';
 pres.subject = deck.title ?? 'Presentation';
 const colors = deck.theme.colors;
 const styles = deck.theme.textStyles ?? {};

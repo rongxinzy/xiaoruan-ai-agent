@@ -2492,7 +2492,7 @@ const scheduleReload = (reason: string, webContents?: WebContents) => {
 const gotTheLock = app.requestSingleInstanceLock();
 
 /**
- * Linux only: 检测单实例锁被哪个"晓软政务办公智能体"实例持有。
+ * Linux only: 检测单实例锁被哪个"晓软AI智能体"实例持有。
  *
  * 返回 null 表示没有可接管的目标(同版本多开或未检测到),此时由第一实例
  * 的 second-instance 处理唤起已有窗口,本实例直接退出。
@@ -2501,7 +2501,7 @@ const gotTheLock = app.requestSingleInstanceLock();
  * 身份判定:
  *  - AppImage:运行时环境变量 APPIMAGE 指向源文件(文件名含版本号),
  *    与当前进程的 APPIMAGE 不同即视为旧版本
- *  - deb:/opt/晓软政务办公智能体 下的进程无 APPIMAGE,exe 路径匹配即视为同族;
+ *  - deb:/opt/晓软AI智能体 下的进程无 APPIMAGE,exe 路径匹配即视为同族;
  *    无法区分版本,统一按"旧实例"提示确认
  */
 async function findStaleLinuxInstances(): Promise<{
@@ -2511,7 +2511,7 @@ async function findStaleLinuxInstances(): Promise<{
   if (process.platform !== 'linux') return null;
 
   const currentAppImage = process.env.APPIMAGE ?? null;
-  const familyPattern = /晓软政务办公智能体|XiaoruanAgent/i;
+  const familyPattern = /晓软AI智能体|XiaoruanAgent/i;
 
   const pids: number[] = [];
   const oldAppImages: string[] = [];
@@ -2535,9 +2535,9 @@ async function findStaleLinuxInstances(): Promise<{
         pids.push(pid);
         oldAppImages.push(appImage);
       } else {
-        // 非 AppImage:匹配 deb 安装路径 /opt/晓软政务办公智能体
+        // 非 AppImage:匹配 deb 安装路径 /opt/晓软AI智能体
         const exe = fs.readlinkSync(`/proc/${pid}/exe`);
-        if (!/\/opt\/晓软政务办公智能体/.test(exe)) continue;
+        if (!/\/opt\/晓软AI智能体/.test(exe)) continue;
         pids.push(pid);
       }
     } catch {
@@ -2546,9 +2546,9 @@ async function findStaleLinuxInstances(): Promise<{
   }
   if (pids.length === 0) return null;
 
-  // 从 AppImage 文件名提取旧版本号,如 晓软政务办公智能体-1.0.0.AppImage → 1.0.0
+  // 从 AppImage 文件名提取旧版本号,如 晓软AI智能体-1.0.0.AppImage → 1.0.0
   const versionMatch = oldAppImages[0]?.match(/-(\d+\.\d+\.\d+)\.AppImage/i);
-  const oldLabel = versionMatch ? `晓软政务办公智能体 ${versionMatch[1]}` : '旧版本的晓软政务办公智能体';
+  const oldLabel = versionMatch ? `晓软AI智能体 ${versionMatch[1]}` : '旧版本的晓软AI智能体';
   return { pids, oldLabel };
 }
 
@@ -2598,7 +2598,7 @@ if (!gotTheLock) {
           title: '检测到旧版本正在运行',
           message: `检测到 ${stale.oldLabel} 正在运行。`,
           detail:
-            `当前启动的是晓软政务办公智能体 ${currentVersion}。启动新版本需要先关闭旧版本,` +
+            `当前启动的是晓软AI智能体 ${currentVersion}。启动新版本需要先关闭旧版本,` +
             '关闭旧版本将中断其中进行中的任务。是否继续?',
         });
         if (response === 1) {

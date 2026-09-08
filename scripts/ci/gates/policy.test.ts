@@ -162,7 +162,7 @@ test('candidate checks bind the source commit and block packaging before memory 
   const payload = steps.findIndex(step => step.name === 'Assemble Linux candidate payload');
   expect(install).toBeGreaterThan(-1);
   expect(payload).toBeGreaterThan(install);
-  expect(steps[install].run).toContain("'/opt/晓软政务办公智能体/晓软政务办公智能体'");
+  expect(steps[install].run).toContain("'/opt/晓软AI智能体/晓软AI智能体'");
   expect(workflow('memory-leak-nightly.yml').jobs[HeavyJob.Memory].uses).toBe(memoryJob.uses);
   expect(workflow('memory-leak-nightly.yml').jobs[HeavyJob.Memory].with?.['analyze-heap']).toBe(
     true,

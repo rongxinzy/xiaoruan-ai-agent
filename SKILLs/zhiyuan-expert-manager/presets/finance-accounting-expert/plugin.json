@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Finance and accounting expert for statements, journal entries, reconciliations, close management, audit support, and variance analysis.",
   "author": {
-    "name": "Xiaoruan Government Office Agent"
+    "name": "Xiaoruan AI Agent"
   },
 
   "expertType": "agent",

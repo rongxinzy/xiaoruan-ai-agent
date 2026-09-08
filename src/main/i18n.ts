@@ -8,7 +8,7 @@
  * Usage:
  *   import { t, setLanguage } from './i18n';
  *   setLanguage('en');
- *   const label = t('trayShowWindow'); // "Open 晓软政务办公智能体"
+ *   const label = t('trayShowWindow'); // "Open 晓软AI智能体"
  *   const msg = t('imMissingCredentials', { fields: 'appId, appSecret' });
  */
 
@@ -20,7 +20,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     todoReminderTitle: '待办提醒',
     todoReminderBody: '该完成：{title}',
     // Tray menu
-    trayShowWindow: '打开晓软政务办公智能体',
+    trayShowWindow: '打开晓软AI智能体',
     trayNewTask: '新建任务',
     traySettings: '设置',
     trayQuit: '退出',
@@ -116,7 +116,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     llamacppModelLaunchLogWindowTitle: '模型启动日志',
     localInferenceImportRuntimeDialogTitle: '选择本地推理 backend',
     localInferenceImportRuntimeDialogMessage:
-      '请选择本地推理 backend 主包压缩包（zip 或 tar.gz）；如果已经解压，请进入目录后选择其中任意文件。晓软政务办公智能体 会校验平台和 backend 类型后导入。',
+      '请选择本地推理 backend 主包压缩包（zip 或 tar.gz）；如果已经解压，请进入目录后选择其中任意文件。晓软AI智能体 会校验平台和 backend 类型后导入。',
     coworkErrorUnknown: '任务执行出错，请重试。如果问题持续出现，请检查模型配置。',
     imErrorPrefix: '处理消息时出错',
 
@@ -316,7 +316,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     scheduledTaskDeliveryAccountMismatch:
       'The channel account does not match the selected conversation',
     // Tray menu
-    trayShowWindow: 'Open 晓软政务办公智能体',
+    trayShowWindow: 'Open 晓软AI智能体',
     trayNewTask: 'New Task',
     traySettings: 'Settings',
     trayQuit: 'Quit',
@@ -435,7 +435,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     llamacppModelLaunchLogWindowTitle: 'Model startup logs',
     localInferenceImportRuntimeDialogTitle: 'Select local inference Backend',
     localInferenceImportRuntimeDialogMessage:
-      'Select a local inference backend archive (zip or tar.gz). If it is already extracted, open that directory and choose any file inside it. Xiaoruan Government Office Agent will validate the platform and backend type before importing it.',
+      'Select a local inference backend archive (zip or tar.gz). If it is already extracted, open that directory and choose any file inside it. Xiaoruan AI Agent will validate the platform and backend type before importing it.',
     coworkErrorUnknown:
       'Task failed due to an unexpected error. Please retry. If the issue persists, check your model configuration.',
     imErrorPrefix: 'Error processing message',

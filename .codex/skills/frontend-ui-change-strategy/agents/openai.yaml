@@ -1,4 +1,4 @@
 interface:
   display_name: "Frontend UI Change Strategy"
-  short_description: "Analyze and implement approved Xiaoruan Government Office Agent UI changes"
+  short_description: "Analyze and implement approved Xiaoruan AI Agent UI changes"
   default_prompt: "Use $frontend-ui-change-strategy to analyze the requested frontend change, propose a scoped strategy, wait for approval, then implement and verify it."
