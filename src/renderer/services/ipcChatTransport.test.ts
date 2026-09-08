@@ -1,20 +1,24 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 import { IpcChatTransport, SseChunkParser } from './ipcChatTransport';
+import { ApiFormat, ProviderName } from '../../shared/providers';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('routes the managed model through the dedicated tokenless renderer IPC', async () => {
-  const modelPoolStream = vi.fn(async () => ({ ok: true, status: 200, statusText: 'OK' }));
-  const genericStream = vi.fn();
+test('streams configured provider responses and cancels the next request through generic IPC', async () => {
+  const genericStream = vi.fn(async (_request: Record<string, unknown>) => ({
+    ok: true,
+    status: 200,
+  }));
+  const cancelStream = vi.fn(async () => true);
   const callbacks: { onData?: (chunk: string) => void } = {};
   vi.stubGlobal('window', {
     electron: {
-      modelPool: {
-        stream: modelPoolStream,
-        cancelStream: vi.fn(async () => true),
+      api: {
+        stream: genericStream,
+        cancelStream,
         onStreamData: vi.fn((_requestId: string, callback: (chunk: string) => void) => {
           callbacks.onData = callback;
           return () => undefined;
@@ -23,10 +27,15 @@ test('routes the managed model through the dedicated tokenless renderer IPC', as
         onStreamError: vi.fn(() => () => undefined),
         onStreamAbort: vi.fn(() => () => undefined),
       },
-      api: { stream: genericStream },
     },
   });
-  const transport = new IpcChatTransport({ provider: 'zhiyuan', model: 'zhiyuan-free' });
+  const transport = new IpcChatTransport({
+    provider: ProviderName.DeepSeek,
+    model: 'deepseek-chat',
+    apiKey: 'test-user-key',
+    baseUrl: 'https://provider.example/v1',
+    apiFormat: ApiFormat.OpenAI,
+  });
 
   const stream = await transport.sendMessages({
     trigger: 'submit-message',
@@ -41,18 +50,19 @@ test('routes the managed model through the dedicated tokenless renderer IPC', as
     ],
     abortSignal: undefined,
   });
-  await vi.waitFor(() => expect(modelPoolStream).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(genericStream).toHaveBeenCalledTimes(1));
 
-  expect(modelPoolStream).toHaveBeenCalledWith({
+  expect(genericStream).toHaveBeenCalledWith({
     requestId: expect.stringMatching(/^ipcchat_chat-1_/u),
-    conversationId: 'chat-1',
-    body: {
-      model: 'zhiyuan-free',
+    url: 'https://provider.example/v1/chat/completions',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-user-key' },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
       messages: [{ role: 'user', content: 'hello' }],
       stream: true,
-    },
+    }),
   });
-  expect(genericStream).not.toHaveBeenCalled();
 
   const reader = stream.getReader();
   callbacks.onData?.('data: {"choices":[{"delta":{"content":"hel');
@@ -62,6 +72,7 @@ test('routes the managed model through the dedicated tokenless renderer IPC', as
     value: { type: 'text-delta', delta: 'hello' },
   });
   await expect(reader.read()).resolves.toMatchObject({ value: { type: 'finish' } });
+  await expect(reader.read()).resolves.toMatchObject({ done: true });
   const nextStream = await transport.sendMessages({
     trigger: 'submit-message',
     chatId: 'chat-1',
@@ -69,11 +80,12 @@ test('routes the managed model through the dedicated tokenless renderer IPC', as
     messages: [{ id: 'message-2', role: 'user', parts: [{ type: 'text', text: 'continue' }] }],
     abortSignal: undefined,
   });
-  await vi.waitFor(() => expect(modelPoolStream).toHaveBeenCalledTimes(2));
-  expect(modelPoolStream).toHaveBeenLastCalledWith(
-    expect.objectContaining({ conversationId: 'chat-1' }),
-  );
+  await vi.waitFor(() => expect(genericStream).toHaveBeenCalledTimes(2));
+  const firstId = genericStream.mock.calls[0][0].requestId;
+  const nextId = genericStream.mock.calls[1][0].requestId;
+  expect(nextId).not.toBe(firstId);
   await nextStream.cancel();
+  expect(cancelStream).toHaveBeenLastCalledWith(nextId);
 });
 
 test('closes reasoning before starting the visible text segment', () => {

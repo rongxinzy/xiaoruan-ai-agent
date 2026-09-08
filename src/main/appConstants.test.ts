@@ -1,6 +1,19 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import { expect, test } from 'vitest';
 import { APP_DATA_DIR_NAME, APP_ID, APP_NAME, DB_FILENAME } from './appConstants';
+
+test('expert CLI registration targets the database opened by the application', () => {
+  const require = createRequire(import.meta.url);
+  const { getDefaultDbPath } =
+    require('../../SKILLs/zhiyuan-expert-manager/scripts/register_expert.js') as {
+      getDefaultDbPath: () => string;
+    };
+  const dbPath = getDefaultDbPath();
+  expect(path.basename(dbPath)).toBe(DB_FILENAME);
+  expect(path.basename(path.dirname(dbPath))).toBe(APP_DATA_DIR_NAME);
+});
 
 test('uses a separate product and storage identity', () => {
   expect(APP_NAME).toBe('晓软AI智能体');

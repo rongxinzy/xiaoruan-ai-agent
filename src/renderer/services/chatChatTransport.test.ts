@@ -3,21 +3,12 @@ import { expect, test, vi } from 'vitest';
 import { ChatMessagePayload } from '../types/chat';
 import { apiService } from './api';
 import { ChatChatTransport } from './chatChatTransport';
-
-const ipcMocks = vi.hoisted(() => ({
-  sendMessages: vi.fn(),
-}));
+import { ProviderName } from '../../shared/providers';
 
 vi.mock('./api', () => ({
   apiService: {
     chatWithWebSearch: vi.fn(),
     cancelOngoingRequest: vi.fn(),
-  },
-}));
-
-vi.mock('./ipcChatTransport', () => ({
-  IpcChatTransport: class {
-    sendMessages = ipcMocks.sendMessages;
   },
 }));
 
@@ -34,28 +25,29 @@ async function collectChunks(
   return chunks;
 }
 
-test('routes the managed ZhiYuan model through the main-process Model Pool bridge', async () => {
-  const managedStream = new ReadableStream<Record<string, unknown>>({
-    start(controller) {
-      controller.close();
-    },
-  });
-  ipcMocks.sendMessages.mockResolvedValue(managedStream);
-  const transport = new ChatChatTransport({
-    modelId: 'zhiyuan-free',
-    modelProviderKey: 'zhiyuan',
-  });
+test('preserves the configured provider and model when sending direct chat', async () => {
+  vi.mocked(apiService.chatWithWebSearch).mockResolvedValue({ content: 'Hello' });
+  const options = { modelId: 'deepseek-chat', modelProviderKey: ProviderName.DeepSeek };
+  const transport = new ChatChatTransport(options);
   const input = {
     trigger: 'submit-message' as const,
-    chatId: 'chat-managed',
+    chatId: 'chat-configured',
     messageId: undefined,
     messages: [{ id: 'u1', role: 'user' as const, parts: [{ type: 'text' as const, text: 'hi' }] }],
     abortSignal: undefined,
   };
 
-  await expect(transport.sendMessages(input)).resolves.toBe(managedStream);
-  expect(ipcMocks.sendMessages).toHaveBeenCalledWith(input);
-  expect(apiService.chatWithWebSearch).not.toHaveBeenCalled();
+  const chunks = await collectChunks(await transport.sendMessages(input));
+  expect(apiService.chatWithWebSearch).toHaveBeenLastCalledWith(
+    'hi',
+    expect.any(Function),
+    [],
+    options,
+    expect.any(String),
+    undefined,
+    expect.any(Function),
+  );
+  expect(chunks).toContainEqual(expect.objectContaining({ type: 'text-delta', delta: 'Hello' }));
 });
 
 test('emits reasoning-end when reasoning stream finishes before content', async () => {
