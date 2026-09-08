@@ -14,7 +14,7 @@ interface Step {
 
 interface Workflow {
   on: Record<string, unknown>;
-  jobs: Record<string, { steps: Step[] }>;
+  jobs: Record<string, { steps: Step[]; uses?: string; needs?: string[] }>;
 }
 
 function workflow(file: string): Workflow {
