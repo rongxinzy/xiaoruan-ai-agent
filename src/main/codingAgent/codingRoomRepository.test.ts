@@ -166,11 +166,21 @@ test('coalesces streamed tool call snapshots with the same tool call ID', () => 
   });
 });
 
+test('loads a lane and its owning room directly by lane id', () => {
+  db = new Database(':memory:');
+  initializeCodingAgentSchema(db);
+  const repository = new CodingRoomRepository(db);
+  const room = repository.getOrCreateRoom('/workspace/project');
+  const mission = repository.createMission(room.id, 'Direct lookup');
+  const lane = repository.createLane(mission.id, 'agent', '/workspace/project');
 
-
-
-
-
+  expect(repository.getLaneById(lane.id)).toEqual(expect.objectContaining({ id: lane.id }));
+  expect(repository.getRoomByLaneId(lane.id)).toEqual(
+    expect.objectContaining({ id: room.id, workspaceRoot: '/workspace/project' }),
+  );
+  expect(repository.getLaneById('missing-lane')).toBeNull();
+  expect(repository.getRoomByLaneId('missing-lane')).toBeNull();
+});
 
 test('persists one pending elicitation per lane and rejects duplicate responses', () => {
   db = new Database(':memory:');
