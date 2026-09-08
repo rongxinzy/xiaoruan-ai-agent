@@ -409,7 +409,7 @@ describe('PiRuntimeAdapter', () => {
           fs.existsSync(
             path.join(
               workspaceRoot,
-              '.zhiyuan',
+              '.xiaoruan',
               'research',
               'academic-session',
               'state',
