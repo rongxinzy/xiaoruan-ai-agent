@@ -1,7 +1,7 @@
 # Daimon Skill 方法论蒸馏台账
 
 本台账记录对 Daimon 目录中 38 个 Skill 的方法论审阅结果。目标不是复制
-上游提示词或其平台专属 API，而是把可迁移原则放入知远的 Skill、Pi harness
+上游提示词或其平台专属 API，而是把可迁移原则放入晓软AI智能体的 Skill、Pi harness
 和构建门禁；每一项必须能落到可执行的交付、验证或边界上。
 
 ## 已内化的通用原则
@@ -63,7 +63,7 @@
 
 ## 当前不变量与验证
 
-- 82 个知远内置 Skill 的 frontmatter 由 `npm run validate:skills` 检查，并在 PR CI 执行。
+- 82 个晓软AI智能体内置 Skill 的 frontmatter 由 `npm run validate:skills` 检查，并在 PR CI 执行。
 - PPT、Word、网站、表格和深度研究快捷入口都必须记录可验证交付物；前四类还必须有真实 raster 预览。
 - QA/预览记录必须引用已注册交付物，不能用无关文件凑证据。
 - 研究还要求多个角度、已完成的研究委派、可访问来源和跨域来源分布。

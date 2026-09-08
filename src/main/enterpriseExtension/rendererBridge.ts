@@ -104,12 +104,12 @@ export class ZhiyuanEnterpriseRendererBridge {
 
   #registerSessionGate(rootDirectory: string, entrypoint: string): () => void {
     if (this.#sessionGate) {
-      throw new Error('A Zhiyuan enterprise session gate is already registered.');
+      throw new Error('An enterprise session gate is already registered.');
     }
     const normalizedEntrypoint = normalizeRelativePath(entrypoint);
     const resolvedEntrypoint = resolveRegularFile(rootDirectory, normalizedEntrypoint);
     if (!resolvedEntrypoint) {
-      throw new Error('Zhiyuan enterprise session gate entrypoint is not a regular file.');
+      throw new Error('Enterprise session gate entrypoint is not a regular file.');
     }
 
     const registration = Object.freeze({
@@ -130,18 +130,18 @@ export class ZhiyuanEnterpriseRendererBridge {
     page: ZhiyuanEnterpriseSettingsPageRegistration,
   ): () => void {
     if (!page || typeof page !== 'object') {
-      throw new Error('Zhiyuan enterprise settings page registration is invalid.');
+      throw new Error('Enterprise settings page registration is invalid.');
     }
     if (!SETTINGS_PAGE_ID_PATTERN.test(page.id)) {
-      throw new Error('Zhiyuan enterprise settings page ID is invalid.');
+      throw new Error('Enterprise settings page ID is invalid.');
     }
     if (this.#settingsPages.has(page.id)) {
-      throw new Error(`Zhiyuan enterprise settings page ${page.id} is already registered.`);
+      throw new Error(`Enterprise settings page ${page.id} is already registered.`);
     }
     const normalizedEntrypoint = normalizeRelativePath(page.entrypoint);
     const resolvedEntrypoint = resolveRegularFile(rootDirectory, normalizedEntrypoint);
     if (!resolvedEntrypoint) {
-      throw new Error('Zhiyuan enterprise settings page entrypoint is not a regular file.');
+      throw new Error('Enterprise settings page entrypoint is not a regular file.');
     }
     const labels = Object.freeze({
       zh: normalizeLabel(page.labels?.zh),
@@ -167,7 +167,7 @@ export const zhiyuanEnterpriseRendererBridge = new ZhiyuanEnterpriseRendererBrid
 
 function normalizeRelativePath(value: unknown): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > MAX_ENTRYPOINT_LENGTH) {
-    throw new Error('Zhiyuan enterprise renderer entrypoint is invalid.');
+    throw new Error('Enterprise renderer entrypoint is invalid.');
   }
   const normalized = value.replaceAll('\\', '/');
   if (
@@ -176,7 +176,7 @@ function normalizeRelativePath(value: unknown): string {
     normalized.includes('\0') ||
     normalized.split('/').some(segment => segment === '..' || segment.length === 0)
   ) {
-    throw new Error('Zhiyuan enterprise renderer entrypoint must be a safe relative path.');
+    throw new Error('Enterprise renderer entrypoint must be a safe relative path.');
   }
   return normalized;
 }
@@ -189,7 +189,7 @@ function normalizeLabel(value: unknown): string {
     value.trim() !== value ||
     /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(value)
   ) {
-    throw new Error('Zhiyuan enterprise settings page label is invalid.');
+    throw new Error('Enterprise settings page label is invalid.');
   }
   return value;
 }
@@ -215,7 +215,7 @@ function resolveRegularFile(rootDirectory: string, relativePath: string): string
 function realDirectory(directory: string): string {
   const realPath = fs.realpathSync(directory);
   if (!fs.statSync(realPath).isDirectory()) {
-    throw new Error('Zhiyuan enterprise extension directory is invalid.');
+    throw new Error('Enterprise extension directory is invalid.');
   }
   return realPath;
 }

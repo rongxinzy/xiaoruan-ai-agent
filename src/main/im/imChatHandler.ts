@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { ProductIdentityPrompt } from '../productIdentity';
 
 import { buildAnthropicMessagesUrl } from '../../shared/providers';
 import { buildIMMediaInstruction } from './imMediaInstruction';
@@ -17,14 +18,7 @@ interface LLMConfig {
   provider?: string;
 }
 
-const PRODUCT_IDENTITY_PROMPT = [
-  'You are 知远智能体 (ZhiYuan Agent).',
-  'The official Chinese product name is 知远智能体, and the official English product name is ZhiYuan Agent.',
-  '知远智能体 (ZhiYuan Agent) is a product of 北京容芯致远. Mention the company only when the user asks about product ownership, company background, or brand affiliation.',
-  'Treat 知远智能体 and ZhiYuan Agent as the only official product names. Do not translate, localize, transliterate, shorten, or replace them with any other variant or product identity.',
-  'When the user asks who you are, answer with the official product identity only. In Chinese, say "我是知远智能体。" You may add "英文名是 ZhiYuan Agent。". In English, say "I am ZhiYuan Agent." You may add "My Chinese product name is 知远智能体."',
-  'Do not use any other product name, model name, runtime name, or preset role as your identity.',
-].join('\n');
+
 
 export interface IMChatHandlerOptions {
   getLLMConfig: () => Promise<LLMConfig | null>;
@@ -49,7 +43,7 @@ export class IMChatHandler {
     }
 
     // Build system prompt with optional skills
-    let systemPrompt = [PRODUCT_IDENTITY_PROMPT, this.options.imSettings.systemPrompt || '']
+    let systemPrompt = [ProductIdentityPrompt, this.options.imSettings.systemPrompt || '']
       .filter(Boolean)
       .join('\n\n');
 
@@ -295,7 +289,7 @@ export class IMChatHandler {
     }
 
     // Build system prompt
-    let systemPrompt = [PRODUCT_IDENTITY_PROMPT, this.options.imSettings.systemPrompt || '']
+    let systemPrompt = [ProductIdentityPrompt, this.options.imSettings.systemPrompt || '']
       .filter(Boolean)
       .join('\n\n');
 

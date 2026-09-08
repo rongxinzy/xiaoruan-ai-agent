@@ -56,7 +56,7 @@ test('rejects a linked attachment directory before writing outside the workspace
   const outside = `${testRoot}-outside`;
   await fs.mkdir(outside, { recursive: true });
   try {
-    await fs.symlink(outside, path.join(testRoot, '.zhiyuan'), 'junction');
+    await fs.symlink(outside, path.join(testRoot, '.xiaoruan'), 'junction');
     await expect(
       persistCcConnectMedia({
         workspacePath: testRoot,

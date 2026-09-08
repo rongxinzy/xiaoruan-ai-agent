@@ -27,9 +27,9 @@ Create, edit, and format DOCX documents via CLI tools or direct C# scripts built
 
 ## Setup
 
-## ZhiYuan/Pi execution
+## Inside the application
 
-When this skill is run inside ZhiYuan, use the `run_skill_script` tool for every bundled
+When this skill is run inside the application, use the `run_skill_script` tool for every bundled
 `.sh`, `.py`, `.mjs`, or `.ps1` script. Do not invoke `bash`, `python3`, or `node`
 through a hand-built shell command. The application resolves the packaged Git Bash,
 Python, and Node runtimes and reports the exact unavailable runtime when one is missing.
@@ -46,7 +46,7 @@ Example:
 }
 ```
 
-**First time (CLI reference):** `bash scripts/setup.sh` (or `powershell scripts/setup.ps1` on Windows, `--minimal` to skip optional deps). Inside ZhiYuan, run the corresponding setup script with `run_skill_script`.
+**First time (CLI reference):** `bash scripts/setup.sh` (or `powershell scripts/setup.ps1` on Windows, `--minimal` to skip optional deps). Inside the application, run the corresponding setup script with `run_skill_script`.
 
 **First operation in session:** `bash scripts/env_check.sh`. Do not proceed if `NOT READY`. `LIMITED` means that the bundled local Markdown converter can create a simple DOCX without downloads, but structural editing, template operations, and OpenXML validation still require .NET 8+. (Skip on subsequent operations within the same session.)
 

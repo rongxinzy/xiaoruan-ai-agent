@@ -29,25 +29,16 @@ describe('ConfigService', () => {
     });
   });
 
-  test('repairs managed access disabled by legacy key validation and preserves user providers', async () => {
-    storedConfig.providers![ProviderName.Zhiyuan].enabled = false;
-    storedConfig.providers![ProviderName.Zhiyuan].apiKey = '';
-    storedConfig.providers![ProviderName.Zhiyuan].models = [];
+  test('preserves provider settings without managed free access', async () => {
     storedConfig.providers![ProviderName.DeepSeek].enabled = false;
     const service = new ConfigService();
     await service.reload();
-    expect(service.getConfig().providers![ProviderName.Zhiyuan].enabled).toBe(true);
-    expect(storedConfig.providers![ProviderName.Zhiyuan].enabled).toBe(true);
-    expect(storedConfig.providers![ProviderName.Zhiyuan].models?.length).toBeGreaterThan(0);
-    expect(service.getConfig().providers![ProviderName.Zhiyuan].apiKey).toBe('');
     expect(service.getConfig().providers![ProviderName.DeepSeek].enabled).toBe(false);
 
     const providers = structuredClone(service.getConfig().providers!);
-    providers[ProviderName.Zhiyuan].enabled = false;
+    providers[ProviderName.DeepSeek].enabled = true;
     await service.updateConfig({ providers, theme: 'light' });
-    expect(storedConfig.providers![ProviderName.Zhiyuan].enabled).toBe(true);
-    expect(storedConfig.providers![ProviderName.Zhiyuan].models?.length).toBeGreaterThan(0);
-    expect(storedConfig.providers![ProviderName.DeepSeek].enabled).toBe(false);
+    expect(storedConfig.providers![ProviderName.DeepSeek].enabled).toBe(true);
     expect(storedConfig.theme).toBe('light');
   });
 

@@ -12,8 +12,20 @@ const allowedTechnicalIdentifiers = [
 ];
 
 describe('brand identity', () => {
+  test('bundled model-facing instructions do not advertise the upstream brand', () => {
+    const skillFiles = execFileSync('git', ['ls-files', ':(glob)SKILLs/**/SKILL.md'], {
+      encoding: 'utf8',
+    }).trim().split('\n').filter(Boolean);
+    for (const filename of ['resources/SYSTEM_PROMPT.md', ...skillFiles]) {
+      const text = fs.readFileSync(filename, 'utf8');
+      expect(text, filename).not.toMatch(
+        /容芯致远|北京容芯|(?:ZhiYuan|Zhiyuan)(?:\/Pi|\s)|zhiyuan_AutoResearch/,
+      );
+    }
+  });
+
   test('uses the current product name in the renderer title', () => {
-    expect(fs.readFileSync('index.html', 'utf8')).toContain('<title>ZhiYuan Agent</title>');
+    expect(fs.readFileSync('index.html', 'utf8')).toContain('<title>Xiaoruan AI Agent</title>');
   });
 
   test('keeps the retired product name out of tracked copy', () => {

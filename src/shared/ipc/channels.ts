@@ -106,16 +106,6 @@ export const ApiIpc = {
 } as const;
 
 // ─── ZhiYuan Model Pool ────────────────────────────────────────────────────
-export const ModelPoolIpc = {
-  ListModels: 'model-pool:list-models',
-  Stream: 'model-pool:stream',
-  CancelStream: 'model-pool:stream:cancel',
-  streamData: (requestId: string) => `model-pool:stream:${requestId}:data`,
-  streamDone: (requestId: string) => `model-pool:stream:${requestId}:done`,
-  streamError: (requestId: string) => `model-pool:stream:${requestId}:error`,
-  streamAbort: (requestId: string) => `model-pool:stream:${requestId}:abort`,
-} as const;
-export type ModelPoolIpc = (typeof ModelPoolIpc)[keyof typeof ModelPoolIpc];
 
 // ─── Window ─────────────────────────────────────────────────────────────────
 export const WindowIpc = {
@@ -308,13 +298,6 @@ export const ImInstanceIpc = {
 export type ImInstanceIpc = (typeof ImInstanceIpc)[keyof typeof ImInstanceIpc];
 
 // ─── Community Auth ─────────────────────────────────────────────────────────
-export const CommunityAuthIpc = {
-  Login: 'auth:communityLogin',
-  GetCommunityUser: 'auth:getCommunityUser',
-  Logout: 'auth:communityLogout',
-  Callback: 'auth:communityCallback',
-} as const;
-export type CommunityAuthIpc = (typeof CommunityAuthIpc)[keyof typeof CommunityAuthIpc];
 
 // ─── Feishu Install ─────────────────────────────────────────────────────────
 export const FeishuInstallIpc = {

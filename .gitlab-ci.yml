@@ -322,7 +322,7 @@ build-linux:
           SIZE=$(du -h "$pkg" | cut -f1)
           echo "Package: $pkg ($SIZE)"
           ENCODED_NAME=$(python3 -c "import urllib.parse; print(urllib.parse.quote_plus('$(basename "$pkg")'))")
-          UPLOAD_URL="http://172.18.5.249:8081/artifactory/ZhiYuanAgent/linux/$ENCODED_NAME"
+          UPLOAD_URL="http://172.18.5.249:8081/artifactory/XiaoruanAgent/linux/$ENCODED_NAME"
           if [ -n "$ARTIFACTORY_USER" ] && [ -n "$ARTIFACTORY_PASSWORD" ]; then
             echo "Uploading to $UPLOAD_URL ..."
             curl -sS --fail --connect-timeout 10 --max-time 900 \

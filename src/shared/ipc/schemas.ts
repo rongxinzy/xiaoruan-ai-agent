@@ -125,37 +125,6 @@ export const ApiFetchSchema = {
   output: z.object({ status: z.number(), data: z.unknown() }).passthrough(),
 };
 
-export const ModelPoolStreamSchema = {
-  input: z.object({
-    conversationId: z
-      .string()
-      .min(1)
-      .max(160)
-      .regex(/^[A-Za-z0-9_-]+$/u),
-    requestId: z
-      .string()
-      .min(1)
-      .max(160)
-      .regex(/^[A-Za-z0-9_-]+$/u),
-    body: z.record(z.string(), z.unknown()),
-  }),
-  output: z.object({
-    ok: z.boolean(),
-    status: z.number(),
-    statusText: z.string(),
-    error: z.string().optional(),
-  }),
-};
-
-export const ModelPoolModelsSchema = {
-  output: z.object({
-    ok: z.boolean(),
-    status: z.number(),
-    models: z.array(z.string()),
-    error: z.string().optional(),
-  }),
-};
-
 export const ProviderModelDiscoverySchema = {
   input: z.object({
     baseUrl: z.string().url(),

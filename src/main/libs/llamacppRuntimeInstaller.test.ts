@@ -82,7 +82,7 @@ describe('llamacpp runtime installer planning', () => {
       'tester',
       'AppData',
       'Roaming',
-      'ZhiYuanAgent',
+      'XiaoruanAgent',
       'llamacpp-runtime',
     );
     const plan = createLlamaCppRuntimeInstallPlan({
@@ -113,7 +113,7 @@ describe('llamacpp runtime installer planning', () => {
       'tester',
       'AppData',
       'Roaming',
-      'ZhiYuanAgent',
+      'XiaoruanAgent',
       'llamacpp-runtime',
     );
     const plan = createLlamaCppRuntimeInstallPlan({

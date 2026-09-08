@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { expect, test, vi } from 'vitest';
 vi.mock('./config', () => ({
-  configService: { getConfig: () => ({ theme: 'system', themeStyle: 'removed-style' }) },
+  configService: { getConfig: () => ({ theme: 'system' }) },
 }));
 
 test('restores missing styles safely and keeps system appearance independent from the style', async () => {
@@ -18,7 +18,7 @@ test('restores missing styles safely and keeps system appearance independent fro
   themeService.initialize();
   themeService.initialize();
   expect(add).toHaveBeenCalledTimes(1);
-  expect(themeService.getStyle()).toBe('codex');
+  expect(themeService.getStyle()).toBe('xiaoruan');
   expect(themeService.getEffectiveTheme()).toBe('light');
   change?.({ matches: true });
   expect(themeService.getEffectiveTheme()).toBe('dark');
@@ -26,7 +26,7 @@ test('restores missing styles safely and keeps system appearance independent fro
   change?.({ matches: true });
   expect(themeService.getEffectiveTheme()).toBe('light');
   themeService.setStyle('unavailable');
-  expect(themeService.getStyle()).toBe('codex');
-  expect(document.documentElement.dataset.theme).toBe('classic-light');
+  expect(themeService.getStyle()).toBe('xiaoruan');
+  expect(document.documentElement.dataset.theme).toBe('xiaoruan-light');
   vi.unstubAllGlobals();
 });

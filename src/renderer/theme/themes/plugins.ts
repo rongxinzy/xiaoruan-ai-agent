@@ -4,11 +4,12 @@ import { damingLight, damingDark } from './daming';
 import { validateComponentAppearances } from '../components/contract';
 import { classicDark } from './classic-dark';
 import { classicLight } from './classic-light';
+import { xiaoruanLight, xiaoruanDark } from './xiaoruan';
 import type { ThemeDefinition } from './types';
 import { TOKEN_NAMES } from '../tokens/contract';
 
 export const THEME_PLUGIN_VERSION = 1 as const;
-export const DEFAULT_THEME_PLUGIN_ID = 'codex';
+export const DEFAULT_THEME_PLUGIN_ID = 'xiaoruan';
 
 /** Presentation data only. Plugins cannot replace controls or own application state. */
 export interface ThemePlugin {
@@ -61,6 +62,12 @@ export const themePlugins = defineThemePlugins([
   {
     version: THEME_PLUGIN_VERSION,
     id: DEFAULT_THEME_PLUGIN_ID,
+    name: { zh: '晓软红', en: 'Xiaoruan Red' },
+    appearances: { light: xiaoruanLight, dark: xiaoruanDark },
+  },
+  {
+    version: THEME_PLUGIN_VERSION,
+    id: 'codex',
     name: { zh: 'Codex', en: 'Codex' },
     appearances: { light: classicLight, dark: classicDark },
   },

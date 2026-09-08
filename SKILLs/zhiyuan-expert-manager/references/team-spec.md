@@ -1,4 +1,4 @@
-# Team 型专用规范（ZhiYuan Agent / pi）
+# Team 型专用规范（Xiaoruan AI Agent / pi）
 
 ## 成员命名规范
 
@@ -73,7 +73,7 @@ Workflow 数量根据用户实际高频场景设计，不是越多越好。
 
 ## 与 other applications 的差异
 
-| other applications      | ZhiYuan Agent / pi                              |
+| other applications      | Xiaoruan AI Agent / pi                              |
 | -------------- | ------------------------------------------- |
 | `TeamCreate`   | 无需显式创建团队，主理人直接调用 `subagent` |
 | `Agent spawn`  | `subagent` tool                             |

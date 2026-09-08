@@ -6,9 +6,9 @@ metadata:
   category: research
 ---
 
-<!-- zhiyuan_AutoResearch: protocol framework for long-horizon autonomous tasks. Ships no executable code; prescribes conventions for state persistence, stall detection, and layered guardians. -->
+<!-- Autonomous Research: protocol framework for long-horizon autonomous tasks. Ships no executable code; prescribes conventions for state persistence, stall detection, and layered guardians. -->
 
-# zhiyuan_AutoResearch
+# Autonomous Research
 
 This skill is a protocol framework for long-horizon autonomous tasks (days to weeks). It ships no executable code; instead it prescribes a set of battle-tested conventions: how state is persisted, how stalls are detected, how guardians are layered, and what constraints bind agent behavior. Implementation details are left to the adopter's environment.
 

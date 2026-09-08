@@ -20,7 +20,7 @@ function contrast(a: string, b: string) {
 test('Changan provides complete appearances without replacing the default package', () => {
   for (const theme of [changanLight, changanDark]) validateTheme(theme);
   expect(resolveThemePlugin('changan').appearances.light).toBe(changanLight);
-  expect(resolveThemePlugin('unknown').id).toBe('codex');
+  expect(resolveThemePlugin('unknown').id).toBe('xiaoruan');
   expect(changanLight.components['fluid-indicator']).not.toBe(
     classicLight.components['fluid-indicator'],
   );

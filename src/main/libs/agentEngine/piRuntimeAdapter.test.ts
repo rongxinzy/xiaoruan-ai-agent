@@ -94,8 +94,6 @@ const hoisted = vi.hoisted(() => {
     mockRegisterPiOpenAICompatUpstream: vi.fn(
       async (providerId: string) => `http://127.0.0.1:19191/__pi_openai_compat/${providerId}/v1`,
     ),
-    mockRegisterPiOpenAICompatTokenRefresher: vi.fn(),
-    mockGetCommunityAuthAccessToken: vi.fn(async () => 'community-access-token'),
     mockResolveRawApiConfig: vi.fn(() => ({
       config: {
         apiKey: 'sk-test',
@@ -195,8 +193,6 @@ const mockModelRuntimeCreate = hoisted.mockModelRuntimeCreate;
 const mockResolveRawApiConfig = hoisted.mockResolveRawApiConfig;
 const mockResolveRawApiConfigForModelRef = hoisted.mockResolveRawApiConfigForModelRef;
 const mockRegisterPiOpenAICompatUpstream = hoisted.mockRegisterPiOpenAICompatUpstream;
-const mockRegisterPiOpenAICompatTokenRefresher = hoisted.mockRegisterPiOpenAICompatTokenRefresher;
-const mockGetCommunityAuthAccessToken = hoisted.mockGetCommunityAuthAccessToken;
 const mockApplyApplicationRuntimeEnv = hoisted.mockApplyApplicationRuntimeEnv;
 
 vi.mock('@earendil-works/pi-coding-agent', () => ({
@@ -226,12 +222,7 @@ vi.mock('../claudeSettings', () => ({
 }));
 
 vi.mock('./piOpenAICompatProxy', () => ({
-  registerPiOpenAICompatTokenRefresher: hoisted.mockRegisterPiOpenAICompatTokenRefresher,
   registerPiOpenAICompatUpstream: hoisted.mockRegisterPiOpenAICompatUpstream,
-}));
-
-vi.mock('../../communityAuthSession', () => ({
-  getModelPoolAccessToken: hoisted.mockGetCommunityAuthAccessToken,
 }));
 
 vi.mock('../coworkUtil', async importOriginal => {
@@ -416,7 +407,7 @@ describe('PiRuntimeAdapter', () => {
           fs.existsSync(
             path.join(
               workspaceRoot,
-              '.zhiyuan',
+              '.xiaoruan',
               'research',
               'academic-session',
               'state',
@@ -1231,58 +1222,6 @@ describe('PiRuntimeAdapter', () => {
           }),
         }),
       );
-    });
-
-    it('should inject and refresh access tokens for the managed model proxy', async () => {
-      mockGetModel.mockImplementationOnce(() => undefined);
-      mockResolveRawApiConfigForModelRef.mockReturnValueOnce({
-        config: {
-          apiKey: 'sk-zhiyuan-managed',
-          baseURL: 'https://model.rongxzyai.com',
-          model: 'zhiyuan-free',
-          apiType: 'openai' as const,
-        },
-        providerMetadata: {
-          providerName: 'zhiyuan',
-          codingPlanEnabled: false,
-          supportsImage: false,
-          modelName: '知远免费模型',
-          contextWindow: 131072,
-          maxTokens: 32768,
-        },
-      });
-
-      await adapter.startSession('test', 'Hello Pi', {
-        modelOverride: 'zhiyuan/zhiyuan-free',
-      });
-
-      expect(mockGetCommunityAuthAccessToken).toHaveBeenCalledWith();
-      expect(mockRegisterPiOpenAICompatUpstream).toHaveBeenCalledWith('zhiyuan', {
-        baseURL: 'https://model.rongxzyai.com',
-        apiKey: 'community-access-token',
-        requiredIncomingApiKey: expect.stringMatching(/^sk-zhiyuan-/u),
-      });
-      expect(mockRegisterPiOpenAICompatTokenRefresher).toHaveBeenCalledWith(
-        'zhiyuan',
-        expect.any(Function),
-      );
-      expect(mockModelRuntime.registerProvider).toHaveBeenCalledWith(
-        'zhiyuan',
-        expect.objectContaining({
-          models: [
-            expect.objectContaining({
-              headers: {
-                'x-zhiyuan-conversation-id': 'test',
-                'x-zhiyuan-workload': 'work',
-              },
-            }),
-          ],
-        }),
-      );
-
-      const refresher = mockRegisterPiOpenAICompatTokenRefresher.mock.calls.at(-1)?.[1];
-      await expect(refresher?.()).resolves.toBe('community-access-token');
-      expect(mockGetCommunityAuthAccessToken).toHaveBeenLastCalledWith({ forceRefresh: true });
     });
 
     it('should pass configured Pi runtime options to custom models', async () => {

@@ -1,6 +1,7 @@
 name: Memory regression
 
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       source-ref:

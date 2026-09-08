@@ -1,8 +1,6 @@
 name: Windows installer gate
 
 on:
-  schedule:
-    - cron: '23 2 * * 1'
   workflow_dispatch:
   workflow_call:
 
@@ -99,7 +97,7 @@ jobs:
         shell: powershell
         run: |
           New-Item -ItemType Directory -Path installer-diagnostics -Force | Out-Null
-          $timingLog = Join-Path $env:APPDATA 'ZhiYuanAgent\install-timing.log'
+          $timingLog = Join-Path $env:APPDATA 'XiaoruanAgent\install-timing.log'
           if (Test-Path -LiteralPath $timingLog) {
             Copy-Item -LiteralPath $timingLog -Destination installer-diagnostics\install-timing.log -Force
           }

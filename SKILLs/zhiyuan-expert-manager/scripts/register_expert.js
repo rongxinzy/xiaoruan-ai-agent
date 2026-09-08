@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Expert Register for ZhiYuan Agent.
+ * Expert Register for Xiaoruan AI Agent.
  *
- * Validates an expert package and registers its agents into the ZhiYuan Agent
+ * Validates an expert package and registers its agents into the Xiaoruan AI Agent
  * SQLite database so they appear in the Agent list.
  *
  * Usage:
  *   node register_expert.js <path/to/expert-dir> [--db-path <sqlite.db>] [--session-id <id>]
  *
- * If --db-path is omitted, the script looks for the default ZhiYuan Agent SQLite
+ * If --db-path is omitted, the script looks for the default Xiaoruan AI Agent SQLite
  * database in the user's app data directory.
  */
 
@@ -27,14 +27,14 @@ function getDefaultDbPath() {
   const platform = process.platform;
   let base;
   if (platform === 'win32') {
-    // Electron's app.getPath('userData') resolves to the ZhiYuan Agent directory on Windows.
+    // Electron's app.getPath('userData') resolves to the Xiaoruan AI Agent directory on Windows.
     base = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
   } else if (platform === 'darwin') {
     base = path.join(os.homedir(), 'Library', 'Application Support');
   } else {
     base = path.join(os.homedir(), '.config');
   }
-  return path.join(base, 'ZhiYuanAgent', DEFAULT_DB_FILENAME);
+  return path.join(base, 'XiaoruanAgent', DEFAULT_DB_FILENAME);
 }
 
 function getDefaultExpertPackagesDir() {
@@ -47,7 +47,7 @@ function getDefaultExpertPackagesDir() {
   } else {
     base = path.join(os.homedir(), '.config');
   }
-  return path.join(base, 'ZhiYuanAgent', 'expert-packages');
+  return path.join(base, 'XiaoruanAgent', 'expert-packages');
 }
 
 function parseMdFrontmatter(mdPath) {
@@ -93,11 +93,11 @@ function generateUuid() {
 
 function loadBetterSqlite3() {
   try {
-    // When running inside the ZhiYuan Agent source tree, prefer project's better-sqlite3.
+    // When running inside the Xiaoruan AI Agent source tree, prefer project's better-sqlite3.
     return require('better-sqlite3');
   } catch (e) {
     throw new Error(
-      'better-sqlite3 is not available. Make sure to run this script from the ZhiYuan Agent project directory.',
+      'better-sqlite3 is not available. Make sure to run this script from the Xiaoruan AI Agent project directory.',
     );
   }
 }

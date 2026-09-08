@@ -378,7 +378,7 @@ export class SqliteStore {
         this.didRunMigration = true;
       }
 
-      const fallbackWorkspacePath = path.join(os.homedir(), 'zhiyuan', 'project');
+      const fallbackWorkspacePath = path.join(os.homedir(), 'xiaoruan', 'project');
       const legacySessions = this.db
         .prepare(
           "SELECT id, cwd FROM cowork_sessions WHERE workspace_id IS NULL OR TRIM(workspace_id) = ''",

@@ -7,7 +7,7 @@ import {
   type ResearchRunState,
 } from './piResearchTypes';
 
-const RESEARCH_ROOT_DIR = '.zhiyuan/research';
+const RESEARCH_ROOT_DIR = '.xiaoruan/research';
 const STATE_DIR = 'state';
 const LOGS_DIR = 'logs';
 const STATE_FILENAME = 'research-state.json';

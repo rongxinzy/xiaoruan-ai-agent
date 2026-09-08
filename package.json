@@ -1,11 +1,11 @@
 {
-  "name": "zhiyuan-agent",
-  "desktopName": "zhiyuan.desktop",
-  "description": "知远 - AI-assisted coding and productivity tool",
+  "name": "xiaoruan-ai-agent",
+  "homepage": "https://github.com/rongxinzy/xiaoruan-ai-agent",
+  "desktopName": "xiaoruan-ai-agent.desktop",
+  "description": "晓软AI智能体 - AI-assisted coding and productivity tool",
   "private": true,
   "author": {
-    "name": "ZhiYuanAgent",
-    "email": "dev@zhiyuanagent.com"
+    "name": "rongxinzy"
   },
   "license": "AGPL-3.0-only",
   "packageManager": "bun@1.4.0",
@@ -334,5 +334,9 @@
     "bufferutil",
     "node-pty",
     "utf-8-validate"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rongxinzy/xiaoruan-ai-agent.git"
+  }
 }

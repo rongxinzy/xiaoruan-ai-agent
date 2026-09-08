@@ -6,6 +6,7 @@ import { CoworkErrorKind } from '../../common/coworkError';
 import { ActivityStatus } from '../../shared/activity/constants';
 import { CoworkSessionSource } from '../../shared/cowork/constants';
 import { IMCoworkHandler } from './imCoworkHandler';
+import { ProductIdentityPrompt } from '../productIdentity';
 
 const electronMocks = vi.hoisted(() => ({
   send: vi.fn(),
@@ -485,6 +486,8 @@ test('IM turns use workspace session configuration without disabling Pi tools', 
   expect(runtime.startCalls[0].options.systemPrompt).toContain(
     'Use the workspace conversation context.',
   );
+  expect(runtime.startCalls[0].options.systemPrompt).toContain(ProductIdentityPrompt);
+  expect(runtime.startCalls[0].options.systemPrompt).not.toMatch(/容芯|致远|知远|zhiyuan|rongxin/i);
   expect(runtime.startCalls[0].options).not.toHaveProperty('confirmationMode');
   expect(runtime.startCalls[0].options).not.toHaveProperty('approvalMode');
 

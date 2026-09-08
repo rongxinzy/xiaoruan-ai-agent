@@ -189,7 +189,7 @@ function formatDownloadFailureMessage(status, statusText, url, targetId, rootDir
 async function downloadFile(url, outputPath, rootDir, targetId) {
   console.log(`[download-llamacpp-runtime] Downloading ${url}`);
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'ZhiYuanAgent/llamacpp-runtime-downloader' },
+    headers: { 'User-Agent': 'XiaoruanAgent/llamacpp-runtime-downloader' },
   });
   if (!response.ok || !response.body) {
     throw new Error(

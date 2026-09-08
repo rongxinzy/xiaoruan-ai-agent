@@ -34,7 +34,7 @@ export async function downloadFileWithResume(input: {
 
   const downloader = new DownloaderHelper(input.url, outputDir, {
     fileName: path.basename(input.outputPath),
-    headers: { 'User-Agent': 'ZhiYuanAgent/llamacpp-backend-manager' },
+    headers: { 'User-Agent': 'XiaoruanAgent/llamacpp-backend-manager' },
     override: true,
     removeOnStop: false,
     removeOnFail: false,
@@ -117,7 +117,7 @@ async function getResumeState(input: {
   if (total === undefined) {
     const response = await fetch(input.url, {
       method: 'HEAD',
-      headers: { 'User-Agent': 'ZhiYuanAgent/llamacpp-backend-manager' },
+      headers: { 'User-Agent': 'XiaoruanAgent/llamacpp-backend-manager' },
       signal: input.signal,
     });
     if (!response.ok) throw new Error(`Failed to determine download size: ${response.status}.`);

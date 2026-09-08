@@ -1,6 +1,6 @@
-# 知远智能体 Official Website
+# 晓软AI智能体 Official Website
 
-This directory contains the official product website for **知远智能体 (ZhiYuan Agent)**, a local-first AI Agent workspace with a fully self-developed stack.
+This directory contains the official product website for **晓软AI智能体 (Xiaoruan AI Agent)**, a local-first AI Agent workspace with a fully self-developed stack.
 
 ## Tech
 

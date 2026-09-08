@@ -46,7 +46,7 @@ export async function persistCcConnectMedia(input: {
 
   const workspaceRoot = await fs.realpath(input.workspacePath);
   const directory = await createAttachmentDirectory(workspaceRoot, [
-    '.zhiyuan',
+    '.xiaoruan',
     'channel-attachments',
     stableSegment(input.accountId),
     `${stableSegment(input.messageId)}-${crypto.randomUUID()}`,

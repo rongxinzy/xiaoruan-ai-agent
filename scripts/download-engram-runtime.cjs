@@ -118,7 +118,7 @@ async function download(url, destination, options = {}) {
   }
   try {
     const response = await (options.fetchImplementation ?? fetch)(url, {
-      headers: { 'User-Agent': 'ZhiYuanAgent/memory-runtime-downloader' },
+      headers: { 'User-Agent': 'XiaoruanAgent/memory-runtime-downloader' },
     });
     if (!response.ok) throw new Error(`Download failed with HTTP ${response.status}.`);
     fs.writeFileSync(destination, Buffer.from(await response.arrayBuffer()));

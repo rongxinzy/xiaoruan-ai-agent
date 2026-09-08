@@ -149,12 +149,12 @@ describe('NSIS offline resource and local inference flow', () => {
     expect(normalizedInstallerScript).toContain(
       '!macro OpenTimingLogForAppend HANDLE\n' +
         '  ; NSIS append mode preserves existing data but starts at offset zero.\n' +
-        '  FileOpen ${HANDLE} "$APPDATA\\ZhiYuanAgent\\install-timing.log" a\n' +
+        '  FileOpen ${HANDLE} "$APPDATA\\XiaoruanAgent\\install-timing.log" a\n' +
         '  FileSeek ${HANDLE} 0 END\n' +
         '!macroend',
     );
     expect(installerScript).not.toMatch(
-      /^\s*FileOpen \$\d+ "\$APPDATA\\ZhiYuanAgent\\install-timing\.log" a$/m,
+      /^\s*FileOpen \$\d+ "\$APPDATA\\XiaoruanAgent\\install-timing\.log" a$/m,
     );
     expect(installerScript.match(/!insertmacro OpenTimingLogForAppend \$[28]/g)).toHaveLength(11);
   });
@@ -217,7 +217,7 @@ describe('NSIS offline resource and local inference flow', () => {
     const installerScript = fs.readFileSync(installerScriptPath, 'utf8');
     const uninstallBlock = installerScript.slice(installerScript.indexOf('!macro customUnInstall'));
 
-    expect(uninstallBlock).toContain('StrCpy $3 "$LOCALAPPDATA\\ZhiYuanAgent\\runtimes"');
+    expect(uninstallBlock).toContain('StrCpy $3 "$LOCALAPPDATA\\XiaoruanAgent\\runtimes"');
     expect(uninstallBlock).toContain('StrCpy $4 "$3.uninstall.$4"');
     expect(uninstallBlock).toContain('Rename "$3" "$4"');
     expect(uninstallBlock).toContain('cmd /d /c rd /s /q "$4"');

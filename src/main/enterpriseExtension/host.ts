@@ -70,7 +70,7 @@ export class ZhiyuanEnterpriseExtensionHost {
     }
     if (this.#status !== ZhiyuanEnterpriseExtensionStatus.Idle) {
       return Promise.reject(
-        new Error(`Zhiyuan enterprise extension cannot initialize from ${this.#status}.`),
+        new Error(`Enterprise extension cannot initialize from ${this.#status}.`),
       );
     }
 
@@ -124,7 +124,7 @@ export class ZhiyuanEnterpriseExtensionHost {
           this.#status = ZhiyuanEnterpriseExtensionStatus.Failed;
           throw new AggregateError(
             [error, disposeError],
-            'Zhiyuan enterprise extension initialization and cleanup failed.',
+            'Enterprise extension initialization and cleanup failed.',
           );
         }
       }
@@ -144,7 +144,7 @@ export class ZhiyuanEnterpriseExtensionHost {
 function resolveExtensionModulePath(options: ZhiyuanEnterpriseExtensionHostOptions): string {
   if (!options.isPackaged && options.developmentExtensionPath) {
     if (!path.isAbsolute(options.developmentExtensionPath)) {
-      throw new Error('Zhiyuan enterprise development extension path must be absolute.');
+      throw new Error('Enterprise development extension path must be absolute.');
     }
     return path.normalize(options.developmentExtensionPath);
   }
@@ -162,7 +162,7 @@ function resolveExtensionModule(imported: unknown): ZhiyuanEnterpriseExtensionMo
     candidate?.createZhiyuanEnterpriseExtension ??
     defaultCandidate?.createZhiyuanEnterpriseExtension;
   if (typeof factory !== 'function') {
-    throw new Error('Zhiyuan enterprise extension module does not export its factory.');
+    throw new Error('Enterprise extension module does not export its factory.');
   }
   return { createZhiyuanEnterpriseExtension: () => factory() };
 }
@@ -170,13 +170,13 @@ function resolveExtensionModule(imported: unknown): ZhiyuanEnterpriseExtensionMo
 function validateExtension(extension: unknown): asserts extension is ZhiyuanEnterpriseExtension {
   const candidate = asRecord(extension);
   if (candidate?.apiVersion !== ZHIYUAN_ENTERPRISE_EXTENSION_API_VERSION) {
-    throw new Error('Zhiyuan enterprise extension API version is not supported.');
+    throw new Error('Enterprise extension API version is not supported.');
   }
   if (typeof candidate.id !== 'string' || !ENTERPRISE_EXTENSION_ID_PATTERN.test(candidate.id)) {
-    throw new Error('Zhiyuan enterprise extension ID is invalid.');
+    throw new Error('Enterprise extension ID is invalid.');
   }
   if (typeof candidate.initialize !== 'function' || typeof candidate.dispose !== 'function') {
-    throw new Error('Zhiyuan enterprise extension lifecycle is incomplete.');
+    throw new Error('Enterprise extension lifecycle is incomplete.');
   }
 }
 

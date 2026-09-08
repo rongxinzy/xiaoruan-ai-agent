@@ -25,7 +25,7 @@ test('keeps separate workspace paths isolated even when they belong to one repos
 
 test('maps task work directories back to their owning workspace', () => {
   const workspaceRoot = path.resolve('workspace', 'repository');
-  const taskDirectory = path.join(workspaceRoot, '.zhiyuan-tasks', 'task-123');
+  const taskDirectory = path.join(workspaceRoot, '.xiaoruan-tasks', 'task-123');
 
   expect(resolveProjectIdentity(taskDirectory)).toEqual(resolveProjectIdentity(workspaceRoot));
 });

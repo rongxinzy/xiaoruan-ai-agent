@@ -28,7 +28,7 @@ const buildPreset = (version: string, skillIds: string[]): void => {
         name: 'upgrade-test-preset',
         version,
         description: 'Test preset for upgrade semantics.',
-        author: { name: 'ZhiYuanAgent' },
+        author: { name: 'XiaoruanAgent' },
         expertType: 'agent',
         agentName: 'upgrade-test-agent',
         agents: ['./agents/upgrade-test-agent.md'],

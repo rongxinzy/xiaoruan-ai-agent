@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { EnterpriseRendererSurface } from '../../../shared/enterpriseRenderer';
 import type { EnterpriseSessionResult } from '../../../shared/enterpriseSession';
+import { APP_NAME } from '../../constants/app';
 import { subscribeToEnterpriseSession } from '../../services/enterpriseSessionEvents';
 import { EnterpriseRendererFrame } from './EnterpriseRendererFrame';
 import WindowTitleBar from '../window/WindowTitleBar';
@@ -81,7 +82,7 @@ export function EnterpriseSessionGate({ children }: EnterpriseSessionGateProps) 
       {state === EnterpriseSessionGateState.Open && gateContext ? (
         <EnterpriseRendererFrame
           src={gateContext.entrypoint}
-          title="Zhiyuan"
+          title={APP_NAME}
           surface={EnterpriseRendererSurface.SessionGate}
           session={gateContext.session}
           className="min-h-0 flex-1 border-0 bg-background"

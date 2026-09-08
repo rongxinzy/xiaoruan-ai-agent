@@ -8,8 +8,8 @@ import {
 import {
   CoworkBundledPromptMarker,
   CoworkManagedPromptMarker,
-  ZhiyuanIdentityPrompt,
 } from './constants';
+import { ProductIdentityPrompt } from '../productIdentity';
 
 type ExpertPromptSnapshot = Pick<CoworkSessionExpertSnapshot, 'promptSnapshot'>;
 
@@ -74,7 +74,7 @@ export const stripManagedCoworkPrompt = (
   );
 
   // Normalize sessions created before managed markers were introduced.
-  result = removeExactText(result, ZhiyuanIdentityPrompt);
+  result = removeExactText(result, ProductIdentityPrompt);
   result = removeExactText(result, buildScheduledTaskEnginePrompt());
   for (const expert of previousExpertSnapshots) {
     result = removeExactText(result, expert.promptSnapshot.trim());
@@ -108,7 +108,7 @@ export const composeCoworkSystemPrompt = ({
       ? null
       : managedBlock(
           CoworkManagedPromptMarker.IdentityStart,
-          ZhiyuanIdentityPrompt,
+          ProductIdentityPrompt,
           CoworkManagedPromptMarker.IdentityEnd,
         ),
     managedBlock(

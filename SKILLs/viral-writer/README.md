@@ -52,7 +52,7 @@ cp -r Viral_Writer_Skill ~/.claude/skills/Viral_Writer_Skill
 
 ### 使用
 
-安装后，在知远智能体中直接用自然语言触发即可：
+安装后，在晓软AI智能体中直接用自然语言触发即可：
 
 ```
 帮我写一篇公众号文章，主题是"为什么年轻人开始反消费主义"

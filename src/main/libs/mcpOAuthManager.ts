@@ -145,7 +145,7 @@ class StoredOAuthProvider implements OAuthClientProvider {
     return this.redirectUri;
   }
   get clientMetadata(): OAuthClientMetadata {
-    return { client_name: 'ZhiYuan Agent', redirect_uris: [this.redirectUri] };
+    return { client_name: 'Xiaoruan AI Agent', redirect_uris: [this.redirectUri] };
   }
   clientInformation() { return this.session.clientInformation; }
   saveClientInformation(value: OAuthClientInformationMixed) {
@@ -210,7 +210,7 @@ export class McpOAuthManager {
           const url = new URL(request.url || '/', redirectUri);
           const authorizationCode = url.searchParams.get('code');
           response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-          response.end('<html><body><p>You can return to ZhiYuan Agent.</p></body></html>');
+          response.end('<html><body><p>You can return to Xiaoruan AI Agent.</p></body></html>');
           if (!authorizationCode) finish(new Error('OAuth authorization code is missing'));
           else finish(undefined, authorizationCode);
         });

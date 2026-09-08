@@ -5,14 +5,12 @@ import { IpcChannel as ScheduledTaskIpc } from '../scheduledTask/constants';
 import { MemoryIpcChannel } from '../shared/memory';
 import type { ProductionLoopMode } from '../shared/productionLoop';
 import { AgentIpcChannel } from '../shared/agent/constants';
-import { AppUpdateIpc } from '../shared/appUpdate/constants';
 import { ActivityIpc } from '../shared/activity/constants';
 import type { ActivityRun } from '../shared/activity/types';
 import {
   ApiIpc,
   AppConfigIpc,
   AppIpc,
-  CommunityAuthIpc,
   CoworkBootstrapIpc,
   CoworkConfigIpc,
   CoworkPermissionIpc,
@@ -30,7 +28,6 @@ import {
   LogIpc,
   ManagedProviderIpc,
   McpIpc,
-  ModelPoolIpc,
   NetworkIpc,
   OpenAICodexOAuthIpc,
   PermissionsIpc,
@@ -830,18 +827,6 @@ contextBridge.exposeInMainWorld('electron', {
     relaunch: () => ipcRenderer.invoke(AppIpc.Relaunch),
   },
 
-  appUpdate: {
-    getState: () => ipcRenderer.invoke(AppUpdateIpc.GetState),
-    checkNow: (options?: { manual?: boolean; userId?: string | null }) =>
-      ipcRenderer.invoke(AppUpdateIpc.CheckNow, options),
-    retryDownload: () => ipcRenderer.invoke(AppUpdateIpc.RetryDownload),
-    pauseDownload: () => ipcRenderer.invoke(AppUpdateIpc.PauseDownload),
-    resumeDownload: () => ipcRenderer.invoke(AppUpdateIpc.ResumeDownload),
-    cancelDownload: () => ipcRenderer.invoke(AppUpdateIpc.CancelDownload),
-    installReady: () => ipcRenderer.invoke(AppUpdateIpc.InstallReady),
-    onStateChanged: (callback: (data: unknown) => void) =>
-      onPush(AppUpdateIpc.StateChanged, callback),
-  },
 
   log: {
     getPath: () => ipcRenderer.invoke(LogIpc.GetPath),
@@ -986,34 +971,6 @@ contextBridge.exposeInMainWorld('electron', {
 
   networkStatus: {
     send: (status: 'online' | 'offline') => ipcRenderer.send(NetworkIpc.StatusChange, status),
-  },
-
-  auth: {
-    communityLogin: () => ipcRenderer.invoke(CommunityAuthIpc.Login),
-    getCommunityUser: () => ipcRenderer.invoke(CommunityAuthIpc.GetCommunityUser),
-    communityLogout: () => ipcRenderer.invoke(CommunityAuthIpc.Logout),
-    onCommunityCallback: (
-      callback: (data: {
-        success: boolean;
-        user?: { id: string; email: string; name: string };
-        error?: string;
-      }) => void,
-    ) => onPush(CommunityAuthIpc.Callback, callback),
-  },
-
-  modelPool: {
-    listModels: () => ipcRenderer.invoke(ModelPoolIpc.ListModels),
-    stream: (input: { requestId: string; conversationId: string; body: Record<string, unknown> }) =>
-      ipcRenderer.invoke(ModelPoolIpc.Stream, input),
-    cancelStream: (requestId: string) => ipcRenderer.invoke(ModelPoolIpc.CancelStream, requestId),
-    onStreamData: (requestId: string, callback: (data: string) => void) =>
-      onPush(ModelPoolIpc.streamData(requestId), callback),
-    onStreamDone: (requestId: string, callback: () => void) =>
-      onPushVoid(ModelPoolIpc.streamDone(requestId), callback),
-    onStreamError: (requestId: string, callback: (error: string) => void) =>
-      onPush(ModelPoolIpc.streamError(requestId), callback),
-    onStreamAbort: (requestId: string, callback: () => void) =>
-      onPushVoid(ModelPoolIpc.streamAbort(requestId), callback),
   },
 
   feishu: {

@@ -41,8 +41,8 @@ export function getOllamaInstallConfig(): OllamaInstallConfig {
 
   const defaults: OllamaInstallConfig = {
     presetInstaller: {
-      win32: ['C:\\ProgramData\\ZhiYuanAgent\\installers', downloadsDir],
-      darwin: ['/Library/Application Support/ZhiYuanAgent/installers', downloadsDir],
+      win32: ['C:\\ProgramData\\XiaoruanAgent\\installers', downloadsDir],
+      darwin: ['/Library/Application Support/XiaoruanAgent/installers', downloadsDir],
       linux: ['/opt/zhiyuan/installers', downloadsDir],
     },
     installerFilenames: {

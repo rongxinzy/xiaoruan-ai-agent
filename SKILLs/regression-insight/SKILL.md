@@ -20,7 +20,7 @@ license: MIT
 
 ## Tooling
 
-在 ZhiYuan/Pi 内**必须**通过 `run_skill_script` 执行本技能脚本，禁止用 bash 直跑 `python3` 或 `python`：
+在应用内**必须**通过 `run_skill_script` 执行本技能脚本，禁止用 bash 直跑 `python3` 或 `python`：
 
 ```json
 {
@@ -125,7 +125,7 @@ python3 scripts/regression_analyzer.py data.csv -t price
 
 ## 依赖
 
-运行时依赖（pandas、numpy、statsmodels、scipy）由应用管理的技能 Python 运行时按 `requirements.txt` 提供，**无需也不应手动安装**。仅在本地独立调试（不经过 ZhiYuan 运行时）时才需要：
+运行时依赖（pandas、numpy、statsmodels、scipy）由应用管理的技能 Python 运行时按 `requirements.txt` 提供，**无需也不应手动安装**。仅在本地独立调试（不经过应用内运行时）时才需要：
 
 ```bash
 pip install pandas numpy statsmodels scipy

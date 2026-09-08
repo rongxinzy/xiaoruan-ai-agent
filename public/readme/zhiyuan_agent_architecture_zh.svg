@@ -24,7 +24,7 @@
 
   <rect width="1120" height="880" fill="#fff"/>
 
-  <text x="560" y="50" text-anchor="middle" class="t0">知远智能体 — 本地 AI Agent 工作台</text>
+  <text x="560" y="50" text-anchor="middle" class="t0">晓软AI智能体 — 本地 AI Agent 工作台</text>
   <text x="560" y="80" text-anchor="middle" class="t1">全栈自研 &#183; 自研 Agent 运行时与本地推理引擎 &#183; Electron 掌管桌面安全边界</text>
 
   <!-- Electron 主进程 -->

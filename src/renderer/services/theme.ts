@@ -17,7 +17,7 @@ class ThemeService {
       this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     }
     this.manager = new ThemeManager(allThemes, {
-      storageKey: 'zhiyuan-theme-id',
+      storageKey: 'xiaoruan-theme-id',
       defaultTheme: resolveThemePlugin(DEFAULT_THEME_PLUGIN_ID).appearances.light.meta.id,
       followSystem: false,
     });

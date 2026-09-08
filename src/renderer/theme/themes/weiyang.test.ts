@@ -20,7 +20,7 @@ function contrast(a: string, b: string) {
 test('Weiyang provides complete appearances without replacing the default package', () => {
   for (const theme of [weiyangLight, weiyangDark]) validateTheme(theme);
   expect(resolveThemePlugin('weiyang').appearances.light).toBe(weiyangLight);
-  expect(resolveThemePlugin('unknown').id).toBe('codex');
+  expect(resolveThemePlugin('unknown').id).toBe('xiaoruan');
   expect(weiyangLight.components['fluid-indicator']).not.toBe(
     classicLight.components['fluid-indicator'],
   );

@@ -4,7 +4,6 @@ import { MessageCircle } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
-import { type AppUpdateRuntimeState, AppUpdateStatus } from '../shared/appUpdate/constants';
 import {
   ManagedProviderAccessMode,
   type ManagedProviderAccessPolicy,
@@ -18,11 +17,10 @@ import type { CodingSidebarSelection } from './components/coding/CodingWorkspace
 import type { McpRegistryId } from './components/mcp/constants';
 import type { SettingsOpenOptions } from './components/Settings';
 import { prefetchFeatureView } from './components/featureViewPrefetch';
-import { ParticleBootScreen } from './components/boot/ParticleBootScreen';
+import { BrandBootScreen } from './components/boot/BrandBootScreen';
 import { LazyChunkErrorBoundary } from './components/LazyChunkErrorBoundary';
 import Sidebar from './components/Sidebar';
 import Toast from './components/Toast';
-import AppUpdateBadge from './components/update/AppUpdateBadge';
 import WindowTitleBar from './components/window/WindowTitleBar';
 import { defaultConfig } from './config';
 import { agentService } from './services/agent';
@@ -33,7 +31,6 @@ import {
   LLAMACPP_RUNNING_MODELS_CHANGED_EVENT,
   notifyLlamaCppRunningModelsChanged,
 } from './services/availableModels';
-import { ZhiyuanModelPoolEvent } from '../shared/modelPool/constants';
 import { configService } from './services/config';
 import { coworkService } from './services/cowork';
 import { i18nService } from './services/i18n';
@@ -145,16 +142,6 @@ const App: React.FC = () => {
     workspaceRoot: '',
     laneId: null,
     draft: null,
-  });
-  const [appUpdateState, setAppUpdateState] = useState<AppUpdateRuntimeState>({
-    status: AppUpdateStatus.Idle,
-    source: null,
-    info: null,
-    progress: null,
-    readyFilePath: null,
-    readyFileHash: null,
-    errorMessage: null,
-    lastCheckedAt: null,
   });
   const [enterpriseConfig, setEnterpriseConfig] = useState<{
     ui?: Record<string, 'hide' | 'disable' | 'readonly'>;
@@ -347,7 +334,6 @@ const App: React.FC = () => {
       LLAMACPP_RUNNING_MODELS_CHANGED_EVENT,
       handleLlamaCppRunningModelsChanged,
     );
-    window.addEventListener(ZhiyuanModelPoolEvent.AuthChanged, handleLlamaCppRunningModelsChanged);
     const unsubscribeModelBindings = window.electron.llamacpp.onModelBindingsChanged(
       handleLlamaCppModelBindingsChanged,
     );
@@ -355,10 +341,6 @@ const App: React.FC = () => {
       window.removeEventListener('config-updated', handleConfigUpdated);
       window.removeEventListener(
         LLAMACPP_RUNNING_MODELS_CHANGED_EVENT,
-        handleLlamaCppRunningModelsChanged,
-      );
-      window.removeEventListener(
-        ZhiyuanModelPoolEvent.AuthChanged,
         handleLlamaCppRunningModelsChanged,
       );
       unsubscribeModelBindings();
@@ -631,59 +613,6 @@ const App: React.FC = () => {
       message,
     );
 
-  useEffect(() => {
-    let mounted = true;
-
-    const loadInitialUpdateState = async () => {
-      try {
-        const state = await window.electron.appUpdate.getState();
-        if (mounted) {
-          setAppUpdateState(state);
-        }
-      } catch (error) {
-        console.error('[App] failed to load initial app update state:', error);
-      }
-    };
-
-    void loadInitialUpdateState();
-
-    const unsubscribe = window.electron.appUpdate.onStateChanged(state => {
-      setAppUpdateState(state);
-    });
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, [showToast]);
-
-  const updateInfo = appUpdateState.info;
-
-  const handleUpdateAction = useCallback(async () => {
-    if (appUpdateState.status === AppUpdateStatus.Ready && appUpdateState.readyFilePath) {
-      const installResult = await window.electron.appUpdate.installReady();
-      if (!installResult.success) {
-        showToast(installResult.error || i18nService.t('updateInstallFailed'));
-      }
-      return;
-    }
-    if (appUpdateState.status === AppUpdateStatus.Error) {
-      await window.electron.appUpdate.retryDownload();
-      return;
-    }
-    if (
-      appUpdateState.status === AppUpdateStatus.Available &&
-      appUpdateState.info?.manualDownloadOnly
-    ) {
-      await window.electron.appUpdate.retryDownload();
-    }
-  }, [
-    appUpdateState.info?.manualDownloadOnly,
-    appUpdateState.readyFilePath,
-    appUpdateState.status,
-    showToast,
-  ]);
-
   const handlePermissionResponse = useCallback(
     async (result: CoworkPermissionResult) => {
       if (!pendingPermission) return;
@@ -831,18 +760,6 @@ const App: React.FC = () => {
   }, [handleNewChat]);
 
   const isOverlayActive = showSettings;
-  const shouldShowUpdateBadge =
-    updateInfo &&
-    (appUpdateState.status === AppUpdateStatus.Ready ||
-      appUpdateState.status === AppUpdateStatus.Error ||
-      (appUpdateState.status === AppUpdateStatus.Available && updateInfo.manualDownloadOnly));
-  const updateEntry = shouldShowUpdateBadge ? (
-    <AppUpdateBadge
-      latestVersion={updateInfo.latestVersion}
-      status={appUpdateState.status}
-      onClick={handleUpdateAction}
-    />
-  ) : null;
   const windowsStandaloneTitleBar = isWindows ? (
     <div className="draggable relative h-9 shrink-0 bg-surface-raised">
       <WindowTitleBar isOverlayActive={isOverlayActive} />
@@ -853,7 +770,7 @@ const App: React.FC = () => {
     return (
       <div className="h-screen overflow-hidden flex flex-col">
         {windowsStandaloneTitleBar}
-        <ParticleBootScreen
+        <BrandBootScreen
           exiting={isInitialized}
           onExitComplete={() => setBootScreenVisible(false)}
         />
@@ -888,7 +805,6 @@ const App: React.FC = () => {
                   initialTab={settingsOptions.initialTab}
                   notice={settingsOptions.notice}
                   enterpriseConfig={enterpriseConfig}
-                  appUpdateState={appUpdateState}
                   managedModelsOnly={managedModelsOnly}
                 />
               </React.Suspense>
@@ -927,8 +843,6 @@ const App: React.FC = () => {
             onNewChat={handleNewChat}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={handleToggleSidebar}
-            updateEntry={!isSidebarCollapsed ? updateEntry : null}
-            hideLogin={false}
             managedModelsOnly={managedModelsOnly}
             onPrefetchView={prefetchFeatureView}
           />
@@ -1070,7 +984,6 @@ const App: React.FC = () => {
                 initialTab={settingsOptions.initialTab}
                 notice={settingsOptions.notice}
                 enterpriseConfig={enterpriseConfig}
-                appUpdateState={appUpdateState}
                 managedModelsOnly={managedModelsOnly}
               />
             </React.Suspense>

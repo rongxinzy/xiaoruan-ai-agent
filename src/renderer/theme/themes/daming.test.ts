@@ -18,7 +18,7 @@ function contrast(a: string, b: string) {
 test('Daming provides complete appearances without replacing the default package', () => {
   for (const theme of [damingLight, damingDark]) validateTheme(theme);
   expect(resolveThemePlugin('daming').appearances.light).toBe(damingLight);
-  expect(resolveThemePlugin('unknown').id).toBe('codex');
+  expect(resolveThemePlugin('unknown').id).toBe('xiaoruan');
   expect(damingLight.components['fluid-indicator']).not.toBe(
     classicLight.components['fluid-indicator'],
   );

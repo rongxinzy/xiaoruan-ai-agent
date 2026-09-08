@@ -62,12 +62,17 @@ test('manual runs and unknown events fail closed to the complete suite', () => {
   expect(planGates([], 'unexpected-event', 'refs/heads/main')).toEqual(full);
 });
 
-test('main pushes are light while tag releases retain mandatory memory regression', () => {
+test('main pushes remain light for the custom Windows package workflow', () => {
   expect(planGates(['package.json'], CiEvent.Push, 'refs/heads/main')).toEqual(light);
   expect(planGates([], CiEvent.Push, 'refs/tags/v2026.9.5')).toEqual({
     ...light,
     [HeavyJob.Memory]: true,
   });
+  const build = workflow('build-platforms.yml');
+  expect(build.on).toHaveProperty('workflow_dispatch');
+  expect(build.on).not.toHaveProperty('schedule');
+  expect(build.on).not.toHaveProperty('push');
+  expect(build.on).not.toHaveProperty('tags');
 });
 
 function resultsFor(plan: GatePlan) {
@@ -128,7 +133,8 @@ function workflow(name: string) {
 
 test('CI waits for every selected reusable check and always runs the merge gate', () => {
   const ci = workflow('ci.yml');
-  expect(ci.on).toHaveProperty(CiEvent.PullRequest);
+  expect(ci.on).toHaveProperty('workflow_dispatch');
+  expect(ci.on).not.toHaveProperty(CiEvent.PullRequest);
   const gate = ci.jobs['merge-gate'];
   expect(gate.if).toBe('always()');
   expect(gate.needs).toEqual(
@@ -145,25 +151,13 @@ test('CI waits for every selected reusable check and always runs the merge gate'
   }
 });
 
-test('candidate checks bind the source commit and block packaging before memory succeeds', () => {
-  const candidate = workflow('release-candidate.yml');
-  const memoryJob = candidate.jobs['memory-regression'];
-  expect(memoryJob.uses).toBe(workflow('ci.yml').jobs[HeavyJob.Memory].uses);
-  expect(memoryJob.with?.['source-ref']).toBe('${{ needs.prepare-candidate.outputs.commit }}');
-  expect(candidate.jobs['build-candidate'].needs).toContain('memory-regression');
-  const qualityCommands = candidate.jobs.quality.steps?.map(step => step.run ?? '').join('\n');
-  expect(qualityCommands).toContain('bun run build:tsc');
-  expect(qualityCommands).toContain('bun run test:bundle-budget');
-  const steps = candidate.jobs['build-candidate'].steps ?? [];
-  const install = steps.findIndex(step =>
-    step.run?.includes('sudo apt-get install -y "$(realpath'),
+test('the custom upload path does not publish official updater metadata', () => {
+  const upload = readFileSync(
+    new URL('../../../.github/workflows/upload-custom-packages.yml', import.meta.url),
+    'utf8',
   );
-  const payload = steps.findIndex(step => step.name === 'Assemble Linux candidate payload');
-  expect(install).toBeGreaterThan(-1);
-  expect(payload).toBeGreaterThan(install);
-  expect(steps[install].run).toContain("'/opt/知远/知远'");
-  expect(workflow('memory-leak-nightly.yml').jobs[HeavyJob.Memory].uses).toBe(memoryJob.uses);
-  expect(workflow('memory-leak-nightly.yml').jobs[HeavyJob.Memory].with?.['analyze-heap']).toBe(
-    true,
-  );
+  expect(upload).toContain('xiaoruan-releases');
+  expect(upload).toContain('upload-custom-packages.mjs');
+  expect(upload).not.toContain('publish-update-manifest');
+  expect(upload).not.toContain('online-update-release');
 });

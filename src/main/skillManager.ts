@@ -973,15 +973,15 @@ const downloadGithubArchive = async (
     archiveUrlCandidates.push(
       {
         url: `https://github.com/${source.owner}/${source.repo}/archive/refs/heads/${encodedRef}.zip`,
-        headers: { 'User-Agent': 'ZhiYuanAgent Skill Downloader' },
+        headers: { 'User-Agent': 'XiaoruanAgent Skill Downloader' },
       },
       {
         url: `https://github.com/${source.owner}/${source.repo}/archive/refs/tags/${encodedRef}.zip`,
-        headers: { 'User-Agent': 'ZhiYuanAgent Skill Downloader' },
+        headers: { 'User-Agent': 'XiaoruanAgent Skill Downloader' },
       },
       {
         url: `https://github.com/${source.owner}/${source.repo}/archive/${encodedRef}.zip`,
-        headers: { 'User-Agent': 'ZhiYuanAgent Skill Downloader' },
+        headers: { 'User-Agent': 'XiaoruanAgent Skill Downloader' },
       },
     );
   }
@@ -990,7 +990,7 @@ const downloadGithubArchive = async (
     url: `https://api.github.com/repos/${source.owner}/${source.repo}/zipball${encodedRef ? `/${encodedRef}` : ''}`,
     headers: {
       Accept: 'application/vnd.github+json',
-      'User-Agent': 'ZhiYuanAgent Skill Downloader',
+      'User-Agent': 'XiaoruanAgent Skill Downloader',
       'X-GitHub-Api-Version': '2022-11-28',
     },
   });
@@ -1179,7 +1179,7 @@ const isRemoteZipUrl = (source: string): boolean => {
 const downloadZipUrl = async (zipUrl: string, tempRoot: string): Promise<string> => {
   const response = await session.defaultSession.fetch(zipUrl, {
     method: 'GET',
-    headers: { 'User-Agent': 'ZhiYuanAgent Skill Downloader' },
+    headers: { 'User-Agent': 'XiaoruanAgent Skill Downloader' },
   });
 
   if (!response.ok) {

@@ -1,6 +1,6 @@
 import path from 'path';
 
-const DEFAULT_WINDOWS_MODEL_LIBRARY_APP_DIR = 'ZhiYuanAgent';
+const DEFAULT_WINDOWS_MODEL_LIBRARY_APP_DIR = 'XiaoruanAgent';
 
 export function getDefaultLlamaCppModelsDir(input: {
   platform: NodeJS.Platform;

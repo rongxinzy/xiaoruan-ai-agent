@@ -13,8 +13,6 @@ import {
 import { type AppConfig, getProviderDisplayName } from '../config';
 import type { Model } from '../store/slices/modelSlice';
 import { getRunningModelAgentEligibility } from '../utils/llamacppAgentEligibility';
-import { ZhiyuanModelPool } from '../../shared/modelPool/constants';
-import { i18nService } from './i18n';
 
 export const LLAMACPP_RUNNING_MODELS_CHANGED_EVENT = 'llamacpp:running-models-changed';
 
@@ -36,9 +34,6 @@ export function buildConfiguredAvailableModels(
   Object.entries(config.providers).forEach(([providerName, providerConfig]) => {
     if (allowedProviderKeys && !allowedProviderKeys.has(providerName)) return;
     if (providerName === ProviderName.LlamaCpp) {
-      return;
-    }
-    if (providerName === ProviderName.Zhiyuan) {
       return;
     }
     if (!isProviderEnabled(providerName, providerConfig)) {
@@ -92,27 +87,6 @@ export function buildConfiguredAvailableModels(
   }
 
   return [];
-}
-
-export function buildZhiyuanManagedModels(): Model[] {
-  return ProviderRegistry.getModels(ProviderName.Zhiyuan, ZhiyuanModelPool.FreeModelId).map(
-    model => ({
-      id: model.id,
-      name: i18nService.t('zhiyuanFreeModel'),
-      provider: i18nService.t('zhiyuanFreeModel'),
-      providerKey: ProviderName.Zhiyuan,
-      agentProviderId: ProviderRegistry.getAgentProviderId(ProviderName.Zhiyuan),
-      supportsImage: model.supportsImage,
-      capabilities: ProviderRegistry.resolveModelCapabilities(
-        ProviderName.Zhiyuan,
-        model.id,
-        'openai',
-        model,
-      ),
-      contextWindow: model.contextWindow,
-      maxTokens: model.maxTokens,
-    }),
-  );
 }
 
 export function buildLlamaCppRunningModels(
@@ -170,16 +144,6 @@ export async function collectAvailableModels(config: AppConfig): Promise<Model[]
 
   if (policy.mode === ManagedProviderAccessMode.Exclusive) return configuredModels;
 
-  let zhiyuanModels: Model[] = [];
-  try {
-    const models = await window.electron.modelPool?.listModels();
-    if (models?.ok && models.models.includes(ZhiyuanModelPool.FreeModelId)) {
-      zhiyuanModels = buildZhiyuanManagedModels();
-    }
-  } catch {
-    // Model Pool availability is optional; user-configured and local models remain usable.
-  }
-
   try {
     const runningModels = await window.electron.llamacpp.listRunningModels();
     let preferences: LlamaCppModelPreferences = {};
@@ -189,11 +153,11 @@ export async function collectAvailableModels(config: AppConfig): Promise<Model[]
       // Model preferences are optional metadata; keep the running model list available.
     }
     return mergeAvailableModels(
-      [...zhiyuanModels, ...configuredModels],
+      configuredModels,
       buildLlamaCppRunningModels(runningModels, preferences),
     );
   } catch {
-    return [...zhiyuanModels, ...configuredModels];
+    return configuredModels;
   }
 }
 

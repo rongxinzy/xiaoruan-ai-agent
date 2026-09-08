@@ -10,7 +10,6 @@ import {
   nativeImage,
   nativeTheme,
   net,
-  powerMonitor,
   powerSaveBlocker,
   protocol,
   screen,
@@ -39,15 +38,8 @@ import { PiScheduledTaskExecutor } from '../scheduledTask/piScheduledTaskExecuto
 import { SqliteScheduledTaskStore } from '../scheduledTask/sqliteScheduledTaskStore';
 import { ActivityService } from './activity/activityService';
 import { registerActivityIpcHandlers } from './activity/ipcHandlers';
-import { COMMUNITY_AUTH_ORIGIN, configureCommunityAuthSession } from './communityAuthSession';
 import { ActivitySource, ActivityStatus } from '../shared/activity/constants';
 import { AgentIpcChannel } from '../shared/agent/constants';
-import {
-  APP_UPDATE_POLL_INTERVAL_MS,
-  APP_UPDATE_STARTUP_DELAY_JITTER_MS,
-  APP_UPDATE_STARTUP_DELAY_MIN_MS,
-  AppUpdateIpc,
-} from '../shared/appUpdate/constants';
 import {
   COWORK_MESSAGE_PAGE_SIZE,
   COWORK_SESSION_PAGE_SIZE,
@@ -64,7 +56,6 @@ import {
 import {
   ApiIpc,
   AppIpc,
-  CommunityAuthIpc,
   CoworkPermissionIpc,
   CoworkQueueIpc,
   CoworkSessionIpc,
@@ -115,7 +106,6 @@ import { SessionSummaryService } from './memory/sessionSummaryService';
 import { SessionSummaryBackfillService } from './memory/sessionSummaryBackfillService';
 import { ZhiYuanEngramAdapter } from './memory/zhiyuanEngramAdapter';
 import { registerMemoryIpcHandlers } from './memory/ipc';
-import { registerModelPoolIpcHandlers } from './modelPoolIpc';
 import { resolveMemorySessionTitles } from './memory/sessionTitleResolver';
 import { promoteVerifiedWorkbenchRun } from './memory/taskMemoryPromotion';
 import { searchAnySearchGateway } from './libs/anysearchGateway';
@@ -184,7 +174,6 @@ import { shouldRequireProductionOnResume } from './productionLoop/entryPolicy';
 import { type PermissionResult, PiRuntimeAdapter } from './libs/agentEngine';
 import type { PiThinkingLevel } from './libs/agentEngine/piRuntimeTypes';
 import { PiModelCatalogRefreshCoordinator } from './libs/agentEngine/piModelCatalogRefresh';
-import { AppUpdateCoordinator } from './libs/appUpdateCoordinator';
 import {
   getCurrentApiConfig,
   resolveAllEnabledProviderConfigs,
@@ -412,7 +401,7 @@ const resolveInlineAttachmentDir = (cwd?: string): string => {
       return path.join(resolved, '.cowork-temp', 'attachments', 'manual');
     }
   }
-  return path.join(app.getPath('temp'), 'zhiyuan', 'attachments');
+  return path.join(app.getPath('temp'), 'xiaoruan-ai-agent', 'attachments');
 };
 
 const ensurePngFileName = (value: string): string => {
@@ -429,7 +418,7 @@ const buildLogExportFileName = (): string => {
   const now = new Date();
   const datePart = `${now.getFullYear()}${padTwoDigits(now.getMonth() + 1)}${padTwoDigits(now.getDate())}`;
   const timePart = `${padTwoDigits(now.getHours())}${padTwoDigits(now.getMinutes())}${padTwoDigits(now.getSeconds())}`;
-  return `zhiyuan-logs-${datePart}-${timePart}.zip`;
+  return `xiaoruan-logs-${datePart}-${timePart}.zip`;
 };
 
 const truncateIpcString = (value: string, maxChars: number): string => {
@@ -1151,7 +1140,7 @@ const getPiRuntimeAdapter = (): PiRuntimeAdapter => {
     process.env.ZHIYUAN_ANYSEARCH_GATEWAY_TOKEN = resolveAnySearchGatewayToken();
     process.env.ZHIYUAN_ANYSEARCH_GATEWAY_URL = resolveAnySearchGatewayUrl();
     // Pi SDK resolves API keys from environment variables (ANTHROPIC_API_KEY etc.).
-    // Inject keys from ZhiYuanAgent's provider configuration before initializing Pi.
+    // Inject keys from XiaoruanAgent's provider configuration before initializing Pi.
     const keys = resolveAllProviderApiKeys();
     const injected: string[] = [];
     for (const [suffix, value] of Object.entries(keys)) {
@@ -1539,7 +1528,6 @@ let ollamaManager: OllamaManager | null = null;
 
 let piWorkbenchRuntimeForwarderBound = false;
 let preventSleepBlockerId: number | null = null;
-let appUpdateCoordinator: AppUpdateCoordinator | null = null;
 
 function setPreventSleepBlockerEnabled(enabled: boolean): void {
   if (enabled) {
@@ -1608,33 +1596,6 @@ const getOllamaManager = (): OllamaManager => {
     ollamaManager = new OllamaManager(() => getOllamaServiceConfig(getStore()));
   }
   return ollamaManager;
-};
-
-const getAppUpdateCoordinator = (): AppUpdateCoordinator => {
-  if (!appUpdateCoordinator) {
-    appUpdateCoordinator = new AppUpdateCoordinator(getStore());
-  }
-  return appUpdateCoordinator;
-};
-
-let appUpdatePollTimer: NodeJS.Timeout | null = null;
-let lastSuccessfulAppUpdateCheckAt = 0;
-
-const checkForAppUpdate = (): void => {
-  void getAppUpdateCoordinator()
-    .checkNow()
-    .then(result => {
-      if (result.success) lastSuccessfulAppUpdateCheckAt = Date.now();
-    });
-};
-
-const startAppUpdatePolling = (): void => {
-  if (appUpdatePollTimer) return;
-  const startupDelay =
-    APP_UPDATE_STARTUP_DELAY_MIN_MS +
-    Math.floor(Math.random() * APP_UPDATE_STARTUP_DELAY_JITTER_MS);
-  setTimeout(checkForAppUpdate, startupDelay);
-  appUpdatePollTimer = setInterval(checkForAppUpdate, APP_UPDATE_POLL_INTERVAL_MS);
 };
 
 const getCoworkStore = () => {
@@ -2532,7 +2493,7 @@ const scheduleReload = (reason: string, webContents?: WebContents) => {
 const gotTheLock = app.requestSingleInstanceLock();
 
 /**
- * Linux only: 检测单实例锁被哪个"知远"实例持有。
+ * Linux only: 检测单实例锁被哪个"晓软AI智能体"实例持有。
  *
  * 返回 null 表示没有可接管的目标(同版本多开或未检测到),此时由第一实例
  * 的 second-instance 处理唤起已有窗口,本实例直接退出。
@@ -2541,7 +2502,7 @@ const gotTheLock = app.requestSingleInstanceLock();
  * 身份判定:
  *  - AppImage:运行时环境变量 APPIMAGE 指向源文件(文件名含版本号),
  *    与当前进程的 APPIMAGE 不同即视为旧版本
- *  - deb:/opt/知远 下的进程无 APPIMAGE,exe 路径匹配即视为同族;
+ *  - deb:/opt/晓软AI智能体 下的进程无 APPIMAGE,exe 路径匹配即视为同族;
  *    无法区分版本,统一按"旧实例"提示确认
  */
 async function findStaleLinuxInstances(): Promise<{
@@ -2551,7 +2512,7 @@ async function findStaleLinuxInstances(): Promise<{
   if (process.platform !== 'linux') return null;
 
   const currentAppImage = process.env.APPIMAGE ?? null;
-  const familyPattern = /知远|ZhiYuanAgent/i;
+  const familyPattern = /晓软AI智能体|XiaoruanAgent/i;
 
   const pids: number[] = [];
   const oldAppImages: string[] = [];
@@ -2575,9 +2536,9 @@ async function findStaleLinuxInstances(): Promise<{
         pids.push(pid);
         oldAppImages.push(appImage);
       } else {
-        // 非 AppImage:匹配 deb 安装路径 /opt/知远
+        // 非 AppImage:匹配 deb 安装路径 /opt/晓软AI智能体
         const exe = fs.readlinkSync(`/proc/${pid}/exe`);
-        if (!/\/opt\/知远/.test(exe)) continue;
+        if (!/\/opt\/晓软AI智能体/.test(exe)) continue;
         pids.push(pid);
       }
     } catch {
@@ -2586,9 +2547,9 @@ async function findStaleLinuxInstances(): Promise<{
   }
   if (pids.length === 0) return null;
 
-  // 从 AppImage 文件名提取旧版本号,如 知远-1.0.0.AppImage → 1.0.0
+  // 从 AppImage 文件名提取旧版本号,如 晓软AI智能体-1.0.0.AppImage → 1.0.0
   const versionMatch = oldAppImages[0]?.match(/-(\d+\.\d+\.\d+)\.AppImage/i);
-  const oldLabel = versionMatch ? `知远 ${versionMatch[1]}` : '旧版本的知远';
+  const oldLabel = versionMatch ? `晓软AI智能体 ${versionMatch[1]}` : '旧版本的晓软AI智能体';
   return { pids, oldLabel };
 }
 
@@ -2638,7 +2599,7 @@ if (!gotTheLock) {
           title: '检测到旧版本正在运行',
           message: `检测到 ${stale.oldLabel} 正在运行。`,
           detail:
-            `当前启动的是知远 ${currentVersion}。启动新版本需要先关闭旧版本,` +
+            `当前启动的是晓软AI智能体 ${currentVersion}。启动新版本需要先关闭旧版本,` +
             '关闭旧版本将中断其中进行中的任务。是否继续?',
         });
         if (response === 1) {
@@ -2660,75 +2621,17 @@ if (!gotTheLock) {
       app.exit(0);
       return;
     }
-    console.warn('[Main] Another ZhiYuanAgent instance is already running; exiting.');
+    console.warn('[Main] Another XiaoruanAgent instance is already running; exiting.');
     app.exit(0);
   })();
 } else {
-  // In development Electron needs the app entry point before the callback URL;
-  // otherwise Windows treats the URL itself as the application to launch.
-  if (process.defaultApp && process.argv[1]) {
-    app.setAsDefaultProtocolClient('zhiyuan', process.execPath, [path.resolve(process.argv[1])]);
-  } else {
-    app.setAsDefaultProtocolClient('zhiyuan');
-  }
-
-  let pendingCommunityLogin: { state: string; verifier: string; expiresAt: number } | null = null;
-
-  type CommunityAuthPayload = Record<string, unknown>;
-
-  async function readCommunityAuthPayload(
-    response: Response,
-  ): Promise<CommunityAuthPayload | null> {
-    const rawText = await response.text();
-    if (!rawText) return null;
-
-    try {
-      const payload: unknown = JSON.parse(rawText);
-      return payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? (payload as CommunityAuthPayload)
-        : null;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Parse a zhiyuan:// deep link for the pending community login. */
-  const handleDeepLink = (url: string) => {
-    try {
-      const parsed = new URL(url);
-      if (parsed.hostname === 'auth' && parsed.pathname === '/callback') {
-        const code = parsed.searchParams.get('code');
-        const state = parsed.searchParams.get('state');
-        if (code && state && pendingCommunityLogin?.state === state) {
-          void completeCommunityLogin(code, state);
-          return;
-        }
-        console.warn('[CommunityAuth] Ignoring unexpected auth callback');
-      }
-    } catch (e) {
-      console.error('[Main] Failed to parse deep link:', e);
-    }
-  };
-
   ipcMain.on('log:fromRenderer', (_event, level: string, tag: string, message: string) => {
     const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
     fn(`[Renderer][${tag}] ${message}`);
   });
 
-  // macOS: handle open-url event for deep links
-  app.on('open-url', (event, url) => {
-    event.preventDefault();
-    handleDeepLink(url);
-  });
-
   app.on('second-instance', (_event, commandLine, workingDirectory) => {
     console.debug('[Main] second-instance event', { commandLine, workingDirectory });
-
-    // Check for deep link in command line args (Windows/Linux)
-    const deepLink = commandLine.find(arg => arg.startsWith('zhiyuan://'));
-    if (deepLink) {
-      handleDeepLink(deepLink);
-    }
 
     // Focus main window
     if (mainWindow) {
@@ -2953,106 +2856,6 @@ if (!gotTheLock) {
   ipcMain.handle(AppIpc.ConsumePendingLocalInferenceInstall, () =>
     consumePendingLocalInferenceInstall(app.getPath('userData')),
   );
-
-  // ── Community auth IPC handlers ──
-  const communityAuthSession = configureCommunityAuthSession(getStore);
-  registerModelPoolIpcHandlers(communityAuthSession);
-
-  ipcMain.handle(CommunityAuthIpc.GetCommunityUser, async () => {
-    const user = communityAuthSession.getUser();
-    if (!user) return { success: false };
-    try {
-      await communityAuthSession.getAccessToken();
-      return { success: true, user };
-    } catch {
-      return { success: false };
-    }
-  });
-
-  ipcMain.handle(CommunityAuthIpc.Logout, () => {
-    communityAuthSession.clear();
-    return { success: true };
-  });
-
-  async function completeCommunityLogin(code: string, state: string): Promise<void> {
-    const pending = pendingCommunityLogin;
-    pendingCommunityLogin = null;
-    if (!pending || pending.state !== state || pending.expiresAt < Date.now()) return;
-    try {
-      const response = await net.fetch(`${COMMUNITY_AUTH_ORIGIN}/v1/auth/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grant_type: 'authorization_code',
-          code,
-          code_verifier: pending.verifier,
-          redirect_uri: 'zhiyuan://auth/callback',
-        }),
-      });
-      const payload = await readCommunityAuthPayload(response);
-      if (!response.ok) {
-        console.warn(
-          `[CommunityAuth] token exchange returned an invalid response with status ${response.status}`,
-        );
-        throw new Error('Token exchange failed');
-      }
-      const user = communityAuthSession.saveTokenPayload(payload);
-      mainWindow?.webContents.send(CommunityAuthIpc.Callback, {
-        success: true,
-        user: { id: user.id, email: user.email, name: user.email },
-      });
-      if (mainWindow?.isMinimized()) mainWindow.restore();
-      if (mainWindow && !mainWindow.isVisible()) mainWindow.show();
-      mainWindow?.focus();
-    } catch (error) {
-      console.warn(
-        '[CommunityAuth] login callback failed:',
-        error instanceof Error ? error.message : error,
-      );
-      mainWindow?.webContents.send(CommunityAuthIpc.Callback, {
-        success: false,
-        error: t('communityAuthLoginIncomplete'),
-      });
-    }
-  }
-
-  ipcMain.handle(CommunityAuthIpc.Login, async () => {
-    try {
-      if (!communityAuthSession.canPersist()) {
-        return { success: false, error: '系统安全存储不可用，无法安全地保存登录状态。' };
-      }
-      const verifier = crypto.randomBytes(48).toString('base64url');
-      const state = crypto.randomBytes(32).toString('base64url');
-      const codeChallenge = crypto.createHash('sha256').update(verifier).digest('base64url');
-      const response = await net.fetch(`${COMMUNITY_AUTH_ORIGIN}/v1/auth/authorize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          redirect_uri: 'zhiyuan://auth/callback',
-          state,
-          code_challenge: codeChallenge,
-          code_challenge_method: 'S256',
-        }),
-      });
-      const payload = await readCommunityAuthPayload(response);
-      const loginUrl = typeof payload?.login_url === 'string' ? payload.login_url : null;
-      if (!response.ok || !loginUrl || !loginUrl.startsWith(`${COMMUNITY_AUTH_ORIGIN}/`)) {
-        console.warn(
-          `[CommunityAuth] login initialization returned an invalid response with status ${response.status}`,
-        );
-        return { success: false, error: t('communityAuthServiceUnavailable') };
-      }
-      pendingCommunityLogin = { state, verifier, expiresAt: Date.now() + 10 * 60 * 1000 };
-      await shell.openExternal(loginUrl);
-      return { success: true };
-    } catch (error) {
-      console.error('[Auth] login failed:', error);
-      return {
-        success: false,
-        error: t('communityAuthServiceUnavailable'),
-      };
-    }
-  });
 
   // Skills IPC handlers
   ipcMain.handle('skills:list', () => {
@@ -3719,7 +3522,7 @@ if (!gotTheLock) {
 
   // Project working-directory helpers
   const getDefaultProjectBaseDir = () =>
-    path.join(app.getPath('documents'), 'ZhiYuanAgent', 'Workspaces');
+    path.join(app.getPath('documents'), 'XiaoruanAgent', 'Workspaces');
   const getUnmanagedWorkspaceBaseDir = () =>
     path.join(app.getPath('userData'), 'unmanaged-workspaces');
   const isUuidDirectoryName = (directoryName: string): boolean =>
@@ -6174,38 +5977,6 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle(AppUpdateIpc.GetState, async () => {
-    return getAppUpdateCoordinator().getState();
-  });
-
-  ipcMain.handle(AppUpdateIpc.CheckNow, async (_event, options?: { manual?: boolean }) => {
-    return getAppUpdateCoordinator().checkNow(options);
-  });
-
-  ipcMain.handle(AppUpdateIpc.RetryDownload, async () => {
-    const state = await getAppUpdateCoordinator().retryDownload();
-    return { success: true, state };
-  });
-
-  ipcMain.handle(AppUpdateIpc.PauseDownload, async () => {
-    const state = getAppUpdateCoordinator().pauseDownload();
-    return { success: true, state };
-  });
-
-  ipcMain.handle(AppUpdateIpc.ResumeDownload, async () => {
-    const state = getAppUpdateCoordinator().resumeDownload();
-    return { success: true, state };
-  });
-
-  ipcMain.handle(AppUpdateIpc.CancelDownload, async () => {
-    const state = getAppUpdateCoordinator().cancelDownload();
-    return { success: true, state };
-  });
-
-  ipcMain.handle(AppUpdateIpc.InstallReady, async () => {
-    return getAppUpdateCoordinator().installReadyUpdate();
-  });
-
   // Helper: detect if a URL belongs to GitHub Copilot and apply token refresh on 401.
   const isCopilotUrl = (url: string) => url.includes('githubcopilot.com');
   const retryCopilotWithRefreshedToken = async (opts: {
@@ -6951,7 +6722,7 @@ if (!gotTheLock) {
     // We don't trigger permission dialogs at startup to avoid annoying users
 
     // Ensure default working directory exists
-    const defaultProjectDir = path.join(os.homedir(), 'zhiyuan', 'project');
+    const defaultProjectDir = path.join(os.homedir(), 'xiaoruan-ai-agent', 'project');
     if (!fs.existsSync(defaultProjectDir)) {
       fs.mkdirSync(defaultProjectDir, { recursive: true });
       console.log('Created default project directory:', defaultProjectDir);
@@ -7030,7 +6801,9 @@ if (!gotTheLock) {
     activityService ??= new ActivityService(getStore().getDatabase());
     const recoveredActivityRuns = activityService.recoverInterruptedRuns();
     if (recoveredActivityRuns > 0) {
-      console.warn(`[Activity] marked ${recoveredActivityRuns} interrupted activity run(s) as failed`);
+      console.warn(
+        `[Activity] marked ${recoveredActivityRuns} interrupted activity run(s) as failed`,
+      );
     }
     const prunedActivityRuns = activityService.pruneExpired();
     if (prunedActivityRuns > 0) {
@@ -7283,7 +7056,6 @@ if (!gotTheLock) {
     profiler.measure('createWindow');
     console.log('[Main] initApp: window created');
     piModelCatalogRefreshCoordinator.start();
-    startAppUpdatePolling();
 
     // ── Step 2-4: Skill bootstrap (non-blocking) ────────────────────
     console.log('[Main] initApp: starting skill bootstrap');
@@ -7374,19 +7146,6 @@ if (!gotTheLock) {
     profiler.measure('skillManager');
 
     console.log(profiler.summary());
-
-    // Windows/Linux cold start: parse deep link from process.argv
-    // Always buffer since renderer is not ready yet after createWindow()
-    const coldStartDeepLink = process.argv.find(arg => arg.startsWith('zhiyuan://'));
-    if (coldStartDeepLink) {
-      handleDeepLink(coldStartDeepLink);
-    }
-
-    powerMonitor.on('resume', () => {
-      if (Date.now() - lastSuccessfulAppUpdateCheckAt >= APP_UPDATE_POLL_INTERVAL_MS) {
-        checkForAppUpdate();
-      }
-    });
 
     // 首次启动时默认开启开机自启动（先写标记再设置，避免崩溃后重复设置）
     if (!getStore().get('auto_launch_initialized')) {

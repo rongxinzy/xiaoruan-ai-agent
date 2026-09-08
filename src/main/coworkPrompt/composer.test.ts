@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { buildScheduledTaskEnginePrompt } from '../../scheduledTask/enginePrompt';
 import { applyCoworkLanguagePrompt } from '../coworkLanguagePrompt';
 import { composeCoworkSystemPrompt } from './composer';
-import { CoworkBundledPromptMarker, ZhiyuanIdentityPrompt } from './constants';
+import { CoworkBundledPromptMarker } from './constants';
+import { ProductIdentityPrompt } from '../productIdentity';
 
 const countOccurrences = (value: string, target: string): number => value.split(target).length - 1;
 
@@ -19,8 +20,8 @@ test('preserves the bundled identity once across composition and expert switchin
     prompt = composeCoworkSystemPrompt({ basePrompt: prompt, language: 'zh' });
   }
   expect(countOccurrences(prompt, CoworkBundledPromptMarker.IdentityStart)).toBe(1);
-  expect(prompt).not.toContain(ZhiyuanIdentityPrompt);
-  expect(prompt).toContain('北京容芯致远科技有限公司');
+  expect(prompt).not.toContain(ProductIdentityPrompt);
+  expect(prompt).toContain('晓软AI智能体');
 
   const selectedExpert = expert('Follow expert A SOP.');
   const withExpert = composeCoworkSystemPrompt({
@@ -47,7 +48,7 @@ test('retains fallback identity when the bundled block is incomplete or empty', 
     `${CoworkBundledPromptMarker.IdentityEnd} text ${CoworkBundledPromptMarker.IdentityStart}`,
   ]) {
     const prompt = composeCoworkSystemPrompt({ basePrompt, language: 'en' });
-    expect(countOccurrences(prompt, ZhiyuanIdentityPrompt)).toBe(1);
+    expect(countOccurrences(prompt, ProductIdentityPrompt)).toBe(1);
   }
 });
 
@@ -57,7 +58,7 @@ test('keeps managed prompt sections idempotent across repeated composition', () 
     prompt = composeCoworkSystemPrompt({ basePrompt: prompt, language: 'zh' });
   }
 
-  expect(countOccurrences(prompt, ZhiyuanIdentityPrompt)).toBe(1);
+  expect(countOccurrences(prompt, ProductIdentityPrompt)).toBe(1);
   expect(countOccurrences(prompt, buildScheduledTaskEnginePrompt())).toBe(1);
   expect(countOccurrences(prompt, '<cowork-response-language>')).toBe(1);
   expect(countOccurrences(prompt, 'User-configured instructions.')).toBe(1);
@@ -91,7 +92,7 @@ test('keeps the selected expert SOP exactly once', () => {
   });
 
   expect(countOccurrences(prompt, selectedExpert.promptSnapshot)).toBe(1);
-  expect(prompt).not.toContain(ZhiyuanIdentityPrompt);
+  expect(prompt).not.toContain(ProductIdentityPrompt);
 });
 
 test('places the expert block before the base prompt with identity precedence', () => {
@@ -126,5 +127,5 @@ test('removes the previous expert SOP when the selected expert changes', () => {
 
   expect(nextPrompt).not.toContain(previousExpert.promptSnapshot);
   expect(nextPrompt).toContain(nextExpert.promptSnapshot);
-  expect(nextPrompt).not.toContain(ZhiyuanIdentityPrompt);
+  expect(nextPrompt).not.toContain(ProductIdentityPrompt);
 });

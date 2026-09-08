@@ -2,7 +2,7 @@
 
 /*
  * Builds the small, 24-bit BMP assets required by NSIS from the same light
- * product language as www.rongxzyai.com. Keep this script with the source
+ * product language as the custom edition. Keep this script with the source
  * application mark so future brand changes are deterministic rather than manual.
  */
 const fs = require('node:fs');
@@ -88,23 +88,23 @@ async function build() {
   const side = sidebar.getContext('2d');
   const background = side.createLinearGradient(0, 0, 0, 314);
   background.addColorStop(0, '#ffffff');
-  background.addColorStop(0.56, '#fbfdff');
-  background.addColorStop(1, '#edf5ff');
+  background.addColorStop(0.56, '#fffafa');
+  background.addColorStop(1, '#f9eeee');
   side.fillStyle = background;
   side.fillRect(0, 0, 164, 314);
   drawDots(side, 164, 314);
 
   const glow = side.createRadialGradient(120, 42, 0, 120, 42, 88);
-  glow.addColorStop(0, 'rgba(83, 147, 255, 0.21)');
-  glow.addColorStop(1, 'rgba(83, 147, 255, 0)');
+  glow.addColorStop(0, 'rgba(170, 38, 50, 0.21)');
+  glow.addColorStop(1, 'rgba(170, 38, 50, 0)');
   side.fillStyle = glow;
   side.fillRect(0, 0, 164, 155);
 
   drawAppIcon(side, sidebarIcon, 14, 14, 58);
-  side.fillStyle = '#397bff';
+  side.fillStyle = '#aa2632';
   side.fillRect(14, 71, 44, 2);
 
-  side.strokeStyle = 'rgba(57, 123, 255, 0.3)';
+  side.strokeStyle = 'rgba(170, 38, 50, 0.3)';
   side.lineWidth = 1;
   for (const [x, y, width, height, radius] of [
     [14, 112, 136, 74, 9],
@@ -113,25 +113,25 @@ async function build() {
     roundedRect(side, x, y, width, height, radius);
     side.stroke();
   }
-  side.fillStyle = 'rgba(57, 123, 255, 0.08)';
+  side.fillStyle = 'rgba(170, 38, 50, 0.08)';
   roundedRect(side, 23, 123, 118, 17, 4);
   side.fill();
   roundedRect(side, 23, 148, 76, 8, 4);
   side.fill();
-  side.fillStyle = '#397bff';
+  side.fillStyle = '#aa2632';
   roundedRect(side, 107, 148, 34, 8, 4);
   side.fill();
-  side.fillStyle = 'rgba(57, 123, 255, 0.12)';
+  side.fillStyle = 'rgba(170, 38, 50, 0.12)';
   roundedRect(side, 23, 216, 86, 7, 3.5);
   side.fill();
   roundedRect(side, 23, 231, 112, 7, 3.5);
   side.fill();
-  side.strokeStyle = 'rgba(57, 123, 255, 0.42)';
+  side.strokeStyle = 'rgba(170, 38, 50, 0.42)';
   side.beginPath();
   side.moveTo(14, 276);
   side.bezierCurveTo(45, 250, 85, 304, 150, 269);
   side.stroke();
-  side.fillStyle = '#397bff';
+  side.fillStyle = '#aa2632';
   for (const [x, y, radius] of [
     [14, 276, 3],
     [76, 280, 2.5],
@@ -150,12 +150,12 @@ async function build() {
   head.fillRect(0, 0, 150, 57);
   drawDots(head, 150, 57, 0.08);
   const headerGlow = head.createRadialGradient(132, 10, 0, 132, 10, 62);
-  headerGlow.addColorStop(0, 'rgba(83, 147, 255, 0.2)');
-  headerGlow.addColorStop(1, 'rgba(83, 147, 255, 0)');
+  headerGlow.addColorStop(0, 'rgba(170, 38, 50, 0.2)');
+  headerGlow.addColorStop(1, 'rgba(170, 38, 50, 0)');
   head.fillStyle = headerGlow;
   head.fillRect(0, 0, 150, 57);
   drawAppIcon(head, headerIcon, 7, 5, 40);
-  head.fillStyle = '#397bff';
+  head.fillStyle = '#aa2632';
   head.fillRect(13, 48, 124, 1);
   writeBmp(header, 'installerHeader.bmp');
 }
