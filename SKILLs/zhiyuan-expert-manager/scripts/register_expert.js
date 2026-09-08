@@ -18,7 +18,7 @@ const path = require('path');
 
 const { validateExpert } = require('./validate_expert');
 
-const DEFAULT_DB_FILENAME = 'zhiyuan.sqlite';
+const DEFAULT_DB_FILENAME = 'xiaoruan.sqlite';
 
 const AGENT_SOURCE_EXPERT_PACKAGE = 'expert-package';
 const AGENT_SOURCE_EXPERT_PACKAGE_MEMBER = 'expert-package-member';

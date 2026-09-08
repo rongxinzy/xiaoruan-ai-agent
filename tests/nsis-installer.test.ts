@@ -13,6 +13,16 @@ const offlineComponentValidatorPath = path.resolve(
 );
 
 describe('NSIS offline resource and local inference flow', () => {
+  test('checks the custom package installation directory during installer smoke', () => {
+    const smokeScript = fs.readFileSync(installerSmokeScriptPath, 'utf8');
+    const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8')) as { name: string };
+    const installDirectory = smokeScript.match(
+      /\$installRoot = Join-Path \$env:LOCALAPPDATA 'Programs\\([^']+)'/,
+    );
+    expect(installDirectory?.[1]).toBe(packageJson.name);
+    expect(smokeScript).not.toContain('zhiyuan-agent');
+  });
+
   test('declares the installer as DPI-aware for high-DPI displays', () => {
     const installerScript = fs.readFileSync(installerScriptPath, 'utf8');
 
