@@ -1,4 +1,5 @@
 name: Build release candidate (manual)
+# Retired: the custom edition builds Windows only through build-platforms.yml.
 
 on:
   workflow_dispatch:
@@ -25,6 +26,7 @@ env:
 
 jobs:
   prepare-candidate:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.identity.outputs.version }}
@@ -64,12 +66,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   memory-regression:
+    if: ${{ false }}
     needs: prepare-candidate
     uses: ./.github/workflows/memory-regression.yml
     with:
       source-ref: ${{ needs.prepare-candidate.outputs.commit }}
 
   quality:
+    if: ${{ false }}
     needs: prepare-candidate
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -126,6 +130,7 @@ jobs:
           bun run test
 
   build-candidate:
+    if: ${{ false }}
     needs: [prepare-candidate, quality, memory-regression]
     strategy:
       fail-fast: true
@@ -405,6 +410,7 @@ jobs:
           retention-days: 7
 
   verify-candidate:
+    if: ${{ false }}
     needs: [prepare-candidate, build-candidate]
     runs-on: ubuntu-latest
     steps:
@@ -442,6 +448,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   upload-packages:
+    if: ${{ false }}
     needs: [prepare-candidate, verify-candidate]
     uses: ./.github/workflows/upload-custom-packages.yml
     with:

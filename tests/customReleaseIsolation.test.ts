@@ -22,6 +22,7 @@ test('every job in inherited official publishing and cleanup workflows is disabl
     'online-update-release',
     'release-candidate-promotion',
     'online-update-cleanup',
+    'release-candidate',
   ]) {
     const jobs = Object.values(workflow(name).jobs);
     expect(jobs.length).toBeGreaterThan(0);
@@ -29,14 +30,25 @@ test('every job in inherited official publishing and cleanup workflows is disabl
   }
 });
 
-test('both package workflows upload only after their verification dependencies pass', () => {
+test('the normal package workflow uploads only after its build dependency passes', () => {
   expect(workflow('build-platforms').jobs['upload-packages'].needs).toContain('build-platforms');
-  expect(workflow('release-candidate').jobs['upload-packages'].needs).toContain('verify-candidate');
-  for (const name of ['build-platforms', 'release-candidate']) {
-    expect(workflow(name).jobs['upload-packages'].uses).toBe(
-      './.github/workflows/upload-custom-packages.yml',
-    );
-  }
+  expect(workflow('build-platforms').jobs['upload-packages'].uses).toBe(
+    './.github/workflows/upload-custom-packages.yml',
+  );
+});
+
+test('the normal private package build is Windows x64 only', () => {
+  const content = fs.readFileSync('.github/workflows/build-platforms.yml', 'utf8');
+  expect(content).toContain('"artifact":"windows-build"');
+  expect(content).toContain('"runtime_target":"win-x64"');
+  expect(content).toContain('artifact-pattern: windows-build');
+  expect(content).toContain('expected-artifacts: 1');
+  expect(content).not.toContain('build_macos:');
+  expect(content).not.toContain('build_linux:');
+  expect(content).not.toContain('Build macOS');
+  expect(content).not.toContain('Build Linux');
+  expect(content).not.toContain('bun run dist:mac');
+  expect(content).not.toContain('bun run dist:linux');
 });
 
 test('the custom upload job uses only dedicated storage and main-branch credentials', () => {

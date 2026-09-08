@@ -1,23 +1,7 @@
-name: Build Xiaoruan packages to private R2 (manual)
+name: Build Xiaoruan Windows package to private R2 (manual)
 
 on:
   workflow_dispatch:
-    inputs:
-      build_macos:
-        description: 'Build macOS'
-        required: true
-        default: true
-        type: boolean
-      build_windows:
-        description: 'Build Windows'
-        required: true
-        default: true
-        type: boolean
-      build_linux:
-        description: 'Build Linux'
-        required: true
-        default: true
-        type: boolean
 
 permissions:
   contents: read
@@ -34,30 +18,10 @@ jobs:
       count: ${{ steps.plan.outputs.count }}
     steps:
       - id: plan
-        env:
-          BUILD_MACOS: ${{ inputs.build_macos }}
-          BUILD_WINDOWS: ${{ inputs.build_windows }}
-          BUILD_LINUX: ${{ inputs.build_linux }}
         shell: bash
         run: |
-          matrix='{"include":['
-          separator=''
-
-          if [[ "$BUILD_MACOS" == "true" ]]; then
-            matrix+='{"platform":"macos","runner":"macos-latest","artifact":"macos-build","runtime_target":"mac-arm64"}'
-            separator=','
-          fi
-          if [[ "$BUILD_WINDOWS" == "true" ]]; then
-            matrix+="${separator}{\"platform\":\"windows\",\"runner\":\"windows-latest\",\"artifact\":\"windows-build\",\"runtime_target\":\"win-x64\"}"
-            separator=','
-          fi
-          if [[ "$BUILD_LINUX" == "true" ]]; then
-            matrix+="${separator}{\"platform\":\"linux\",\"runner\":\"ubuntu-latest\",\"artifact\":\"linux-build\",\"runtime_target\":\"linux-x64\"}"
-          fi
-
-          matrix+=']}'
-          count="$(jq '.include | length' <<< "$matrix")"
-          [[ "$count" -gt 0 ]] || { echo 'Select at least one platform' >&2; exit 1; }
+          matrix='{"include":[{"platform":"windows","runner":"windows-latest","artifact":"windows-build","runtime_target":"win-x64"}]}'
+          count=1
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
@@ -80,8 +44,7 @@ jobs:
   build-platforms:
     needs: [plan-platforms, storage-config]
     strategy:
-      # A manual platform build is a single release unit; cancel sibling builds
-      # as soon as one selected platform fails.
+      # Keep the matrix contract with exactly one Windows x64 target.
       fail-fast: true
       matrix: ${{ fromJSON(needs.plan-platforms.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
@@ -114,88 +77,35 @@ jobs:
           key: packaging-${{ runner.os }}-${{ matrix.runtime_target }}-node24-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'scripts/**') }}
           restore-keys: |
             packaging-${{ runner.os }}-${{ matrix.runtime_target }}-node24-bun1.4.0-
-      - name: Install Electron system dependencies
-        if: ${{ matrix.platform == 'linux' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libatspi2.0-0 libgbm1 libgtk-3-0 libnotify4 libnss3 libsecret-1-0 \
-            libxss1 libxtst6 libuuid1 xdg-utils xvfb
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run apply:patches
       - name: Set up Windows runtimes
-        if: ${{ matrix.platform == 'windows' }}
         run: |
           bun run setup:uv-runtime
           bun run setup:python-runtime
           bun run engram:runtime:${{ matrix.runtime_target }}
-      - name: Set up POSIX runtimes
-        if: ${{ matrix.platform != 'windows' }}
-        run: |
-          bun run setup:posix-uv-runtime
-          bun run setup:posix-python-runtime
-          bun run engram:runtime:${{ matrix.runtime_target }}
-      - name: Build macOS
-        if: ${{ matrix.platform == 'macos' }}
-        run: bun run dist:mac
-        env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
       - name: Build Windows
-        if: ${{ matrix.platform == 'windows' }}
         run: bun run dist:win
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
-      - name: Build Linux
-        if: ${{ matrix.platform == 'linux' }}
-        run: bun run dist:linux
-        env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
-          MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
       - name: Verify Windows package runtimes with a clean PATH
-        if: ${{ matrix.platform == 'windows' }}
         shell: powershell
         run: >-
           powershell -NoProfile -ExecutionPolicy Bypass
           -File scripts/ci/windows-runtime-smoke.ps1
           -ProjectRoot ${{ github.workspace }}
-      - name: Verify the packaged renderer in a virtual Ubuntu desktop
-        if: ${{ matrix.platform == 'linux' }}
-        run: >-
-          node scripts/verify-linux-renderer.mjs
-          release/linux-unpacked
-          release/linux-render-smoke.png
       - uses: actions/upload-artifact@v6
-        if: ${{ matrix.platform == 'macos' }}
-        with:
-          name: ${{ matrix.artifact }}
-          path: release/*.dmg
-          if-no-files-found: error
-          retention-days: 7
-      - uses: actions/upload-artifact@v6
-        if: ${{ matrix.platform == 'windows' }}
         with:
           name: ${{ matrix.artifact }}
           path: release/*.exe
           if-no-files-found: error
           retention-days: 7
 
-      - uses: actions/upload-artifact@v6
-        if: ${{ always() && matrix.platform == 'linux' }}
-        with:
-          name: ${{ matrix.artifact }}
-          path: |
-            release/*.AppImage
-            release/*.deb
-            release/linux-render-smoke.png
-          retention-days: 7
-
   upload-packages:
     needs: [plan-platforms, build-platforms]
     uses: ./.github/workflows/upload-custom-packages.yml
     with:
-      artifact-pattern: '*-build'
-      expected-artifacts: ${{ fromJSON(needs.plan-platforms.outputs.count) }}
+      artifact-pattern: windows-build
+      expected-artifacts: 1
