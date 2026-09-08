@@ -26,14 +26,17 @@ jobs:
       R2_BUCKET: xiaoruan-releases
       PACKAGE_SOURCE_COMMIT: ${{ inputs.source-commit || github.sha }}
       XIAORUAN_R2_ACCOUNT_ID: ${{ vars.XIAORUAN_R2_ACCOUNT_ID }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
     steps:
+      # Use the reviewed workflow revision for upload tooling even when the
+      # candidate was built from an older source-commit. That input labels bytes.
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: '24.x'
       - name: Check dedicated storage configuration
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
         run: node --input-type=module -e "import { uploadIdentity } from './scripts/release/upload-custom-packages.mjs'; uploadIdentity(process.env)"
       - uses: actions/download-artifact@v8
         with:
@@ -42,6 +45,8 @@ jobs:
       - name: Verify and store installers
         env:
           EXPECTED_ARTIFACTS: ${{ inputs.expected-artifacts }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
         run: node scripts/release/upload-custom-packages.mjs packages "$EXPECTED_ARTIFACTS"
       - uses: actions/upload-artifact@v6
         with:
