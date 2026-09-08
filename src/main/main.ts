@@ -1270,6 +1270,7 @@ const getCanonicalScheduledTaskService = (): CanonicalScheduledTaskService => {
       taskStore,
       canonicalSchedulerRuntime,
     );
+    piRuntimeAdapter?.setScheduledTaskService(canonicalScheduledTaskService);
   }
   return canonicalScheduledTaskService;
 };
@@ -5664,7 +5665,8 @@ if (!gotTheLock) {
   });
 
   ipcMain.handle('check-api-config', async (_event, options?: { probeModel?: boolean }) => {
-    const { config, error } = resolveCurrentApiConfig();
+    // Pi and managed Model Pool requests do not depend on the compatibility proxy.
+    const { config, error } = resolveRawApiConfig();
     if (config && options?.probeModel) {
       const probe = await probeCoworkModelReadiness();
       if (probe.ok === false) {

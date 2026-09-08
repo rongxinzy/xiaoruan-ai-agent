@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
+import { ProviderName } from '@shared/providers';
 import type { AppConfig } from '../config';
 import { defaultConfig } from '../config';
 import { ConfigService } from './config';
@@ -26,6 +27,19 @@ describe('ConfigService', () => {
     vi.stubGlobal('window', {
       dispatchEvent: vi.fn(),
     });
+  });
+
+  test('preserves provider settings without managed free access', async () => {
+    storedConfig.providers![ProviderName.DeepSeek].enabled = false;
+    const service = new ConfigService();
+    await service.reload();
+    expect(service.getConfig().providers![ProviderName.DeepSeek].enabled).toBe(false);
+
+    const providers = structuredClone(service.getConfig().providers!);
+    providers[ProviderName.DeepSeek].enabled = true;
+    await service.updateConfig({ providers, theme: 'light' });
+    expect(storedConfig.providers![ProviderName.DeepSeek].enabled).toBe(true);
+    expect(storedConfig.theme).toBe('light');
   });
 
   test('serializes concurrent partial updates against the latest stored config', async () => {

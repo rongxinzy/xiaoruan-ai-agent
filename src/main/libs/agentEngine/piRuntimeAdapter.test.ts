@@ -94,7 +94,6 @@ const hoisted = vi.hoisted(() => {
     mockRegisterPiOpenAICompatUpstream: vi.fn(
       async (providerId: string) => `http://127.0.0.1:19191/__pi_openai_compat/${providerId}/v1`,
     ),
-    mockRegisterPiOpenAICompatTokenRefresher: vi.fn(),
     mockResolveRawApiConfig: vi.fn(() => ({
       config: {
         apiKey: 'sk-test',
@@ -223,7 +222,6 @@ vi.mock('../claudeSettings', () => ({
 }));
 
 vi.mock('./piOpenAICompatProxy', () => ({
-  registerPiOpenAICompatTokenRefresher: hoisted.mockRegisterPiOpenAICompatTokenRefresher,
   registerPiOpenAICompatUpstream: hoisted.mockRegisterPiOpenAICompatUpstream,
 }));
 
@@ -1249,6 +1247,7 @@ describe('PiRuntimeAdapter', () => {
           piRuntime: {
             api: ProviderModelPiApi.OpenAIResponses,
             reasoning: true,
+            thinkingLevelMap: { off: null, low: 'low', high: 'high', max: 'max' },
             compat: {
               supportsDeveloperRole: false,
               maxTokensField: ProviderModelPiMaxTokensField.MaxTokens,
@@ -1273,6 +1272,7 @@ describe('PiRuntimeAdapter', () => {
               id: 'agent-model',
               api: ProviderModelPiApi.OpenAIResponses,
               reasoning: true,
+              thinkingLevelMap: { off: null, low: 'low', high: 'high', max: 'max' },
               input: ['text', 'image'],
               compat: {
                 supportsDeveloperRole: false,

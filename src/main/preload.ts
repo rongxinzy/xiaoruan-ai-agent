@@ -656,7 +656,8 @@ contextBridge.exposeInMainWorld('electron', {
       workspaceRoot: string;
       prompt: import('../shared/codingAgent').CodingPromptInput;
     }) => ipcRenderer.invoke(CodingAgentIpc.Prompt, input),
-    listPendingMessages: (laneId: string) => ipcRenderer.invoke(CodingAgentIpc.ListPendingMessages, laneId),
+    listPendingMessages: (laneId: string) =>
+      ipcRenderer.invoke(CodingAgentIpc.ListPendingMessages, laneId),
     enqueuePendingMessage: (input: { laneId: string; text: string }) =>
       ipcRenderer.invoke(CodingAgentIpc.EnqueuePendingMessage, input),
     updatePendingMessage: (input: { laneId: string; itemId: string; text: string }) =>
@@ -715,6 +716,14 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke(CodingAgentIpc.CommitGitChanges, input),
     pushGitBranch: (input: import('../shared/codingAgent').CodingGitTargetInput) =>
       ipcRenderer.invoke(CodingAgentIpc.PushGitBranch, input),
+    switchGitBranch: (input: import('../shared/codingAgent').CodingGitBranchInput) =>
+      ipcRenderer.invoke(CodingAgentIpc.SwitchGitBranch, input),
+    createGitPullRequest: (input: import('../shared/codingAgent').CodingGitPullRequestInput) =>
+      ipcRenderer.invoke(CodingAgentIpc.CreateGitPullRequest, input),
+    listWorkspaceFiles: (input: import('../shared/codingAgent').CodingWorkspaceFileInput) =>
+      ipcRenderer.invoke(CodingAgentIpc.ListWorkspaceFiles, input),
+    readWorkspaceFile: (input: import('../shared/codingAgent').CodingWorkspaceFileInput) =>
+      ipcRenderer.invoke(CodingAgentIpc.ReadWorkspaceFile, input),
     discoverAgents: (input: { workspaceRoot: string }) =>
       ipcRenderer.invoke(CodingAgentIpc.DiscoverAgents, input),
     probeAgent: (input: { workspaceRoot: string; profileId: string }) =>

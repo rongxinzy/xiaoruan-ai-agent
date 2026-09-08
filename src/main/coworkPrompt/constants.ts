@@ -6,3 +6,10 @@ export const CoworkManagedPromptMarker = {
   ExpertsStart: '<cowork-managed-experts>',
   ExpertsEnd: '</cowork-managed-experts>',
 } as const;
+
+// Unlike managed additions, this block belongs to the bundled base prompt and
+// survives recomposition, including switching to an expert and back.
+export const CoworkBundledPromptMarker = {
+  IdentityStart: '<cowork-bundled-identity>',
+  IdentityEnd: '</cowork-bundled-identity>',
+} as const;

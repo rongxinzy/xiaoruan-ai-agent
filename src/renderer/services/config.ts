@@ -1,4 +1,8 @@
-import { type ApiFormat, type ProviderConfig, ProviderRegistry } from '@shared/providers';
+import {
+  type ApiFormat,
+  type ProviderConfig,
+  ProviderRegistry,
+} from '@shared/providers';
 
 import { AppConfig, CONFIG_KEYS, defaultConfig, isCustomProvider } from '../config';
 import { localStore } from './store';
@@ -408,7 +412,7 @@ export class ConfigService {
           ...defaultConfig.shortcuts!,
           ...(storedConfig.shortcuts ?? {}),
         } as AppConfig['shortcuts'],
-        providers: mergedProviders as AppConfig['providers'],
+        providers: normalizeProvidersConfig(mergedProviders as AppConfig['providers']),
         migrations: {
           ...defaultConfig.migrations,
           ...storedConfig.migrations,
@@ -418,7 +422,8 @@ export class ConfigService {
       const shortcuts = this.config.shortcuts!;
       this.config.shortcuts = {
         ...shortcuts,
-        newChat: shortcuts.newChat === 'Ctrl+N' ? defaultConfig.shortcuts!.newChat : shortcuts.newChat,
+        newChat:
+          shortcuts.newChat === 'Ctrl+N' ? defaultConfig.shortcuts!.newChat : shortcuts.newChat,
         search: shortcuts.search === 'Ctrl+F' ? defaultConfig.shortcuts!.search : shortcuts.search,
         settings:
           shortcuts.settings === 'Ctrl+,' ? defaultConfig.shortcuts!.settings : shortcuts.settings,

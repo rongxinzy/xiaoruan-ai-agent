@@ -1,5 +1,9 @@
 # 定制版说明
 
+## 上游基线
+
+本版从 `rongxinzy/RongxinAI` 的 `cc7bf4ef66312f88ad06058d58e8ec8ec00167ac`（`feat(runtime): pass model thinking level maps to Pi (#727)`）切出，移植原晓软定制版的品牌、产品边界与独立发布配置。
+
 ## 安装包存储
 
 - 手动运行 `Build Xiaoruan Windows package to private R2 (manual)`，当前仅构建 Windows x64；普通 push/PR 继续只做质量验证。
@@ -29,7 +33,7 @@
 
 产品名称为「晓软AI智能体」。应用、托盘、启动页和安装器使用用户提供的晓软科技 R 形标志。原图保存在 `public/brand/xiaoruan-source.jpg`；`public/xiaoruan-mark.png` 是去除底部文字后的白底应用标志。运行 `node scripts/generate-xiaoruan-brand.cjs` 可重新生成各平台图标与字标，需通过 `XIAORUAN_BRAND_FONT` 指定中文字体（macOS 默认使用黑体）。
 
-默认采用浅色政务红，深色与跟随系统仍可选。主题源文件位于 `src/renderer/theme/themes/`，修改后运行 `bun src/renderer/theme/scripts/generate-css.ts`，同时同步 `css/shadcn-token-bridge.css`。启动欢迎页无需登录，展示完整产品名，就绪后淡出；减少动态效果时立即退出。
+默认采用「晓软红」主题包的浅色外观，深色与跟随系统仍可选。品牌色通过 `src/renderer/theme/themes/xiaoruan.ts` 定义，在 `themes/plugins.ts` 注册，遵循统一 token 和组件外观契约；不修改其他主题或通用语义桥接色。修改后运行 `bun run theme:generate`，并通过 `theme:check` 和 `theme:audit`。启动欢迎页无需登录，展示完整产品名，就绪后淡出；减少动态效果时立即退出。
 
 ## 身份文案与交付工作区
 

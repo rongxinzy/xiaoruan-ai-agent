@@ -43,7 +43,7 @@ export function EmailAdvancedFields({
 }: EmailAdvancedFieldsProps) {
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} className="flex flex-col gap-4">
-      <CollapsibleTrigger className="focus-ring flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-raised">
+      <CollapsibleTrigger className="theme-fold-settings flex w-full items-center gap-2">
         <SlidersHorizontal className="size-4 text-muted-foreground" />
         <span className="flex-1 text-left">{i18nService.t('emailAdvancedSettings')}</span>
         <ChevronDown
@@ -129,7 +129,7 @@ export function EmailAdvancedFields({
         <FieldSet>
           <FieldLegend variant="label">{i18nService.t('emailSecuritySettings')}</FieldLegend>
           <FieldGroup className="gap-3">
-            <Field orientation="horizontal" className="rounded-lg border border-border p-3">
+            <Field orientation="horizontal" className="theme-scene-email-field">
               <FieldContent>
                 <FieldLabel htmlFor="email-imap-tls">{i18nService.t('emailImapTls')}</FieldLabel>
                 <FieldDescription>{i18nService.t('emailImapTlsDescription')}</FieldDescription>
@@ -141,7 +141,7 @@ export function EmailAdvancedFields({
               />
             </Field>
 
-            <Field orientation="horizontal" className="rounded-lg border border-border p-3">
+            <Field orientation="horizontal" className="theme-scene-email-field">
               <FieldContent>
                 <FieldLabel htmlFor="email-smtp-ssl">{i18nService.t('emailSmtpSsl')}</FieldLabel>
                 <FieldDescription>{i18nService.t('emailSmtpSslDescription')}</FieldDescription>
@@ -153,7 +153,7 @@ export function EmailAdvancedFields({
               />
             </Field>
 
-            <Field orientation="horizontal" className="rounded-lg border border-border p-3">
+            <Field orientation="horizontal" className="theme-scene-email-field">
               <FieldContent>
                 <FieldLabel htmlFor="email-insecure-cert">
                   {i18nService.t('emailAllowInsecureCert')}

@@ -48,14 +48,14 @@ export function InstalledSkillGrid({
           <Card
             key={skill.id}
             size="sm"
-            className="group relative min-h-20 flex-row items-center gap-3 border border-border bg-card p-4 ring-0 transition-colors hover:bg-muted"
+            className="theme-page-installed-skill-grid-card-1 group relative flex-row items-center"
           >
             {!batchMode && (
               <Button
                 type="button"
                 variant="ghost"
                 aria-label={name}
-                className="absolute inset-0 z-0 h-auto w-auto rounded-[inherit] border-0 p-0 hover:bg-transparent dark:hover:bg-transparent"
+                className="theme-page-installed-skill-grid-button-1 absolute inset-0 z-0"
                 onClick={() => onSelect(skill)}
               />
             )}
@@ -109,7 +109,7 @@ export function InstalledSkillGrid({
 
 function SkillIcon({ skill }: { skill: Skill }) {
   return (
-    <Avatar className="size-10 shrink-0 rounded-xl bg-muted">
+    <Avatar className="theme-scene-skill-avatar shrink-0">
       {skill.iconUrl && (
         <AvatarImage
           src={resolveSkillIconUrl(skill.iconUrl)}
@@ -117,7 +117,7 @@ function SkillIcon({ skill }: { skill: Skill }) {
           className="m-auto size-8 rounded-lg object-contain"
         />
       )}
-      <AvatarFallback className="rounded-lg text-xl font-semibold text-muted-foreground">
+      <AvatarFallback className="theme-scene-skill-fallback">
         {getSkillInitial(skill.displayName || skill.name)}
       </AvatarFallback>
     </Avatar>

@@ -1,9 +1,11 @@
+import { getCoworkOpenAICompatProxyStatus } from './coworkOpenAICompatProxy';
+import { defaultConfig } from '../../renderer/config';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 vi.mock('./coworkOpenAICompatProxy', () => ({
   configureCoworkOpenAICompatProxy: vi.fn(),
   getCoworkOpenAICompatProxyBaseURL: () => 'http://127.0.0.1:3456/v1',
-  getCoworkOpenAICompatProxyStatus: () => ({ running: true }),
+  getCoworkOpenAICompatProxyStatus: vi.fn(() => ({ running: true })),
   getCoworkOpenAICompatProxyToken: () => 'proxy-auth-token',
 }));
 
@@ -597,4 +599,22 @@ test('resolveRawApiConfigForModelRef forwards custom model Pi runtime metadata',
       },
     }),
   );
+});
+
+test('a fresh custom edition requires a configured model service', () => {
+  vi.mocked(getCoworkOpenAICompatProxyStatus).mockReturnValue({ running: false } as ReturnType<
+    typeof getCoworkOpenAICompatProxyStatus
+  >);
+  const config = structuredClone(defaultConfig);
+  setStoreGetter(() => ({ get: () => config }) as never);
+  try {
+    const resolved = resolveRawApiConfig();
+    expect(resolved.error).toBeTruthy();
+    expect(resolved.config).toBeNull();
+    expect(resolveCurrentApiConfig().config).toBeNull();
+  } finally {
+    vi.mocked(getCoworkOpenAICompatProxyStatus).mockReturnValue({ running: true } as ReturnType<
+      typeof getCoworkOpenAICompatProxyStatus
+    >);
+  }
 });

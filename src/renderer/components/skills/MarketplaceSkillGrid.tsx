@@ -70,8 +70,10 @@ export function MarketplaceSkillGrid({
           <Card
             key={skill.id}
             className={cn(
-              'group relative min-h-20 flex-row items-center gap-3 border border-border bg-card px-4 py-3 transition-colors hover:bg-muted',
-              isInstallingSkillId && !isInstalling && 'pointer-events-none opacity-50',
+              'theme-page-marketplace-skill-grid-card-variant-1 group relative flex-row items-center',
+              isInstallingSkillId &&
+                !isInstalling &&
+                'theme-page-marketplace-skill-grid-card-variant-2 pointer-events-none',
             )}
           >
             <Button
@@ -79,10 +81,10 @@ export function MarketplaceSkillGrid({
               variant="ghost"
               size="lg"
               disabled={Boolean(isInstallingSkillId && !isInstalling)}
-              className="h-auto min-w-0 flex-1 shrink justify-start gap-2 border-0 px-0 py-1 text-left whitespace-normal hover:bg-transparent dark:hover:bg-transparent"
+              className="theme-page-marketplace-skill-grid-button-1 min-w-0 flex-1 shrink justify-start text-left whitespace-normal"
               onClick={() => onSelect(skill)}
             >
-              <Avatar className="size-10 shrink-0 rounded-xl bg-muted">
+              <Avatar className="theme-scene-skill-avatar shrink-0">
                 {skill.iconUrl && (
                   <AvatarImage
                     src={resolveSkillIconUrl(skill.iconUrl)}
@@ -90,7 +92,7 @@ export function MarketplaceSkillGrid({
                     className="m-auto size-8 rounded-lg object-contain"
                   />
                 )}
-                <AvatarFallback className="rounded-lg text-xl font-semibold text-muted-foreground">
+                <AvatarFallback className="theme-scene-skill-fallback">
                   {getSkillInitial(skill.name)}
                 </AvatarFallback>
               </Avatar>
@@ -129,7 +131,7 @@ export function MarketplaceSkillGrid({
               <Progress
                 value={installProgress}
                 aria-label={`${i18nService.t('skillInstalling')} ${installProgress}%`}
-                className="absolute bottom-0 left-0 h-1 w-full gap-0 rounded-none"
+                className="theme-scene-skill-progress absolute bottom-0 left-0 w-full gap-0"
               />
             )}
           </Card>

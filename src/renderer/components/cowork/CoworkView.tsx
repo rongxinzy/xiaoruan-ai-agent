@@ -1,3 +1,4 @@
+import { configService } from '../../services/config';
 import { ProductBrand } from '../ProductBrand';
 import { cn } from '@shared/lib/utils';
 import React, { useEffect, useRef, useState } from 'react';
@@ -320,6 +321,8 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         console.error('Failed to load quick actions:', error);
       }
       try {
+        // Finish configuration repair before main-process availability checks.
+        await configService.init();
         const apiConfig = await coworkService.checkApiConfig();
         if (apiConfig && !apiConfig.hasConfig) {
           onRequestAppSettings?.({
@@ -395,6 +398,8 @@ const CoworkView: React.FC<CoworkViewProps> = ({
 
     try {
       try {
+        // Finish configuration repair before main-process availability checks.
+        await configService.init();
         const apiConfig = await coworkService.checkApiConfig();
         if (apiConfig && !apiConfig.hasConfig) {
           onRequestAppSettings?.({
@@ -402,7 +407,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
             ...buildApiConfigNotice(apiConfig.error),
           });
           startingSessionIdsRef.current.delete(startSessionKey);
-          return;
+          return false;
         }
       } catch (error) {
         console.error('Failed to check cowork API config:', error);
@@ -1538,7 +1543,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
 
   if (!isInitialized) {
     return (
-      <div className="flex-1 h-full flex flex-col bg-background">
+      <div data-page-canvas className="flex-1 h-full flex flex-col bg-background">
         <PageHeader />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-muted-foreground">{i18nService.t('loading')}</div>
@@ -1598,7 +1603,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
 
   // Home view - no current session
   return (
-    <div className="flex-1 flex flex-col bg-background h-full">
+    <div data-page-canvas className="flex-1 flex flex-col bg-background h-full">
       {/* Header */}
       {homeHeader}
 
