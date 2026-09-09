@@ -1,4 +1,4 @@
-name: Store Xiaoruan packages in private R2
+name: Store Xiaoruan packages in R2
 
 on:
   workflow_dispatch:

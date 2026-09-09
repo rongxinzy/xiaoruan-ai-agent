@@ -1,4 +1,4 @@
-name: Build Xiaoruan Windows package to private R2 (manual)
+name: Build Xiaoruan Windows package to R2 (manual)
 
 on:
   workflow_dispatch:
