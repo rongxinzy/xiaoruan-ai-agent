@@ -166,6 +166,7 @@ type AnimatedIconHandle = {
 
 export type SettingsOpenOptions = {
   initialTab?: SettingsTabType;
+  initialProvider?: ProviderName;
   notice?: string;
   noticeI18nKey?: string;
   noticeExtra?: string;
@@ -642,6 +643,7 @@ const SendShortcutSelect: React.FC<{ value: string; onChange: (v: string) => voi
 const Settings: React.FC<SettingsProps> = ({
   onClose,
   initialTab,
+  initialProvider,
   notice,
   noticeI18nKey,
   noticeExtra,
@@ -696,6 +698,8 @@ const Settings: React.FC<SettingsProps> = ({
   const initialThemeStyleRef = useRef(themeService.getStyle());
   const initialThemeRef = useRef<'light' | 'dark' | 'system'>(themeService.getTheme());
   const initialLanguageRef = useRef<LanguageType>(i18nService.getLanguage());
+  const initialProviderRef = useRef(initialProvider);
+  const initialProviderAppliedRef = useRef(false);
   const didSaveRef = useRef(false);
   const emailSettingsRef = useRef<EmailSettingsHandle>(null);
   const generalIconRef = useRef<SettingsAnimatedSlidersHorizontalIconHandle>(null);
@@ -743,7 +747,9 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   // Add state for active provider
-  const [activeProvider, setActiveProvider] = useState<ProviderType>(getDefaultActiveProvider());
+  const [activeProvider, setActiveProvider] = useState<ProviderType>(
+    initialProvider ?? getDefaultActiveProvider(),
+  );
   const [showApiKey, setShowApiKey] = useState(false);
 
   // MiniMax OAuth state
@@ -992,6 +998,9 @@ const Settings: React.FC<SettingsProps> = ({
       try {
         const config = await configService.reload();
         if (!active) return;
+        const setProviderFromConfig = (provider: ProviderType) => {
+          if (!initialProviderRef.current) setActiveProvider(provider);
+        };
 
         // Set general settings
         initialThemeRef.current = config.theme;
@@ -1032,7 +1041,7 @@ const Settings: React.FC<SettingsProps> = ({
           // Initialize active provider based on baseUrl
           const normalizedApiBaseUrl = config.api.baseUrl.toLowerCase();
           if (normalizedApiBaseUrl.includes('openai')) {
-            setActiveProvider('openai');
+            setProviderFromConfig('openai');
             setProviders(prev => ({
               ...prev,
               openai: {
@@ -1043,7 +1052,7 @@ const Settings: React.FC<SettingsProps> = ({
               },
             }));
           } else if (normalizedApiBaseUrl.includes('deepseek')) {
-            setActiveProvider('deepseek');
+            setProviderFromConfig('deepseek');
             setProviders(prev => ({
               ...prev,
               deepseek: {
@@ -1057,7 +1066,7 @@ const Settings: React.FC<SettingsProps> = ({
             normalizedApiBaseUrl.includes('moonshot.ai') ||
             normalizedApiBaseUrl.includes('moonshot.cn')
           ) {
-            setActiveProvider('moonshot');
+            setProviderFromConfig('moonshot');
             setProviders(prev => ({
               ...prev,
               moonshot: {
@@ -1068,7 +1077,7 @@ const Settings: React.FC<SettingsProps> = ({
               },
             }));
           } else if (normalizedApiBaseUrl.includes('bigmodel.cn')) {
-            setActiveProvider('zhipu');
+            setProviderFromConfig('zhipu');
             setProviders(prev => ({
               ...prev,
               zhipu: {
@@ -1079,7 +1088,7 @@ const Settings: React.FC<SettingsProps> = ({
               },
             }));
           } else if (normalizedApiBaseUrl.includes('minimax')) {
-            setActiveProvider('minimax');
+            setProviderFromConfig('minimax');
             setProviders(prev => ({
               ...prev,
               minimax: {
@@ -1090,7 +1099,7 @@ const Settings: React.FC<SettingsProps> = ({
               },
             }));
           } else if (normalizedApiBaseUrl.includes('dashscope')) {
-            setActiveProvider('qwen');
+            setProviderFromConfig('qwen');
             setProviders(prev => ({
               ...prev,
               qwen: {
@@ -1101,7 +1110,7 @@ const Settings: React.FC<SettingsProps> = ({
               },
             }));
           } else if (normalizedApiBaseUrl.includes('stepfun')) {
-            setActiveProvider('stepfun');
+            setProviderFromConfig('stepfun');
             setProviders(prev => ({
               ...prev,
               stepfun: {
@@ -1112,7 +1121,7 @@ const Settings: React.FC<SettingsProps> = ({
               },
             }));
           } else if (normalizedApiBaseUrl.includes('openrouter.ai')) {
-            setActiveProvider('openrouter');
+            setProviderFromConfig('openrouter');
             setProviders(prev => ({
               ...prev,
               openrouter: {
@@ -1123,7 +1132,7 @@ const Settings: React.FC<SettingsProps> = ({
               },
             }));
           } else if (normalizedApiBaseUrl.includes('googleapis')) {
-            setActiveProvider('gemini');
+            setProviderFromConfig('gemini');
             setProviders(prev => ({
               ...prev,
               gemini: {
@@ -1134,7 +1143,7 @@ const Settings: React.FC<SettingsProps> = ({
               },
             }));
           } else if (normalizedApiBaseUrl.includes('anthropic')) {
-            setActiveProvider('anthropic');
+            setProviderFromConfig('anthropic');
             setProviders(prev => ({
               ...prev,
               anthropic: {
@@ -1148,7 +1157,7 @@ const Settings: React.FC<SettingsProps> = ({
             normalizedApiBaseUrl.includes('ollama') ||
             normalizedApiBaseUrl.includes('11434')
           ) {
-            setActiveProvider('ollama');
+            setProviderFromConfig('ollama');
             setProviders(prev => ({
               ...prev,
               ollama: {
@@ -1175,9 +1184,7 @@ const Settings: React.FC<SettingsProps> = ({
             const firstEnabledProvider = providerKeys.find(providerKey =>
               isProviderEnabled(providerKey, merged[providerKey]),
             );
-            if (firstEnabledProvider) {
-              setActiveProvider(firstEnabledProvider);
-            }
+            if (firstEnabledProvider) setProviderFromConfig(firstEnabledProvider);
 
             return Object.fromEntries(
               Object.entries(merged).map(([providerKey, providerConfig]) => {
@@ -1286,6 +1293,21 @@ const Settings: React.FC<SettingsProps> = ({
     }
   }, [initialTab]);
 
+  useEffect(() => {
+    if (initialProviderRef.current !== initialProvider) {
+      initialProviderRef.current = initialProvider;
+      initialProviderAppliedRef.current = !initialProvider;
+    }
+    if (!initialProvider) {
+      initialProviderAppliedRef.current = true;
+      return;
+    }
+    if (initialProviderAppliedRef.current) return;
+    if (!providers[initialProvider]) return;
+    setActiveProvider(initialProvider);
+    initialProviderAppliedRef.current = true;
+  }, [initialProvider, providers]);
+
   // Subscribe to language changes
   useEffect(() => {
     const unsubscribe = i18nService.subscribe(() => {
@@ -1333,6 +1355,7 @@ const Settings: React.FC<SettingsProps> = ({
 
   // Ensure activeProvider is always in visibleProviders when language changes
   useEffect(() => {
+    if (!initialProviderAppliedRef.current) return;
     const visibleKeys = Object.keys(visibleProviders) as ProviderType[];
     if (visibleKeys.length > 0 && !visibleKeys.includes(activeProvider)) {
       // If current activeProvider is not visible, switch to first visible provider
@@ -4626,11 +4649,12 @@ const Settings: React.FC<SettingsProps> = ({
                                 className={cn(
                                   'h-1.5 w-1.5 shrink-0 rounded-full',
                                   getModelConnectionStatus(activeProvider, model.id) ===
-                                    ModelConnectionStatus.Success
-                                    ? 'bg-success'
-                                    : getModelConnectionStatus(activeProvider, model.id) ===
-                                        ModelConnectionStatus.Failure
-                                      ? 'bg-destructive'
+                                    ModelConnectionStatus.Failure
+                                    ? 'bg-destructive'
+                                    : activeProvider === ProviderName.LlamaCpp ||
+                                        getModelConnectionStatus(activeProvider, model.id) ===
+                                          ModelConnectionStatus.Success
+                                      ? 'bg-success'
                                       : 'bg-muted-foreground',
                                 )}
                               />

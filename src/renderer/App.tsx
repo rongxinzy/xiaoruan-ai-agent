@@ -8,6 +8,7 @@ import {
   ManagedProviderAccessMode,
   type ManagedProviderAccessPolicy,
 } from '../shared/managedProviders';
+import { ProviderName } from '../shared/providers';
 import {
   hasAskUserQuestions,
   isAskUserQuestionPermission,
@@ -445,10 +446,37 @@ const App: React.FC = () => {
   const handleShowSettings = useCallback((options?: SettingsOpenOptions) => {
     setSettingsOptions({
       initialTab: options?.initialTab,
+      initialProvider: options?.initialProvider,
       notice: options?.notice,
     });
     setShowSettings(true);
   }, []);
+
+  const handleOpenLocalModelSettings = useCallback(async () => {
+    try {
+      const config = await configService.reload();
+      const localProvider = config.providers?.[ProviderName.LlamaCpp];
+      if (localProvider && (!localProvider.enabled || localProvider.userEnabled !== true)) {
+        await configService.updateConfig({
+          providers: {
+            ...config.providers,
+            [ProviderName.LlamaCpp]: {
+              ...localProvider,
+              enabled: true,
+              userEnabled: true,
+            },
+          },
+        });
+      }
+    } catch (error) {
+      console.error('[App] failed to enable the local model provider before opening settings:', error);
+    }
+
+    handleShowSettings({
+      initialTab: 'model',
+      initialProvider: ProviderName.LlamaCpp,
+    });
+  }, [handleShowSettings]);
 
   const handleShowSkills = useCallback(() => {
     setMainView('skills');
@@ -799,6 +827,7 @@ const App: React.FC = () => {
                 <Settings
                   onClose={handleCloseSettings}
                   initialTab={settingsOptions.initialTab}
+                  initialProvider={settingsOptions.initialProvider}
                   notice={settingsOptions.notice}
                   enterpriseConfig={enterpriseConfig}
                   managedModelsOnly={managedModelsOnly}
@@ -864,7 +893,7 @@ const App: React.FC = () => {
                         isVisible={mainView === 'localInference'}
                         onToggleSidebar={handleToggleSidebar}
                         onNewChat={handleNewChat}
-                        onOpenModelSettings={() => handleShowSettings({ initialTab: 'model' })}
+                        onOpenModelSettings={() => void handleOpenLocalModelSettings()}
                         updateBadge={null}
                       />
                     </React.Suspense>
@@ -977,6 +1006,7 @@ const App: React.FC = () => {
               <Settings
                 onClose={handleCloseSettings}
                 initialTab={settingsOptions.initialTab}
+                initialProvider={settingsOptions.initialProvider}
                 notice={settingsOptions.notice}
                 enterpriseConfig={enterpriseConfig}
                 managedModelsOnly={managedModelsOnly}
