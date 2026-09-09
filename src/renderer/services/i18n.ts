@@ -827,8 +827,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     capabilityUnsupported: '不支持',
     capabilityUnknown: '未知',
     toolCapabilityUnsupportedFallback: '当前模型不支持工具调用，已改用普通对话，未执行联网搜索。',
-    toolCapabilityUnknownFallback:
-      '当前模型的工具调用能力尚未确认，已改用普通对话，未执行联网搜索。',
+    toolCapabilityRejectedFallback:
+      '该接口暂不支持工具调用，已继续普通对话，本次未执行联网搜索。',
     modelSuffixSecure: '（安全）',
     codingPlanSubscriptionBadge: '订阅套餐',
     inputFileLabel: '输入文件',
@@ -4169,8 +4169,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     capabilityUnknown: 'Unknown',
     toolCapabilityUnsupportedFallback:
       'This model does not support tool calling. Switched to regular chat without web search.',
-    toolCapabilityUnknownFallback:
-      'Tool-calling support for this model is unknown. Switched to regular chat without web search.',
+    toolCapabilityRejectedFallback:
+      'This endpoint does not currently support tool calling. Continued with regular chat; no web search was performed.',
     modelSuffixSecure: '(Secure)',
     codingPlanSubscriptionBadge: 'Subscription',
     inputFileLabel: 'Input Files',

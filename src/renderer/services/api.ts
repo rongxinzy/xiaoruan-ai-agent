@@ -11,7 +11,7 @@ import { store } from '../store';
 import type { Model } from '../store/slices/modelSlice';
 import { ChatMessagePayload, ChatUserMessageInput, ImageAttachment } from '../types/chat';
 import { configService } from './config';
-import { i18nService } from './i18n';
+import { chatToolCapabilityPolicy } from './chatToolCapabilityPolicy';
 import {
   buildLocalThinkingRequestParams,
   type DirectChatRequestOptions,
@@ -65,6 +65,7 @@ class ApiService {
 
   setConfig(config: ApiConfig) {
     this.config = config;
+    chatToolCapabilityPolicy.clear();
     // Provider settings may have changed even when the legacy fallback config
     // is identical. Do not carry endpoint-specific capability evidence across
     // a settings refresh.
@@ -663,104 +664,115 @@ class ApiService {
       config,
     );
     const supportsImages = capabilities.imageInput === ModelCapabilityStatus.Supported;
-    if (capabilities.toolCalling !== ModelCapabilityStatus.Supported) {
-      const capabilityMessage =
-        capabilities.toolCalling === ModelCapabilityStatus.Unsupported
-          ? `${i18nService.t('toolCapabilityUnsupportedFallback')}\n\n`
-          : `${i18nService.t('toolCapabilityUnknownFallback')}\n\n`;
-      // Keep the request valid for custom, aggregated, and local endpoints. The
-      // regular chat path deliberately contains no `tools` or `tool_choice`.
-      onProgress?.(capabilityMessage);
-      return this.chat(message, onProgress, history, options, requestId);
-    }
-    const prompt =
-      'Use the web_search tool when current, factual, or external information would improve the answer. Cite result URLs when you use search.';
-    const system = [
-      prompt,
-      ...history.filter(item => item.role === 'system').map(item => item.content),
-    ]
-      .filter(Boolean)
-      .join('\n');
-    const userMessage: ChatMessagePayload = {
-      role: 'user',
-      content: typeof message === 'string' ? message : message.content,
-      ...(typeof message === 'string' || !message.images?.length ? {} : { images: message.images }),
-    };
-
-    if (apiFormat === 'anthropic') {
-      const messages = [...history.filter(item => item.role !== 'system'), userMessage]
-        .map(item => this.formatAnthropicMessage(item, supportsImages))
-        .filter(Boolean) as any[];
-      return this.runAnthropicWebSearchLoop(
-        messages,
-        system,
-        selectedModel.id,
-        config,
-        onProgress,
-        requestId,
-        abortSignal,
-        onToolEvent,
-      );
-    }
-    if (apiFormat === 'gemini') {
-      const contents = [...history.filter(item => item.role !== 'system'), userMessage].map(
-        item => ({
-          role: item.role === 'assistant' ? 'model' : 'user',
-          parts: [
-            ...(item.content ? [{ text: item.content }] : []),
-            ...(item.images ?? []).flatMap(image => {
-              const payload = this.extractImageData(image);
-              return payload
-                ? [{ inline_data: { mime_type: payload.mimeType, data: payload.data } }]
-                : [];
-            }),
-          ],
-        }),
-      );
-      return this.runGeminiWebSearchLoop(
-        contents,
-        system,
-        selectedModel.id,
-        config,
-        onProgress,
-        requestId,
-        abortSignal,
-        onToolEvent,
-      );
-    }
-    if (this.shouldUseOpenAIResponsesApi(provider)) {
-      const input = [...history.filter(item => item.role !== 'system'), userMessage]
-        .map(item => this.formatOpenAIResponsesInputMessage(item, supportsImages))
-        .filter(Boolean) as any[];
-      return this.runOpenAIResponsesWebSearchLoop(
-        input,
-        system,
-        selectedModel.id,
-        config,
-        onProgress,
-        requestId,
-        abortSignal,
-        onToolEvent,
-      );
-    }
-    const messages = [
-      { role: 'system', content: system },
-      ...history
-        .filter(item => item.role !== 'system')
-        .map(item => this.formatOpenAIMessage(item, supportsImages))
-        .filter(Boolean),
-      ...[this.formatOpenAIMessage(userMessage, supportsImages)].filter(Boolean),
-    ];
-    return this.runOpenAIWebSearchLoop(
-      messages,
-      selectedModel.id,
-      config,
+    return chatToolCapabilityPolicy.run({
       provider,
+      model: selectedModel.id,
+      config,
+      capability: capabilities.toolCalling,
+      configuredCapability:
+        provider === ProviderName.LlamaCpp
+          ? selectedModel.capabilities?.toolCalling
+          : configService
+              .getConfig()
+              .providers?.[provider]?.models?.find(model => model.id === selectedModel.id)
+              ?.capabilities?.toolCalling,
+      signal: abortSignal,
       onProgress,
-      requestId,
-      abortSignal,
       onToolEvent,
-    );
+      plain: progress => this.chat(message, progress, history, options, requestId),
+      attempt: async (onProgress, onToolEvent) => {
+        const prompt =
+          'Use the web_search tool when current, factual, or external information would improve the answer. Cite result URLs when you use search.';
+        const system = [
+          prompt,
+          ...history.filter(item => item.role === 'system').map(item => item.content),
+        ]
+          .filter(Boolean)
+          .join('\n');
+        const userMessage: ChatMessagePayload = {
+          role: 'user',
+          content: typeof message === 'string' ? message : message.content,
+          ...(typeof message === 'string' || !message.images?.length
+            ? {}
+            : { images: message.images }),
+        };
+
+        if (apiFormat === 'anthropic') {
+          const messages = [...history.filter(item => item.role !== 'system'), userMessage]
+            .map(item => this.formatAnthropicMessage(item, supportsImages))
+            .filter(Boolean) as any[];
+          return this.runAnthropicWebSearchLoop(
+            messages,
+            system,
+            selectedModel.id,
+            config,
+            onProgress,
+            requestId,
+            abortSignal,
+            onToolEvent,
+          );
+        }
+        if (apiFormat === 'gemini') {
+          const contents = [...history.filter(item => item.role !== 'system'), userMessage].map(
+            item => ({
+              role: item.role === 'assistant' ? 'model' : 'user',
+              parts: [
+                ...(item.content ? [{ text: item.content }] : []),
+                ...(item.images ?? []).flatMap(image => {
+                  const payload = this.extractImageData(image);
+                  return payload
+                    ? [{ inline_data: { mime_type: payload.mimeType, data: payload.data } }]
+                    : [];
+                }),
+              ],
+            }),
+          );
+          return this.runGeminiWebSearchLoop(
+            contents,
+            system,
+            selectedModel.id,
+            config,
+            onProgress,
+            requestId,
+            abortSignal,
+            onToolEvent,
+          );
+        }
+        if (this.shouldUseOpenAIResponsesApi(provider)) {
+          const input = [...history.filter(item => item.role !== 'system'), userMessage]
+            .map(item => this.formatOpenAIResponsesInputMessage(item, supportsImages))
+            .filter(Boolean) as any[];
+          return this.runOpenAIResponsesWebSearchLoop(
+            input,
+            system,
+            selectedModel.id,
+            config,
+            onProgress,
+            requestId,
+            abortSignal,
+            onToolEvent,
+          );
+        }
+        const messages = [
+          { role: 'system', content: system },
+          ...history
+            .filter(item => item.role !== 'system')
+            .map(item => this.formatOpenAIMessage(item, supportsImages))
+            .filter(Boolean),
+          ...[this.formatOpenAIMessage(userMessage, supportsImages)].filter(Boolean),
+        ];
+        return this.runOpenAIWebSearchLoop(
+          messages,
+          selectedModel.id,
+          config,
+          provider,
+          onProgress,
+          requestId,
+          abortSignal,
+          onToolEvent,
+        );
+      },
+    });
   }
 
   private throwIfAborted(signal?: AbortSignal): void {
