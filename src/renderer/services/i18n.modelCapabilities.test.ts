@@ -12,7 +12,7 @@ describe('model capability translations', () => {
     expect(i18nService.t('modelCapabilities')).toBe('模型能力');
     expect(i18nService.t('capabilityToolCalling')).toBe('工具调用');
     expect(i18nService.t('capabilityUnknown')).toBe('未知');
-    expect(i18nService.t('toolCapabilityUnknownFallback')).toContain('尚未确认');
+    expect(i18nService.t('toolCapabilityRejectedFallback')).toContain('本次未执行联网搜索');
   });
 
   test('provides complete English labels and fallback messages', () => {
@@ -20,7 +20,7 @@ describe('model capability translations', () => {
     expect(i18nService.t('modelCapabilities')).toBe('Model capabilities');
     expect(i18nService.t('capabilityToolCalling')).toBe('Tool calling');
     expect(i18nService.t('capabilityUnknown')).toBe('Unknown');
-    expect(i18nService.t('toolCapabilityUnknownFallback')).toContain('regular chat');
+    expect(i18nService.t('toolCapabilityRejectedFallback')).toContain('no web search');
   });
 
   test('uses the edge-inference label for the sidebar entry', () => {

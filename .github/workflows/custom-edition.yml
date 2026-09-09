@@ -35,7 +35,7 @@ jobs:
       - name: Verify isolated package storage
         run: bunx vitest run scripts/release/upload-custom-packages.test.ts scripts/release/verify-windows-artifact-source.test.ts tests/customReleaseIsolation.test.ts
       - name: Verify configured chat transports and installer identity
-        run: bunx vitest run src/renderer/services/chatChatTransport.test.ts src/renderer/services/ipcChatTransport.test.ts tests/nsis-installer.test.ts
+        run: bunx vitest run src/renderer/services/chatChatTransport.test.ts src/renderer/services/ipcChatTransport.test.ts src/renderer/services/api.webSearch.test.ts src/renderer/services/chatToolCapabilityPolicy.test.ts src/renderer/services/i18n.modelCapabilities.test.ts tests/nsis-installer.test.ts
       - name: Verify theme packages and configuration
         run: bunx vitest run src/renderer/theme src/renderer/services/theme.test.ts src/renderer/services/config.test.ts
       - name: Verify Windows packaging contracts
