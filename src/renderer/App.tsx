@@ -130,6 +130,7 @@ const App: React.FC = () => {
   const [mcpOpenMarketplace, setMcpOpenMarketplace] = useState(false);
   const [hasMountedLocalInference, setHasMountedLocalInference] = useState(false);
   const [localInferenceInstallRequestId, setLocalInferenceInstallRequestId] = useState<string>();
+  const [localInferenceRefreshRequestId, setLocalInferenceRefreshRequestId] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
   const [bootScreenVisible, setBootScreenVisible] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
@@ -508,6 +509,7 @@ const App: React.FC = () => {
 
   const handleShowLocalInference = useCallback(() => {
     if (managedModelsOnly) return;
+    setLocalInferenceRefreshRequestId(current => current + 1);
     setMainView('localInference');
   }, [managedModelsOnly]);
 
@@ -889,6 +891,7 @@ const App: React.FC = () => {
                       <LocalInferenceView
                         installRequestId={localInferenceInstallRequestId}
                         onInstallRequestHandled={handleLocalInferenceInstallRequestHandled}
+                        refreshRequestId={localInferenceRefreshRequestId}
                         isSidebarCollapsed={isSidebarCollapsed}
                         isVisible={mainView === 'localInference'}
                         onToggleSidebar={handleToggleSidebar}

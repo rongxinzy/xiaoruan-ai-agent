@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { expect, test } from 'vitest';
 
 import { MarketplaceDeviceProfile } from '../../../shared/marketplace';
@@ -14,6 +17,28 @@ import {
   isInstallTerminalPhase,
   isSuccessfulMarketplaceInstallProgress,
 } from './utils/progress';
+
+const localInferenceViewSource = readFileSync(
+  fileURLToPath(new URL('./LocalInferenceView.tsx', import.meta.url)),
+  'utf8',
+);
+const appSource = readFileSync(fileURLToPath(new URL('../../App.tsx', import.meta.url)), 'utf8');
+
+test('refreshes local inference data when the kept-alive view becomes visible', () => {
+  expect(localInferenceViewSource).toContain('if (!isVisible) return;');
+  expect(localInferenceViewSource).toContain('await refreshLocalModels();');
+  expect(localInferenceViewSource).toContain('    isVisible,\n    refreshRequestId,');
+});
+
+test('refreshes local models when local inference is selected again', () => {
+  expect(appSource).toContain(
+    'const [localInferenceRefreshRequestId, setLocalInferenceRefreshRequestId] = useState(0);',
+  );
+  expect(appSource).toContain('setLocalInferenceRefreshRequestId(current => current + 1);');
+  expect(appSource).toContain('refreshRequestId={localInferenceRefreshRequestId}');
+  expect(localInferenceViewSource).toContain('refreshRequestId?: number;');
+  expect(localInferenceViewSource).toContain('    refreshRequestId,\n    refreshLocalModels,');
+});
 
 test('done progress is only considered a successful install when the model actually exists locally', () => {
   expect(
