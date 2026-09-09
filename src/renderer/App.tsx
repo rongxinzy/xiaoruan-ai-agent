@@ -488,10 +488,6 @@ const App: React.FC = () => {
     setMainView('expert');
   }, []);
 
-  const handleShowCoding = useCallback(() => {
-    setMainView('coding');
-  }, []);
-
   const handleShowTodo = useCallback(() => {
     setMainView('todo');
   }, []);
@@ -836,7 +832,6 @@ const App: React.FC = () => {
             onShowMcp={handleShowMcp}
             onShowLocalInference={handleShowLocalInference}
             onShowExpert={handleShowExpert}
-            onShowCoding={handleShowCoding}
             onShowTodo={handleShowTodo}
             codingSelection={codingSelection}
             onCodingSelectionChange={setCodingSelection}
