@@ -92,16 +92,19 @@ const ChatSkillShortcuts: React.FC = () => {
     }
     dispatch(setActiveSkillIds([...selectedSkillIds]));
     const quickActionIdByShortcut: Record<string, string> = {
-      ppt: 'pptx',
       sheets: 'data-analysis',
       website: 'website',
       docs: 'docs',
       'deep-research': 'deep-research',
       'academic-research': 'academic-research',
     };
-    const quickActionId = quickActionIdByShortcut[entry.id];
+    const quickActionId = quickActionIdByShortcut[entry.id] ?? null;
     dispatch(
-      selectAction(quickActions.some(action => action.id === quickActionId) ? quickActionId : null),
+      selectAction(
+        quickActionId && quickActions.some(action => action.id === quickActionId)
+          ? quickActionId
+          : null,
+      ),
     );
     dispatch(clearCurrentSession());
     window.setTimeout(() => {

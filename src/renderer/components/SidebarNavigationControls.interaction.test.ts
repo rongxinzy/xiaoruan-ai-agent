@@ -69,7 +69,6 @@ test('preserves new-task workspace cleanup and view navigation callbacks', async
   );
   const views = [
     ['localInferenceTitle', handlers.onShowLocalInference, 'localInference'],
-    ['codingAgent', handlers.onShowCoding, undefined],
     ['todoTitle', handlers.onShowTodo, 'todo'],
     ['scheduledTasks', handlers.onShowScheduledTasks, 'scheduledTasks'],
     ['activityTitle', handlers.onShowActivity, 'activity'],
@@ -86,6 +85,7 @@ test('preserves new-task workspace cleanup and view navigation callbacks', async
     await user.keyboard('{Enter}');
     expect(callback).toHaveBeenCalledTimes(1);
   }
+  expect(screen.queryByRole('button', { name: 'codingAgent' })).toBeNull();
   expect(screen.getByRole('button', { name: 'todoTitle' })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByTestId('sidebar-new-conversation')).not.toHaveAttribute('aria-current');
 });

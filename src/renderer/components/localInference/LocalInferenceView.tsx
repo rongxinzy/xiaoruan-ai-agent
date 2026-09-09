@@ -101,6 +101,7 @@ import { sameRunningModelSnapshot } from './utils/runningModels';
 interface LocalInferenceViewProps {
   installRequestId?: string;
   onInstallRequestHandled?: (requestId: string) => void;
+  refreshRequestId?: number;
   isSidebarCollapsed?: boolean;
   isVisible?: boolean;
   onToggleSidebar?: () => void;
@@ -147,6 +148,7 @@ let cachedStatus: OllamaStatusSnapshot | null = null;
 const LocalInferenceView: React.FC<LocalInferenceViewProps> = ({
   installRequestId,
   onInstallRequestHandled,
+  refreshRequestId = 0,
   isSidebarCollapsed,
   isVisible = true,
   onToggleSidebar,
@@ -808,6 +810,7 @@ const LocalInferenceView: React.FC<LocalInferenceViewProps> = ({
   }, []);
 
   useEffect(() => {
+    if (!isVisible) return;
     void runAction(async () => {
       const nextStatus = await refreshStatus();
       await refreshLocalModels();
@@ -819,6 +822,8 @@ const LocalInferenceView: React.FC<LocalInferenceViewProps> = ({
       }
     });
   }, [
+    isVisible,
+    refreshRequestId,
     refreshLocalModels,
     refreshModelPreferences,
     refreshModelsDir,
