@@ -139,6 +139,7 @@ export const ToolCard: React.FC<{
           type={`tool-${rawToolName}` as ToolUIPart['type']}
           state={toolState}
           title={displayName}
+          isOpen={isToolOpen}
         />
         <ToolContent className="flex flex-col gap-4">
           {isBashTool ? (

@@ -36,6 +36,8 @@ export type ToolHeaderProps = {
   title?: string;
   className?: string;
   statusLabel?: string;
+  /** Controls the chevron when the parent owns the collapsible state. */
+  isOpen?: boolean;
   /** Overrides the default wrench icon, e.g. to reflect an ACP tool kind. */
   icon?: ReactNode;
 } & (
@@ -82,6 +84,7 @@ export const ToolHeader = ({
   statusLabel,
   toolName,
   icon,
+  isOpen,
   ...props
 }: ToolHeaderProps) => {
   const derivedName = type === 'dynamic-tool' ? toolName : type.split('-').slice(1).join('-');
@@ -96,7 +99,16 @@ export const ToolHeader = ({
         <span className="font-medium text-sm">{title ?? derivedName}</span>
         {getStatusBadge(state, statusLabel)}
       </div>
-      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      <ChevronDownIcon
+        className={cn(
+          'size-4 text-muted-foreground transition-transform duration-200 ease-out motion-reduce:transition-none',
+          isOpen === undefined
+            ? 'group-data-[state=open]:rotate-180'
+            : isOpen
+              ? 'rotate-180'
+              : 'rotate-0',
+        )}
+      />
     </CollapsibleTrigger>
   );
 };
@@ -106,7 +118,7 @@ export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 export const ToolContent = ({ className, ...props }: ToolContentProps) => (
   <CollapsibleContent
     className={cn(
-      'data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 space-y-4 p-4 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in',
+      'data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 space-y-4 p-4 text-popover-foreground outline-none duration-200 ease-out data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none',
       className,
     )}
     {...props}
