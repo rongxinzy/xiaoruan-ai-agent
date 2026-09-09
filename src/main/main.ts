@@ -219,6 +219,9 @@ import {
 } from './enterpriseExtension/rendererProtocol';
 import { zhiyuanEnterpriseSessionBridge } from './enterpriseExtension/sessionBridge';
 import { zhiyuanManagedProviderBridge } from './enterpriseExtension/managedProviderBridge';
+import { AISphere, AISphereIpc } from '../shared/aisphere';
+import { aisphereService } from './aisphere/service';
+import { startAISphereGateway } from './aisphere/gateway';
 import { ZhiyuanEnterpriseSkillBridge } from './enterpriseExtension/skillBridge';
 import { LlamaCppManager } from './libs/llamacppManager';
 import { CcConnectBridgeServer } from './libs/ccConnectBridgeServer';
@@ -2643,17 +2646,20 @@ if (!gotTheLock) {
 
   // IPC 处理程序
   ipcMain.handle('store:get', (_event, key) => {
-    return getStore().get(key);
+    const value = getStore().get(key);
+    return key === AISphere.AppConfigKey ? aisphereService.project(value ?? {}) : value;
   });
 
   ipcMain.handle('store:set', async (_event, key, value) => {
-    getStore().set(key, value);
+    if (key === AISphere.StoreKey) throw new Error('AISphere binding requires platform verification.');
+    getStore().set(key, key === AISphere.AppConfigKey ? aisphereService.project(value ?? {}) : value);
     if (key === 'app_config') {
       refreshEndpointsTestMode(getStore());
     }
   });
 
   ipcMain.handle('store:remove', (_event, key) => {
+    if (key === AISphere.StoreKey) throw new Error('AISphere binding requires platform verification.');
     getStore().delete(key);
   });
 
@@ -2678,9 +2684,14 @@ if (!gotTheLock) {
   ipcMain.handle(EnterpriseRendererIpc.SettingsPages, () =>
     zhiyuanEnterpriseRendererBridge.settingsPages(),
   );
-  ipcMain.handle(ManagedProviderIpc.Policy, () => zhiyuanManagedProviderBridge.accessPolicy());
-  ipcMain.handle(ManagedProviderIpc.Catalog, () => zhiyuanManagedProviderBridge.catalog());
-  zhiyuanManagedProviderBridge.onDidChange(() => {
+  ipcMain.handle(AISphereIpc.Snapshot, () => aisphereService.snapshot());
+  ipcMain.handle(AISphereIpc.Connect, (_event, address: unknown) => aisphereService.connect(address));
+  ipcMain.handle(AISphereIpc.Refresh, async () => { await aisphereService.refresh(); return aisphereService.snapshot(); });
+  ipcMain.handle(ManagedProviderIpc.Policy, () => aisphereService.policy());
+  ipcMain.handle(ManagedProviderIpc.Catalog, () => aisphereService.snapshot().models.map((model, index) => ({
+    ...model, displayName: model.name, providerKey: AISphere.Provider, providerDisplayName: 'AISphere', isDefault: index === 0,
+  })));
+  aisphereService.onChanged(() => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.send(ManagedProviderIpc.Changed);
     }
@@ -6017,6 +6028,7 @@ if (!gotTheLock) {
 
   ipcMain.handle('api:fetch', async (_event, rawOptions: unknown) => {
     const options = ApiFetchSchema.input.parse(rawOptions);
+    aisphereService.assertGateway(options.url, options.method);
     console.log(
       `[api:fetch] ${options.method} ${options.url}, headers: ${serializeForLog(options.headers)}, body: ${options.body}`,
     );
@@ -6090,6 +6102,7 @@ if (!gotTheLock) {
   // SSE 流式 API 代理
   ipcMain.handle('api:stream', async (event, rawOptions: unknown) => {
     const options = ApiStreamSchema.input.parse(rawOptions);
+    aisphereService.assertGateway(options.url, options.method);
     const controller = new AbortController();
 
     // 存储 controller 以便后续取消
@@ -6740,6 +6753,10 @@ if (!gotTheLock) {
     console.log('[Main] initApp: starting initStore()');
     store = await initStore();
     zhiyuanManagedProviderBridge.attachStore(store);
+    const aisphereGateway = await startAISphereGateway();
+    await aisphereService.initialize(store, aisphereGateway.baseUrl);
+    aisphereService.busy = () => Boolean(piRuntimeAdapter?.hasRunningSessions() || activeStreamControllers.size);
+    app.once('before-quit', () => { void aisphereGateway.close(); });
     profiler.measure('initStore');
     console.log('[Main] initApp: store initialized');
     try {

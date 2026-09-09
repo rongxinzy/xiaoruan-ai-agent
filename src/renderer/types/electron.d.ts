@@ -1453,6 +1453,9 @@ interface IElectronAPI {
     };
   };
   managedProviders: {
+    aisphereSnapshot: () => Promise<import('../../shared/aisphere').AISphereSnapshot>;
+    aisphereConnect: (address: string) => Promise<import('../../shared/aisphere').AISphereSnapshot>;
+    aisphereRefresh: () => Promise<import('../../shared/aisphere').AISphereSnapshot>;
     policy: () => Promise<import('../../shared/managedProviders').ManagedProviderAccessPolicy>;
     catalog: () => Promise<
       readonly import('../../shared/managedProviders').ManagedProviderCatalogModel[]

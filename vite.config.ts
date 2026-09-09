@@ -107,6 +107,11 @@ export default defineConfig(async ({ command }) => {
         : [
             electron([
               {
+                entry: 'src/main/aisphere/requestWorker.ts',
+                vite: { build: { outDir: 'dist-electron', emptyOutDir: false, minify: false } },
+                onstart() {},
+              },
+              {
                 // Build preload once before starting the main-process watcher.
                 // Concurrent Rolldown watchers writing the same output directory
                 // can stall the main bundle on Vite 8.

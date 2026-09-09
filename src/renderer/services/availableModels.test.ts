@@ -44,7 +44,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test('collectAvailableModels exposes running llama.cpp models when provider is disabled', async () => {
+test('missing platform policy cannot expose running local or third-party models', async () => {
   const listRunningModels = vi.fn(async () => [
     { name: 'qwen-local', runtime_context_length: 8192 },
   ]);
@@ -58,9 +58,8 @@ test('collectAvailableModels exposes running llama.cpp models when provider is d
 
   const models = await collectAvailableModels(createConfig());
 
-  expect(listRunningModels).toHaveBeenCalledTimes(1);
-  expect(models.some(model => model.providerKey === ProviderName.LlamaCpp)).toBe(true);
-  expect(models.some(model => model.providerKey === ProviderName.DeepSeek)).toBe(true);
+  expect(listRunningModels).not.toHaveBeenCalled();
+  expect(models).toEqual([]);
 });
 
 test('exclusive managed policy exposes only the synchronized custom provider', async () => {
@@ -112,7 +111,7 @@ test('does not expose the legacy default model when no provider is configured', 
   await expect(collectAvailableModels(config)).resolves.toEqual([]);
 });
 
-test('collectAvailableModels merges running llama.cpp model metadata', async () => {
+test('configured local inference cannot bypass the default exclusive policy', async () => {
   const listRunningModels = vi.fn(async () => [
     {
       name: 'qwen-local',
@@ -139,17 +138,11 @@ test('collectAvailableModels merges running llama.cpp model metadata', async () 
 
   const models = await collectAvailableModels(config);
 
-  expect(listRunningModels).toHaveBeenCalledTimes(1);
+  expect(listRunningModels).not.toHaveBeenCalled();
   const llamaCppModel = models.find(
     model => model.providerKey === ProviderName.LlamaCpp && model.id === 'qwen-local',
   );
-  expect(llamaCppModel).toBeDefined();
-  expect(llamaCppModel?.llamaCppAgentEligibility).toMatchObject({
-    eligible: false,
-    runtimeContextWindow: 8192,
-    trainedContextWindow: 32768,
-  });
-  expect(llamaCppModel?.supportsThinkingToggle).toBe(true);
+  expect(llamaCppModel).toBeUndefined();
 });
 
 test('uses saved llama.cpp preferences for the model capability metadata', () => {
@@ -265,7 +258,7 @@ test('starts without any enabled bundled cloud provider', async () => {
   expect(listModels).not.toHaveBeenCalled();
 });
 
-test('keeps configured models available when local inference is offline', async () => {
+test('local inference errors cannot restore third-party models', async () => {
   vi.stubGlobal('window', {
     electron: {
       llamacpp: {
@@ -276,5 +269,5 @@ test('keeps configured models available when local inference is offline', async 
     },
   });
   const models = await collectAvailableModels(createConfig());
-  expect(models.map(model => model.providerKey)).toEqual([ProviderName.DeepSeek]);
+  expect(models).toEqual([]);
 });

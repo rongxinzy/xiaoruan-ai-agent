@@ -89,6 +89,12 @@ export function selectAgentSelectedModel(
   if (trimmed) {
     const resolved = resolveAgentModelRef(trimmed, modelState.availableModels);
     if (resolved) return resolved;
+    const separator = trimmed.indexOf('/');
+    return {
+      id: separator >= 0 ? trimmed.slice(separator + 1) : trimmed,
+      providerKey: separator >= 0 ? trimmed.slice(0, separator) : '',
+      name: trimmed,
+    };
   }
   return modelState.defaultSelectedModel;
 }
@@ -102,8 +108,6 @@ function syncSelectedModelByAgent(
     const matched = allAvailableModels.find(m => isSameModelIdentity(m, agentModel));
     if (matched) {
       selectedModelByAgent[agentId] = matched;
-    } else {
-      delete selectedModelByAgent[agentId];
     }
   }
 }
@@ -136,10 +140,12 @@ const modelSlice = createSlice({
       state.availableModels = action.payload;
       availableModels = state.availableModels;
       if (state.availableModels.length > 0) {
-        const matchedModel = state.availableModels.find(m =>
-          isSameModelIdentity(m, state.defaultSelectedModel),
-        );
-        state.defaultSelectedModel = matchedModel ?? state.availableModels[0];
+        const matchedModel =
+          state.defaultSelectedModel &&
+          state.availableModels.find(m => isSameModelIdentity(m, state.defaultSelectedModel));
+        // Retain a removed selection so the request fails explicitly instead of silently changing models.
+        state.defaultSelectedModel =
+          matchedModel ?? state.defaultSelectedModel ?? state.availableModels[0];
       }
       syncSelectedModelByAgent(state.selectedModelByAgent, state.availableModels);
     },

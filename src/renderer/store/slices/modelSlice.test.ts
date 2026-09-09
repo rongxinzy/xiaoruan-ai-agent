@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { AISphere } from '../../../shared/aisphere';
 
 import type { Model } from './modelSlice';
 import modelReducer, {
@@ -69,13 +70,13 @@ describe('setAvailableModels', () => {
     expect(state.selectedModelByAgent['agent-1'].name).toBe('GPT-4o (Updated)');
   });
 
-  test('removes per-agent model when it is no longer available', () => {
+  test('retains a removed model so a later request cannot silently switch providers', () => {
     let state = modelReducer(undefined, setSelectedModel({ agentId: 'agent-1', model: modelA }));
 
     // Update available models — modelA removed
     state = modelReducer(state, setAvailableModels([modelB, modelC]));
 
-    expect(state.selectedModelByAgent['agent-1']).toBeUndefined();
+    expect(state.selectedModelByAgent['agent-1']).toEqual(modelA);
   });
 
   test('re-matches defaultSelectedModel', () => {
@@ -88,6 +89,15 @@ describe('setAvailableModels', () => {
 });
 
 describe('selectAgentSelectedModel', () => {
+  test('does not remap an old provider reference to a same-named platform model', () => {
+    const platformModel = { ...modelA, providerKey: AISphere.Provider };
+    const state = makeState({
+      availableModels: [platformModel],
+      defaultSelectedModel: platformModel,
+    });
+    const selected = selectAgentSelectedModel(state, 'old-agent', 'openai/gpt-4o');
+    expect(selected.providerKey).toBe('openai');
+  });
   test('returns per-agent override when present', () => {
     const state = makeState({
       selectedModelByAgent: { 'agent-1': modelA },
@@ -121,7 +131,7 @@ describe('selectAgentSelectedModel', () => {
     expect(result).toEqual(modelB);
   });
 
-  test('falls back to defaultSelectedModel when agent model ref is invalid', () => {
+  test('preserves an invalid agent model reference for explicit request rejection', () => {
     const state = makeState({
       selectedModelByAgent: {},
       availableModels: [modelA, modelB],
@@ -129,6 +139,6 @@ describe('selectAgentSelectedModel', () => {
     });
 
     const result = selectAgentSelectedModel(state, 'agent-1', 'nonexistent/model');
-    expect(result).toEqual(modelB);
+    expect(result).toMatchObject({ providerKey: 'nonexistent', id: 'model' });
   });
 });

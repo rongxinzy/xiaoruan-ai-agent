@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { AISphereIpc, type AISphereSnapshot } from '../shared/aisphere';
 
 import type { CoworkError } from '../common/coworkError';
 import { IpcChannel as ScheduledTaskIpc } from '../scheduledTask/constants';
@@ -299,6 +300,9 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   managedProviders: {
+    aisphereSnapshot: () => ipcRenderer.invoke(AISphereIpc.Snapshot) as Promise<AISphereSnapshot>,
+    aisphereConnect: (address: string) => ipcRenderer.invoke(AISphereIpc.Connect, address) as Promise<AISphereSnapshot>,
+    aisphereRefresh: () => ipcRenderer.invoke(AISphereIpc.Refresh) as Promise<AISphereSnapshot>,
     policy: () =>
       ipcRenderer.invoke(ManagedProviderIpc.Policy) as Promise<
         import('../shared/managedProviders').ManagedProviderAccessPolicy

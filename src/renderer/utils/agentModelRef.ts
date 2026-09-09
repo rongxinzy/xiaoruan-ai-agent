@@ -1,4 +1,5 @@
 import { AgentProviderId, ProviderName, ProviderRegistry } from '@shared/providers/constants';
+import { AISphere } from '../../shared/aisphere';
 
 import type { Model } from '../store/slices/modelSlice';
 
@@ -34,6 +35,7 @@ export function resolveAgentModelRef<T extends ModelRefInput>(
     const exact =
       availableModels.find(model => toAgentModelRef(model) === normalizedRef) ?? null;
     if (exact) return exact;
+    if (availableModels.some(model => model.providerKey === AISphere.Provider)) return null;
 
     console.log(
       '[agentModelRef] exact match failed for',
