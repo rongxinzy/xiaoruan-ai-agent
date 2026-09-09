@@ -240,16 +240,19 @@ test('web-search fallback message follows the selected UI language', async () =>
   store.dispatch(setDefaultSelectedModel(model));
   apiService.setConfig({ apiKey: 'key', baseUrl: 'https://example.test/v1', apiFormat: 'openai' });
   vi.spyOn(apiService, 'chat').mockResolvedValue({ content: 'plain answer' });
+  vi.spyOn(privateApiService, 'runOpenAIWebSearchLoop').mockRejectedValue(
+    new ApiError('This model does not support tools', 400),
+  );
   const progress = vi.fn();
 
   const result = await apiService.chatWithWebSearch('latest news', progress);
 
   expect(result.content).toContain(
-    'This model does not support tool calling. Switched to regular chat without web search.',
+    'This endpoint does not currently support tool calling. Continued with regular chat; no web search was performed.',
   );
 
   expect(progress).toHaveBeenCalledWith(
-    'This model does not support tool calling. Switched to regular chat without web search.\n\n',
+    'This endpoint does not currently support tool calling. Continued with regular chat; no web search was performed.\n\n',
   );
 });
 
@@ -292,7 +295,7 @@ test('endpoint tool rejection falls back, caches per endpoint and clears on conf
   expect(loop).toHaveBeenCalledTimes(2);
 });
 
-test('configured provider model capability overrides detected capability', async () => {
+test('manual unsupported capability cannot prevent an actual tool attempt', async () => {
   const model = {
     id: 'custom-configured-capability',
     name: 'Configured Capability',
@@ -324,25 +327,25 @@ test('configured provider model capability overrides detected capability', async
     },
   });
   apiService.setConfig({ apiKey: 'key', baseUrl: 'https://example.test/v1', apiFormat: 'openai' });
-  const loop = vi.spyOn(privateApiService, 'runOpenAIWebSearchLoop');
+  const loop = vi
+    .spyOn(privateApiService, 'runOpenAIWebSearchLoop')
+    .mockResolvedValue({ content: 'searched answer' });
   const regularChat = vi.spyOn(apiService, 'chat').mockResolvedValue({ content: 'plain answer' });
 
   const result = await apiService.chatWithWebSearch('latest news');
 
-  expect(result.content).toBe(
-    '当前模型不支持工具调用，已改用普通对话，未执行联网搜索。\n\nplain answer',
-  );
-  expect(regularChat).toHaveBeenCalledOnce();
-  expect(loop).not.toHaveBeenCalled();
+  expect(result.content).toBe('searched answer');
+  expect(regularChat).not.toHaveBeenCalled();
+  expect(loop).toHaveBeenCalledOnce();
 });
 
-test('local model preference overrides runtime detection', async () => {
+test('local model capability metadata cannot prevent an actual tool attempt', async () => {
   const model = {
     id: 'local-manual-tools',
     name: 'Local Manual Tools',
     providerKey: ProviderName.LlamaCpp,
     supportsImage: false,
-    capabilities: { toolCalling: ModelCapabilityStatus.Supported },
+    capabilities: { toolCalling: ModelCapabilityStatus.Unsupported },
   };
   store.dispatch(setAvailableModels([model]));
   store.dispatch(setDefaultSelectedModel(model));
@@ -360,7 +363,7 @@ test('local model preference overrides runtime detection', async () => {
   expect(loop).toHaveBeenCalledOnce();
 });
 
-test('configured supported capability retries after a cached endpoint rejection', async () => {
+test('manual supported capability does not bypass actual rejection evidence', async () => {
   const model = {
     id: 'custom-supported-override',
     name: 'Supported Override',
@@ -377,7 +380,13 @@ test('configured supported capability retries after a cached endpoint rejection'
     baseUrl: 'https://example.test/v1',
     apiFormat: 'openai' as const,
   };
-  let configuredModels: NonNullable<typeof provider.models> = [];
+  const configuredModels: NonNullable<typeof provider.models> = [
+    {
+      id: model.id,
+      name: model.name,
+      capabilities: { toolCalling: ModelCapabilityStatus.Supported },
+    },
+  ];
   vi.spyOn(configService, 'getConfig').mockImplementation(() => ({
     ...appConfig,
     providers: { ...appConfig.providers, custom_0: { ...provider, models: configuredModels } },
@@ -390,18 +399,10 @@ test('configured supported capability retries after a cached endpoint rejection'
   vi.spyOn(apiService, 'chat').mockResolvedValue({ content: 'plain answer' });
 
   await apiService.chatWithWebSearch('latest news');
-  configuredModels = [
-    {
-      id: model.id,
-      name: model.name,
-      capabilities: { toolCalling: ModelCapabilityStatus.Supported },
-    },
-  ];
-
   await expect(apiService.chatWithWebSearch('latest news')).resolves.toEqual({
-    content: 'searched answer',
+    content: '该接口暂不支持工具调用，已继续普通对话，本次未执行联网搜索。\n\nplain answer',
   });
-  expect(loop).toHaveBeenCalledTimes(2);
+  expect(loop).toHaveBeenCalledTimes(1);
 });
 
 test('OpenAI Responses returns an output for every parallel tool call', async () => {

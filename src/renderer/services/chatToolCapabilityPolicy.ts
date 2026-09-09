@@ -1,4 +1,3 @@
-import { ModelCapabilityStatus } from '../../shared/providers';
 import { i18nService } from './i18n';
 import type { WebSearchToolEventHandler } from './webSearchToolEvents';
 
@@ -11,8 +10,6 @@ interface Request<T extends Result> {
   provider: string;
   model: string;
   config: { baseUrl: string; apiKey: string; apiFormat?: string };
-  capability: ModelCapabilityStatus;
-  configuredCapability?: ModelCapabilityStatus;
   signal?: AbortSignal;
   onProgress?: Progress;
   onToolEvent?: WebSearchToolEventHandler;
@@ -62,12 +59,8 @@ export class ChatToolCapabilityPolicy {
       request.config.apiFormat,
       request.config.apiKey,
     ]);
-    const explicit = request.configuredCapability;
-    const configured =
-      explicit === ModelCapabilityStatus.Supported ||
-      explicit === ModelCapabilityStatus.Unsupported;
-    const capability = configured ? explicit : request.capability;
-    const cached = !configured && (this.rejected.get(key) ?? 0) > Date.now();
+    // Catalog metadata and manual capability labels cannot veto a real attempt.
+    const cached = (this.rejected.get(key) ?? 0) > Date.now();
     const fallback = async (noticeKey: string): Promise<T> => {
       assertActive();
       const prefix = `${i18nService.t(noticeKey)}\n\n`;
@@ -79,8 +72,6 @@ export class ChatToolCapabilityPolicy {
       return { ...result, content: prefix + result.content };
     };
     if (cached) return fallback('toolCapabilityRejectedFallback');
-    if (capability === ModelCapabilityStatus.Unsupported)
-      return fallback('toolCapabilityUnsupportedFallback');
 
     let started = false;
     try {
@@ -96,12 +87,7 @@ export class ChatToolCapabilityPolicy {
       );
     } catch (error) {
       assertActive();
-      if (
-        started ||
-        explicit === ModelCapabilityStatus.Supported ||
-        !isToolCapabilityRejection(error)
-      )
-        throw error;
+      if (started || !isToolCapabilityRejection(error)) throw error;
       if (generation === this.generation) {
         // Bounded cache with expiry lets changed server capabilities be tried again.
         if (this.rejected.size >= 256) this.rejected.delete(this.rejected.keys().next().value!);

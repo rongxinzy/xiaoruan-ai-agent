@@ -1,5 +1,4 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { ModelCapabilityStatus } from '../../shared/providers';
 import { ChatToolCapabilityPolicy, isToolCapabilityRejection } from './chatToolCapabilityPolicy';
 import { WebSearchToolEventType } from './webSearchToolEvents';
 
@@ -14,7 +13,6 @@ function request() {
     provider: 'custom_0',
     model: 'new-model',
     config: { baseUrl: 'https://example.test/v1', apiKey: 'test-key', apiFormat: 'openai' },
-    capability: ModelCapabilityStatus.Unknown,
     attempt: vi.fn(async () => ({ content: 'tool answer' })),
     plain: vi.fn(async () => ({ content: 'plain answer' })),
   };
@@ -89,17 +87,13 @@ test('provider, model, URL, credentials, format and settings refresh invalidate 
   expect(base.attempt).toHaveBeenCalledTimes(7);
 });
 
-test('explicit user support bypasses rejection cache and explicit lack of support skips tools', async () => {
+test('actual rejection evidence skips further attempts until invalidated', async () => {
   const policy = new ChatToolCapabilityPolicy();
   const input = request();
   input.attempt.mockRejectedValue(rejection());
   await policy.run(input);
-  await expect(
-    policy.run({ ...input, configuredCapability: ModelCapabilityStatus.Supported }),
-  ).rejects.toThrow('support tools');
-  expect(input.attempt).toHaveBeenCalledTimes(2);
-  await policy.run({ ...input, configuredCapability: ModelCapabilityStatus.Unsupported });
-  expect(input.attempt).toHaveBeenCalledTimes(2);
+  await policy.run(input);
+  expect(input.attempt).toHaveBeenCalledTimes(1);
   expect(input.plain).toHaveBeenCalledTimes(2);
 });
 

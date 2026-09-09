@@ -668,14 +668,6 @@ class ApiService {
       provider,
       model: selectedModel.id,
       config,
-      capability: capabilities.toolCalling,
-      configuredCapability:
-        provider === ProviderName.LlamaCpp
-          ? selectedModel.capabilities?.toolCalling
-          : configService
-              .getConfig()
-              .providers?.[provider]?.models?.find(model => model.id === selectedModel.id)
-              ?.capabilities?.toolCalling,
       signal: abortSignal,
       onProgress,
       onToolEvent,
