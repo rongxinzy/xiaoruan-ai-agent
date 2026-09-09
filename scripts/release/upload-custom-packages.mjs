@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const CUSTOM_BUCKET = 'xiaoruan-releases';
+export const CUSTOM_PUBLIC_BASE_URL = 'https://pub-d84d8bc650334c12afc7ce47bc8fcdda.r2.dev';
 const CUSTOM_REPOSITORY = 'rongxinzy/xiaoruan-ai-agent';
 const PACKAGE_EXTENSIONS = new Set(['.exe', '.dmg', '.deb', '.appimage']);
 const MAX_OBJECT_BYTES = 5 * 1024 ** 3;
@@ -103,7 +104,8 @@ export async function uploadCustomPackages({ root, expectedArtifacts, env = proc
   for (const entry of packages) {
     const key = `${identity.prefix}/${entry.relativePath}`;
     await upload(entry.file, key, entry.size, entry.sha256);
-    objects.push({ key, size: entry.size, sha256: entry.sha256 });
+    const downloadUrl = `${CUSTOM_PUBLIC_BASE_URL}/${key.split('/').map(encodeURIComponent).join('/')}`;
+    objects.push({ key, size: entry.size, sha256: entry.sha256, downloadUrl });
   }
   const manifest = {
     repository: env.GITHUB_REPOSITORY,
@@ -121,9 +123,11 @@ export async function uploadCustomPackages({ root, expectedArtifacts, env = proc
   await upload(manifestPath, manifestKey, (await fsp.stat(manifestPath)).size, await sha256(manifestPath));
   if (env.GITHUB_STEP_SUMMARY) {
     await fsp.appendFile(env.GITHUB_STEP_SUMMARY,
-      `### Xiaoruan packages stored\n\n- Bucket: \`${CUSTOM_BUCKET}\` (private)\n- Manifest: \`${manifestKey}\`\n- Packages: ${objects.length}\n- Official website and update feeds: unchanged\n`);
+      `### Xiaoruan installer downloads\n\n- Bucket: \`${CUSTOM_BUCKET}\`\n- Commit: \`${identity.sourceCommit}\`\n- Manifest: \`${manifestKey}\`\n\n`
+      + objects.map((entry, index) => `- [Download installer ${index + 1}](${entry.downloadUrl}) (${entry.size} bytes)\n  - SHA-256: \`${entry.sha256}\`\n`).join(''));
   }
   console.log(`Verified ${objects.length} packages in ${CUSTOM_BUCKET}/${identity.prefix}`);
+  for (const entry of objects) console.log(`Public download: ${entry.downloadUrl}`);
   return manifest;
 }
 

@@ -3,7 +3,7 @@ import { statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { collectPackages, uploadCustomPackages, uploadIdentity } from './upload-custom-packages.mjs';
+import { CUSTOM_PUBLIC_BASE_URL, collectPackages, uploadCustomPackages, uploadIdentity } from './upload-custom-packages.mjs';
 
 const directories: string[] = [];
 const env = {
@@ -19,6 +19,7 @@ const env = {
 };
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(directories.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true })));
 });
 
@@ -62,6 +63,9 @@ test('rejects symlink artifacts before uploading', async () => {
 
 test('uploads verified packages and a receipt without publishing update feeds', async () => {
   const options = await fixture();
+  const summaryPath = path.join(path.dirname(options.root), 'summary.md');
+  const uploadEnv = { ...env, GITHUB_STEP_SUMMARY: summaryPath };
+  const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
   const objects = new Map<string, { ContentLength: number; Metadata: { sha256: string } }>();
   const runAws = vi.fn((args: string[]) => {
     const key = args[args.indexOf('--key') + 1];
@@ -77,8 +81,13 @@ test('uploads verified packages and a receipt without publishing update feeds', 
     objects.set(key, { ContentLength: size, Metadata: { sha256: args[args.indexOf('--metadata') + 1].slice('sha256='.length) } });
     return { status: 0, stdout: '{}', stderr: '' };
   });
-  const receipt = await uploadCustomPackages({ ...options, expectedArtifacts: 1, env, runAws });
+  const receipt = await uploadCustomPackages({ ...options, expectedArtifacts: 1, env: uploadEnv, runAws });
   expect(receipt.objects).toHaveLength(1);
+  const downloadUrl = `${CUSTOM_PUBLIC_BASE_URL}/builds/${env.GITHUB_SHA}/123/1/windows-build/${encodeURIComponent('晓软AI智能体.exe')}`;
+  expect(receipt.objects[0].downloadUrl).toBe(downloadUrl);
+  expect(new URL(downloadUrl).pathname).toContain('%E6%99%93');
+  expect(await fs.readFile(summaryPath, 'utf8')).toContain(`[Download installer 1](${downloadUrl})`);
+  expect(log).toHaveBeenCalledWith(`Public download: ${downloadUrl}`);
   expect(objects.size).toBe(2);
   expect([...objects.keys()].every(key => key.startsWith('builds/') && !key.endsWith('.yml'))).toBe(true);
   const writes = runAws.mock.calls.filter(([args]) => args[1] === 'put-object').length;
