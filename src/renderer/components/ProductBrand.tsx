@@ -19,7 +19,8 @@ export function ProductBrand({ compact = false }: { compact?: boolean }) {
       />
       {compact ? (
         <div className="min-w-0" title={i18nService.t('appTitle')}>
-          <p className="text-sm font-semibold leading-4 text-foreground">
+          {/* Fixed artwork color from the logo's gold; brand marks do not follow theme accents. */}
+          <p className="text-sm font-semibold leading-4" style={{ color: '#b58b49' }}>
             {i18nService.t('brandCompactName')}
           </p>
           <p className="truncate text-xs leading-4 text-muted-foreground">
