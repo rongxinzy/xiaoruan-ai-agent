@@ -372,7 +372,7 @@
   --zy-switch-track-checked-hover: var(--zy-primary-hover);
   --zy-accent: oklch(0.97 0.001 106.424);
   --zy-accent-foreground: oklch(0.216 0.006 56.043);
-  --zy-background: oklch(1 0 0);
+  --zy-background: #fdfbf8;
   --zy-foreground: oklch(0.366 0.008 253);
   --zy-surface: oklch(1 0 0);
   --zy-surface-foreground: oklch(0.366 0.008 253);
@@ -7964,7 +7964,7 @@ to {
   --zy-switch-track-checked-hover: var(--zy-primary-hover);
   --zy-accent: oklch(0.268 0.007 34.298);
   --zy-accent-foreground: oklch(0.985 0.001 106.423);
-  --zy-background: oklch(0.147 0.004 49.25);
+  --zy-background: #191716;
   --zy-foreground: oklch(0.985 0.001 106.423);
   --zy-surface: oklch(0.216 0.006 56.043);
   --zy-surface-foreground: oklch(0.985 0.001 106.423);
