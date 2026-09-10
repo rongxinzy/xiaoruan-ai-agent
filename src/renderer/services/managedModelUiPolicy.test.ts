@@ -7,15 +7,15 @@ import {
 } from './managedModelUiPolicy';
 
 describe('managed model UI policy', () => {
-  test('replaces the editable model tab with the enterprise models page', () => {
+  test('keeps the model tab for AISphere connection settings', () => {
     expect(
       filterManagedModelSettingsTabs(
         [{ key: 'general' }, { key: 'model' }, { key: 'extension:models' }],
         true,
       ),
-    ).toEqual([{ key: 'general' }, { key: 'extension:models' }]);
+    ).toEqual([{ key: 'general' }, { key: 'model' }, { key: 'extension:models' }]);
     expect(resolveManagedModelSettingsTab('model', true, 'extension:models')).toBe(
-      'extension:models',
+      'model',
     );
   });
 

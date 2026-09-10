@@ -25,6 +25,10 @@ import {
 } from './coworkOpenAICompatProxy';
 import type { LlamaCppAgentEligibility } from './llamacppAgentBinding';
 import { readOpenAICodexAuthFile } from './openaiCodexAuth';
+import { AISphere } from '../../shared/aisphere';
+import { aisphereService } from '../aisphere/service';
+import { selectAISphereModel } from '../aisphere/modelSelection';
+import { t } from '../i18n';
 
 type LocalProviderConfig = Omit<ProviderConfig, 'apiFormat'> & { apiFormat?: ApiFormat | 'native' };
 
@@ -505,6 +509,12 @@ function resolveMatchedProviderForModelRef(
   appConfig: AppConfig,
   modelRef: string,
 ): { matched: MatchedProvider | null; error?: string } {
+  if (aisphereService.policy().providerKeys.includes(AISphere.Provider)) {
+    try {
+      const selected = selectAISphereModel(appConfig, modelRef);
+      return resolveMatchedProviderFromSelection(AISphere.Provider, selected.config, selected.model);
+    } catch (error) { return { matched: null, error: t(error instanceof Error ? error.message : 'aisphereUnavailable') }; }
+  }
   const normalizedRef = modelRef.trim();
   if (!normalizedRef) {
     return { matched: null, error: 'Model ref is empty.' };
@@ -610,6 +620,12 @@ function resolveMatchedProvider(appConfig: AppConfig): {
   matched: MatchedProvider | null;
   error?: string;
 } {
+  if (aisphereService.policy().providerKeys.includes(AISphere.Provider)) {
+    try {
+      const selected = selectAISphereModel(appConfig);
+      return resolveMatchedProviderFromSelection(AISphere.Provider, selected.config, selected.model);
+    } catch (error) { return { matched: null, error: t(error instanceof Error ? error.message : 'aisphereUnavailable') }; }
+  }
   const providers = appConfig.providers ?? {};
 
   const resolveFallbackModel = (): {
@@ -934,6 +950,9 @@ export function resolveRawApiConfigForModelRef(modelRef: string): ApiConfigResol
  * Returns a map of env-var-safe provider name → apiKey.
  */
 export function resolveAllProviderApiKeys(): Record<string, string> {
+  if (aisphereService.policy().providerKeys.includes(AISphere.Provider)) {
+    return { [AISphere.Provider.toUpperCase()]: aisphereService.token };
+  }
   const result: Record<string, string> = {};
 
   // All configured custom providers
@@ -991,6 +1010,11 @@ export type ProviderRawConfig = {
 };
 
 export function resolveAllEnabledProviderConfigs(): ProviderRawConfig[] {
+  if (aisphereService.policy().providerKeys.includes(AISphere.Provider)) {
+    const config = aisphereService.provider();
+    return config.models?.length ? [{ providerName: AISphere.Provider, baseURL: config.baseUrl,
+      apiKey: config.apiKey, apiType: 'openai', codingPlanEnabled: false, models: config.models }] : [];
+  }
   const sqliteStore = getStore();
   if (!sqliteStore) return [];
   const appConfig = sqliteStore.get<AppConfig>('app_config');

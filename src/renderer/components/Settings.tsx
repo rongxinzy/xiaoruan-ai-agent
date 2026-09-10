@@ -4,6 +4,7 @@ import { Button } from '@shared/components/ui/button';
 import { FluidTabs } from '@shared/components/ui/fluid-tabs';
 import { Input } from '@shared/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@shared/components/ui/radio-group';
+import { AISphereSettings } from './AISphereSettings';
 import {
   Select,
   SelectContent,
@@ -2060,7 +2061,7 @@ const Settings: React.FC<SettingsProps> = ({
           key: primaryProvider.apiKey,
           baseUrl: primaryProvider.baseUrl,
         },
-        model: reconcileDefaultModelConfig(currentAppConfig, normalizedProviders),
+        model: managedModelsOnly ? currentAppConfig.model : reconcileDefaultModelConfig(currentAppConfig, normalizedProviders),
       });
       if (Object.keys(appConfigPatch).length > 0) {
         await configService.updateConfig(appConfigPatch);
@@ -3176,6 +3177,7 @@ const Settings: React.FC<SettingsProps> = ({
         return <ManagedMemorySettings workingDirectory={coworkConfig.workingDirectory} />;
 
       case 'model':
+        if (managedModelsOnly) return <AISphereSettings />;
         return (
           <div className="flex h-full flex-col md:flex-row">
             {/* Provider List - Left Side */}
@@ -5184,7 +5186,7 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
 
             {/* Footer buttons */}
-            {!isEnterpriseTab(activeTab) && (
+            {!isEnterpriseTab(activeTab) && !(managedModelsOnly && activeTab === 'model') && (
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-background p-4">
                 <Button
                   type="button"

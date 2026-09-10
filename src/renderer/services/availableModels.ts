@@ -1,7 +1,7 @@
 import type { LlamaCppModelPreferences, LlamaCppRunningModel } from '../../shared/llamacpp';
+import { AISphere } from '../../shared/aisphere';
 import {
   ManagedProviderAccessMode,
-  OPEN_MANAGED_PROVIDER_ACCESS_POLICY,
   type ManagedProviderAccessPolicy,
 } from '../../shared/managedProviders';
 import {
@@ -164,7 +164,7 @@ export async function collectAvailableModels(config: AppConfig): Promise<Model[]
 export async function getManagedProviderAccessPolicy(): Promise<ManagedProviderAccessPolicy> {
   return (
     (await window.electron.managedProviders?.policy().catch(() => null)) ??
-    OPEN_MANAGED_PROVIDER_ACCESS_POLICY
+    { mode: ManagedProviderAccessMode.Exclusive, providerKeys: [AISphere.Provider] }
   );
 }
 

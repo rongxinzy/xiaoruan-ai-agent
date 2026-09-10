@@ -57,7 +57,7 @@ Public-facing product documentation and user-visible UI copy must use the 晓软
 
 ### Authentication Flow
 
-本定制版没有产品账号登录、登录 deep-link、游客令牌或内置免费模型。用户自行配置第三方模型授权或本地模型。不得重新接入上游账号、免费模型或自动更新服务。产品标识与数据隔离以 `src/main/appConstants.ts` 和 `electron-builder.json` 为准，来源与保留的资源服务见 `CUSTOMIZATION.md`。
+本定制版没有产品账号登录、登录 deep-link、游客令牌或内置免费模型。模型只能来自用户绑定的 AISphere 平台；不得开放第三方提供商、自定义模型或本地模型入口。真实模型地址及密钥仅由主进程持有，所有内置模型调用必须经过 AISphere 网关。不得重新接入上游账号、免费模型或自动更新服务。产品标识与数据隔离以 `src/main/appConstants.ts` 和 `electron-builder.json` 为准，来源与保留的资源服务见 `CUSTOMIZATION.md`。
 
 ### Process Model
 

@@ -16,6 +16,9 @@ export type LanguageType = 'zh' | 'en';
 
 const translations: Record<LanguageType, Record<string, string>> = {
   zh: {
+    aisphereMissingModel: '所选模型不在当前 AISphere 平台列表中，请刷新后重新选择。',
+    aisphereUnavailable: '无法连接 AISphere 平台，请检查平台地址和网络后重试。',
+    aisphereBusy: '请先停止正在运行的任务，再切换 AISphere地址。',
     scheduledTaskDeliveryAccountMismatch: '频道账号与所选会话不匹配',
     todoReminderTitle: '待办提醒',
     todoReminderBody: '该完成：{title}',
@@ -311,6 +314,9 @@ const translations: Record<LanguageType, Record<string, string>> = {
     'enterprise.updateBlocked': '版本更新由企业统一管理',
   },
   en: {
+    aisphereMissingModel: 'The selected model is not available on AISphere. Refresh and select a platform model.',
+    aisphereUnavailable: 'Cannot connect to AISphere. Check the platform address and network, then retry.',
+    aisphereBusy: 'Stop running tasks before switching the AISphere address.',
     todoReminderTitle: 'Todo reminder',
     todoReminderBody: 'Due now: {title}',
     scheduledTaskDeliveryAccountMismatch:

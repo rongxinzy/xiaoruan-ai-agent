@@ -168,7 +168,7 @@ const App: React.FC = () => {
     selectPendingPermissionForSession(state, currentSessionId),
   );
   const isWindows = window.electron.platform === 'win32';
-  const managedModelsOnly = managedProviderPolicy?.mode === ManagedProviderAccessMode.Exclusive;
+  const managedModelsOnly = managedProviderPolicy?.mode !== ManagedProviderAccessMode.Open;
 
   const waitWithTimeout = useCallback(
     async <T,>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
@@ -256,7 +256,10 @@ const App: React.FC = () => {
                 model.id === config.model.defaultModel &&
                 (!config.model.defaultModelProvider ||
                   model.providerKey === config.model.defaultModelProvider),
-            ) ?? allModels[0];
+            ) ?? (config.model.defaultModel ? {
+              id: config.model.defaultModel, name: config.model.defaultModel,
+              providerKey: config.model.defaultModelProvider,
+            } : allModels[0]);
           dispatch(setDefaultSelectedModel(preferredModel));
         }
         mark('model resolution done');
@@ -310,6 +313,8 @@ const App: React.FC = () => {
       }
       const allModels = await collectAvailableModels(config);
       dispatch(setAvailableModels(allModels));
+      const preferred = allModels.find(model => model.id === config.model.defaultModel && model.providerKey === config.model.defaultModelProvider);
+      if (preferred) dispatch(setDefaultSelectedModel(preferred));
     };
 
     const handleConfigUpdated = () => {
@@ -339,6 +344,11 @@ const App: React.FC = () => {
     const unsubscribeModelBindings = window.electron.llamacpp.onModelBindingsChanged(
       handleLlamaCppModelBindingsChanged,
     );
+    const unsubscribePlatform = window.electron.managedProviders.onChanged(() => {
+      const config = configService.getConfig();
+      apiService.setConfig({ apiKey: config.api.key, baseUrl: config.api.baseUrl });
+      void refreshAvailableModels().catch(() => undefined);
+    });
     return () => {
       window.removeEventListener('config-updated', handleConfigUpdated);
       window.removeEventListener(
@@ -346,6 +356,7 @@ const App: React.FC = () => {
         handleLlamaCppRunningModelsChanged,
       );
       unsubscribeModelBindings();
+      unsubscribePlatform();
     };
   }, [dispatch, isInitialized]);
 

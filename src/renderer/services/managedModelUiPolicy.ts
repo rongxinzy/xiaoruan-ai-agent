@@ -1,17 +1,16 @@
 export function filterManagedModelSettingsTabs<T extends { readonly key: string }>(
   tabs: readonly T[],
-  managedModelsOnly: boolean,
+  _managedModelsOnly: boolean,
 ): T[] {
-  return managedModelsOnly ? tabs.filter(tab => tab.key !== 'model') : [...tabs];
+  return [...tabs];
 }
 
 export function resolveManagedModelSettingsTab<T extends string>(
   activeTab: T,
-  managedModelsOnly: boolean,
-  enterpriseTab: T | undefined,
+  _managedModelsOnly: boolean,
+  _enterpriseTab: T | undefined,
 ): T {
-  if (!managedModelsOnly || activeTab !== 'model') return activeTab;
-  return enterpriseTab ?? ('general' as T);
+  return activeTab;
 }
 
 export function shouldShowLocalInferenceNavigation(
