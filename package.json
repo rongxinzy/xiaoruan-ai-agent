@@ -222,7 +222,7 @@
     "@melloware/react-logviewer": "^6.5.5",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@napi-rs/canvas": "^0.1.100",
-    "@nodesecure/js-x-ray": "^15.2.0",
+    "@nodesecure/js-x-ray": "^16.0.0",
     "@radix-ui/react-use-controllable-state": "^1.2.3",
     "@reduxjs/toolkit": "^2.2.1",
     "@replit/codemirror-indentation-markers": "^6.5.3",
