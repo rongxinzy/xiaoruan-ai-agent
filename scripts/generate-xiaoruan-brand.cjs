@@ -57,7 +57,7 @@ async function build() {
     output(
       `public/xiaoruan-logo-${theme}.svg`,
       Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="96" viewBox="0 0 800 96"><title>晓软AI智能体</title><image href="data:image/png;base64,${markData}" width="96" height="96"/><text x="116" y="63" fill="${color}" font-family="system-ui,sans-serif" font-size="54" font-weight="600">晓软AI智能体</text></svg>\n`,
+        `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="96" viewBox="0 0 800 96"><title>晓软智能体</title><image href="data:image/png;base64,${markData}" width="96" height="96"/><text x="116" y="63" fill="${color}" font-family="system-ui,sans-serif" font-size="54" font-weight="600">晓软智能体</text></svg>\n`,
       ),
     );
     const canvas = createCanvas(1600, 300);
@@ -67,7 +67,7 @@ async function build() {
     ctx.font = '116px XiaoruanBrand';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('晓软AI智能体', 280, 150);
+    ctx.fillText('晓软智能体', 280, 150);
     output(`public/xiaoruan-logo-${theme}-1600.png`, canvas.toBuffer('image/png'));
   }
 

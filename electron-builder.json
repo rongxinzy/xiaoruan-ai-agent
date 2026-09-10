@@ -1,7 +1,7 @@
 {
   "appId": "com.xiaoruan.agent",
-  "productName": "晓软AI智能体",
-  "executableName": "晓软AI智能体",
+  "productName": "晓软智能体",
+  "executableName": "晓软智能体",
   "directories": {
     "output": "release"
   },
@@ -118,9 +118,9 @@
     "entitlementsInherit": "build/entitlements.mac.plist",
     "extendInfo": {
       "CFBundleIconName": "icon",
-      "NSCalendarsUsageDescription": "晓软AI智能体需要访问您的日历来帮助您查看和管理日程安排，例如查找事件、创建会议等。",
-      "NSRemindersUsageDescription": "晓软AI智能体需要访问您的提醒事项来帮助您管理待办事项。",
-      "NSAppleEventsUsageDescription": "晓软AI智能体需要使用 Apple Events 来控制 Calendar 应用执行自动化操作。"
+      "NSCalendarsUsageDescription": "晓软智能体需要访问您的日历来帮助您查看和管理日程安排，例如查找事件、创建会议等。",
+      "NSRemindersUsageDescription": "晓软智能体需要访问您的提醒事项来帮助您管理待办事项。",
+      "NSAppleEventsUsageDescription": "晓软智能体需要使用 Apple Events 来控制 Calendar 应用执行自动化操作。"
     },
     "extraResources": [
       {

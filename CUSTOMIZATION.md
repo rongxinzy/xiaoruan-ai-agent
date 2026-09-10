@@ -23,7 +23,7 @@
 - GitHub Environment `xiaoruan-release` 仅允许 main 分支。变量 `XIAORUAN_R2_ACCOUNT_ID` 指定账户；Secrets `XIAORUAN_R2_ACCESS_KEY_ID`、`XIAORUAN_R2_SECRET_ACCESS_KEY` 必须是只允许 `xiaoruan-releases` 的 Object Read & Write 凭据。禁止复用原官网存储凭据。
 - 不启用 r2.dev 公开访问或官网域名。通过 R2 控制台或经过授权的 S3 客户端取包。缺少专用凭据时，普通打包工作流在构建前报错，不回退到其他存储。
 
-本仓库是晓软AI智能体的公开定制版本，源自知远智能体。上游版权、许可证及第三方运行时来源不因换牌而转移。
+本仓库是晓软智能体的公开定制版本，源自知远智能体。上游版权、许可证及第三方运行时来源不因换牌而转移。
 
 ## 已移除
 
@@ -41,7 +41,7 @@
 
 ## 品牌资源
 
-产品名称为「晓软AI智能体」。应用、托盘、启动页和安装器使用用户提供的晓软科技 R 形标志。原图保存在 `public/brand/xiaoruan-source.jpg`；`public/xiaoruan-mark.png` 是去除底部文字后的白底应用标志。运行 `node scripts/generate-xiaoruan-brand.cjs` 可重新生成各平台图标与字标，需通过 `XIAORUAN_BRAND_FONT` 指定中文字体（macOS 默认使用黑体）。
+产品名称为「晓软智能体」。应用、托盘、启动页和安装器使用用户提供的晓软科技 R 形标志。原图保存在 `public/brand/xiaoruan-source.jpg`；`public/xiaoruan-mark.png` 是去除底部文字后的白底应用标志。运行 `node scripts/generate-xiaoruan-brand.cjs` 可重新生成各平台图标与字标，需通过 `XIAORUAN_BRAND_FONT` 指定中文字体（macOS 默认使用黑体）。
 
 默认采用「晓软红」主题包的浅色外观，深色与跟随系统仍可选。品牌色通过 `src/renderer/theme/themes/xiaoruan.ts` 定义，在 `themes/plugins.ts` 注册，遵循统一 token 和组件外观契约；不修改其他主题或通用语义桥接色。修改后运行 `bun run theme:generate`，并通过 `theme:check` 和 `theme:audit`。启动欢迎页无需登录，展示完整产品名，就绪后淡出；减少动态效果时立即退出。
 

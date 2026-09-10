@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Expert Initializer for Xiaoruan AI Agent.
+ * Expert Initializer for 晓软Agent.
  *
  * Creates a new expert package directory from template, compatible with
- * Xiaoruan AI Agent's Cowork runtime.
+ * 晓软Agent's Cowork runtime.
  *
  * Usage:
  *   node init_expert.js <expert-name> --type agent|team [--path <output-dir>]
  *
- * Output directory defaults to the Xiaoruan AI Agent user data directory.
+ * Output directory defaults to the 晓软Agent user data directory.
  */
 
 const fs = require('fs');

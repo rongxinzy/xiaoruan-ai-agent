@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "A daily report quality expert that turns work logs into factual, decision-ready project status updates.",
   "author": {
-    "name": "Xiaoruan AI Agent"
+    "name": "晓软Agent"
   },
   "expertType": "agent",
   "agentName": "daily-report-expert",

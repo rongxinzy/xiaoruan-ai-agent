@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Expert Validator for Xiaoruan AI Agent.
+ * Expert Validator for 晓软Agent.
  *
- * Validates an expert package against the Xiaoruan AI Agent expert specification.
+ * Validates an expert package against the 晓软Agent expert specification.
  *
  * Usage:
  *   node validate_expert.js <path/to/expert-dir>

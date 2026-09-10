@@ -74,7 +74,7 @@ describe('createZhiyuanEvaluationPolicy', () => {
     const policy = createZhiyuanEvaluationPolicy(testContext.value);
     const productionTool = tool(policy.customTools, 'production_loop');
 
-    expect(policy.systemPrompt).toContain('Xiaoruan AI Agent');
+    expect(policy.systemPrompt).toContain('晓软Agent');
     expect(policy.skillPaths).toEqual(['SKILLs']);
     expect(policy.customTools?.map(candidate => candidate.name)).toEqual([
       'production_loop',

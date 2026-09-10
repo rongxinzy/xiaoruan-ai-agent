@@ -2,7 +2,7 @@
   "name": "xiaoruan-ai-agent",
   "homepage": "https://github.com/rongxinzy/xiaoruan-ai-agent",
   "desktopName": "xiaoruan-ai-agent.desktop",
-  "description": "晓软AI智能体 - AI-assisted coding and productivity tool",
+  "description": "晓软智能体 - AI-assisted coding and productivity tool",
   "private": true,
   "author": {
     "name": "rongxinzy"
