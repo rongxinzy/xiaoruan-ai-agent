@@ -28,7 +28,7 @@ async function fixture() {
   directories.push(directory);
   const root = path.join(directory, 'packages');
   await fs.mkdir(path.join(root, 'windows-build'), { recursive: true });
-  await fs.writeFile(path.join(root, 'windows-build', '晓软AI智能体.exe'), 'test installer bytes');
+  await fs.writeFile(path.join(root, 'windows-build', '晓软智能体.exe'), 'test installer bytes');
   await fs.writeFile(path.join(root, 'windows-build', 'latest.yml'), 'must not publish this feed');
   return { root, outputDirectory: path.join(directory, 'receipt') };
 }
@@ -49,15 +49,15 @@ test('keeps each workflow run and rerun in a distinct immutable prefix', () => {
 
 test('collects only installers and fails if a selected platform is missing', async () => {
   const { root } = await fixture();
-  expect((await collectPackages(root, 1)).map(entry => entry.relativePath)).toEqual(['windows-build/晓软AI智能体.exe']);
+  expect((await collectPackages(root, 1)).map(entry => entry.relativePath)).toEqual(['windows-build/晓软智能体.exe']);
   await expect(collectPackages(root, 2)).rejects.toThrow('count');
-  await fs.unlink(path.join(root, 'windows-build', '晓软AI智能体.exe'));
+  await fs.unlink(path.join(root, 'windows-build', '晓软智能体.exe'));
   await expect(collectPackages(root, 1)).rejects.toThrow('No installer');
 });
 
 test('rejects symlink artifacts before uploading', async () => {
   const { root } = await fixture();
-  await fs.symlink('晓软AI智能体.exe', path.join(root, 'windows-build', 'linked.exe'));
+  await fs.symlink('晓软智能体.exe', path.join(root, 'windows-build', 'linked.exe'));
   await expect(collectPackages(root, 1)).rejects.toThrow('symlinks');
 });
 
@@ -83,7 +83,7 @@ test('uploads verified packages and a receipt without publishing update feeds', 
   });
   const receipt = await uploadCustomPackages({ ...options, expectedArtifacts: 1, env: uploadEnv, runAws });
   expect(receipt.objects).toHaveLength(1);
-  const downloadUrl = `${CUSTOM_PUBLIC_BASE_URL}/builds/${env.GITHUB_SHA}/123/1/windows-build/${encodeURIComponent('晓软AI智能体.exe')}`;
+  const downloadUrl = `${CUSTOM_PUBLIC_BASE_URL}/builds/${env.GITHUB_SHA}/123/1/windows-build/${encodeURIComponent('晓软智能体.exe')}`;
   expect(receipt.objects[0].downloadUrl).toBe(downloadUrl);
   expect(new URL(downloadUrl).pathname).toContain('%E6%99%93');
   expect(await fs.readFile(summaryPath, 'utf8')).toContain(`[Download installer 1](${downloadUrl})`);

@@ -5072,15 +5072,9 @@ const Settings: React.FC<SettingsProps> = ({
             <span className="text-xs text-muted-foreground mt-1">v{appVersion}</span>
             <span className="text-sm text-muted-foreground mt-2">{i18nService.t('brandPurpose')}</span>
             <div className="w-full mt-8 rounded-xl border border-border overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div className="flex items-center justify-between px-4 py-3">
                 <span className="text-sm text-foreground">{i18nService.t('aboutVersion')}</span>
                 <span className="text-sm text-muted-foreground">{appVersion}</span>
-              </div>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <span className="text-sm text-foreground">GitHub</span>
-                <a href="https://github.com/rongxinzy/xiaoruan-ai-agent" target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary hover:underline transition-colors">
-                  {i18nService.t('mcpViewOnGithub')}
-                </a>
               </div>
             </div>
             <div className="mt-auto w-full pt-14 pb-2 flex flex-col items-center">

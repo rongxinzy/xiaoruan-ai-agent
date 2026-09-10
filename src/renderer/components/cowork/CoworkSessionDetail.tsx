@@ -1336,7 +1336,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
                         items.push({
                           key: `${turn.id}-asst`,
                           turnIndex: i,
-                          label: getLabel(asstContent, '晓软AI智能体'),
+                          label: getLabel(asstContent, '晓软智能体'),
                           contentLen: asstContent.length,
                           isUser: false,
                         });
@@ -1461,7 +1461,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
                 >
                   {!railTooltip.isUser && (
                     <div className="text-xs font-medium mb-0.5 text-neutral-800 dark:text-neutral-200">
-                      晓软AI智能体：
+                      晓软智能体：
                     </div>
                   )}
                   <div

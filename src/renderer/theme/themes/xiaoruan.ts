@@ -20,8 +20,17 @@ function createXiaoruan(dark: boolean): ThemeDefinition {
       appearance: dark ? 'dark' : 'light',
     },
     components,
+    background: {
+      kind: BackgroundKind.Image,
+      image: './themes/xiaoruan-background.svg',
+      color: '#b58b49',
+      opacity: dark ? 0.2 : 0.35,
+      texture: BackgroundTexture.Clouds,
+      fit: BackgroundFit.Cover,
+    },
     tokens: {
       ...base.tokens,
+      background: dark ? '#191716' : '#fdfbf8',
       primary: red,
       'primary-strong': dark ? 'oklch(0.48 0.18 25)' : red,
       'primary-hover': redHover,
@@ -39,3 +48,4 @@ function createXiaoruan(dark: boolean): ThemeDefinition {
 
 export const xiaoruanLight = createXiaoruan(false);
 export const xiaoruanDark = createXiaoruan(true);
+import { BackgroundFit, BackgroundKind, BackgroundTexture } from '../background/background';

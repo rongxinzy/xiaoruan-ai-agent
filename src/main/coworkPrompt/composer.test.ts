@@ -21,7 +21,7 @@ test('preserves the bundled identity once across composition and expert switchin
   }
   expect(countOccurrences(prompt, CoworkBundledPromptMarker.IdentityStart)).toBe(1);
   expect(prompt).not.toContain(ProductIdentityPrompt);
-  expect(prompt).toContain('晓软AI智能体');
+  expect(prompt).toContain('晓软智能体');
 
   const selectedExpert = expert('Follow expert A SOP.');
   const withExpert = composeCoworkSystemPrompt({

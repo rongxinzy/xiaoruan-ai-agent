@@ -37,9 +37,9 @@ test('does not broaden ordinary non-CJK queries', () => {
 });
 
 test('ranks exact title matches ahead of weaker content matches', () => {
-  const results = rankRecallResults('晓软AI智能体', [
-    observation({ id: 1, title: 'Other', content: '晓软AI智能体 is mentioned here.' }),
-    observation({ id: 2, title: '晓软AI智能体', content: 'Project identity.' }),
+  const results = rankRecallResults('晓软智能体', [
+    observation({ id: 1, title: 'Other', content: '晓软智能体 is mentioned here.' }),
+    observation({ id: 2, title: '晓软智能体', content: 'Project identity.' }),
   ]);
 
   expect(results.map(result => result.id)).toEqual([2, 1]);

@@ -1,12 +1,12 @@
-# Xiaoruan AI Agent
+# 晓软Agent
 
-Xiaoruan AI Agent is a desktop AI workspace for research, documents, spreadsheets, code, browser tasks, messaging channels, skills, MCP integrations, and recurring tasks.
+晓软Agent is a desktop AI workspace for research, documents, spreadsheets, code, browser tasks, messaging channels, skills, MCP integrations, and recurring tasks.
 
 This edition does not require a product account and does not provide a built-in free model or official model quota. Configure your own provider and API key in Settings, or run a local model.
 
 ## Custom edition boundaries
 
-- Product name: Xiaoruan AI Agent (晓软AI智能体).
+- Product name: 晓软Agent (晓软智能体).
 - Xiaoruan branding is used across the welcome screen, About page, installer, and default government-red theme. Dark and system modes remain available.
 - Application ID: `com.xiaoruan.agent`.
 - Data is stored under `XiaoruanAgent`, using `xiaoruan.sqlite`. Upstream application data is not read or migrated.

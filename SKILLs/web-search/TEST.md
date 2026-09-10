@@ -2,21 +2,21 @@
 
 ## Testing the Complete Integration
 
-This guide walks through testing the entire Web Search Skill integration with Xiaoruan AI Agent.
+This guide walks through testing the entire Web Search Skill integration with 晓软Agent.
 
 ## Prerequisites
 
-1. Xiaoruan AI Agent built and ready to run
+1. 晓软Agent built and ready to run
 2. Google Chrome installed
 3. Internet connection available
 
 ## Test 1: Service Auto-Start
 
-**Objective:** Verify that the Bridge Server starts automatically with Xiaoruan AI Agent.
+**Objective:** Verify that the Bridge Server starts automatically with 晓软Agent.
 
 **Steps:**
 
-1. Start Xiaoruan AI Agent in development mode:
+1. Start 晓软Agent in development mode:
 
    ```bash
    npm run electron:dev
@@ -49,7 +49,7 @@ This guide walks through testing the entire Web Search Skill integration with Xi
    }
    ```
 
-**Expected Result:** ✅ Bridge Server starts automatically within 3 seconds of Xiaoruan AI Agent launch.
+**Expected Result:** ✅ Bridge Server starts automatically within 3 seconds of 晓软Agent launch.
 
 ## Test 2: CLI Search from Terminal
 
@@ -57,7 +57,7 @@ This guide walks through testing the entire Web Search Skill integration with Xi
 
 **Steps:**
 
-1. Open a terminal while Xiaoruan AI Agent is running
+1. Open a terminal while 晓软Agent is running
 
 2. Execute a search:
 
@@ -79,7 +79,7 @@ This guide walks through testing the entire Web Search Skill integration with Xi
 
 **Steps:**
 
-1. Start Xiaoruan AI Agent
+1. Start 晓软Agent
 2. Create a new Cowork session
 3. Send the following message:
 
@@ -119,11 +119,11 @@ This guide walks through testing the entire Web Search Skill integration with Xi
 
 ## Test 5: Service Cleanup on Exit
 
-**Objective:** Verify graceful shutdown of services when Xiaoruan AI Agent quits.
+**Objective:** Verify graceful shutdown of services when 晓软Agent quits.
 
 **Steps:**
 
-1. With Xiaoruan AI Agent running and searches completed, quit the application
+1. With 晓软Agent running and searches completed, quit the application
 2. Check console output for:
 
    ```
@@ -153,7 +153,7 @@ This guide walks through testing the entire Web Search Skill integration with Xi
 
 **Steps:**
 
-1. Start Xiaoruan AI Agent
+1. Start 晓软Agent
 2. Manually stop the Bridge Server:
 
    ```bash
@@ -185,7 +185,7 @@ This guide walks through testing the entire Web Search Skill integration with Xi
 
 **Steps:**
 
-1. Start Xiaoruan AI Agent (ensure headless is false in config)
+1. Start 晓软Agent (ensure headless is false in config)
 2. Execute a search via CLI or Cowork
 3. Observe:
    - Chrome window appears
@@ -328,7 +328,7 @@ rm SKILLs/web-search/.connection
 
 All tests pass when:
 
-- ✅ Server auto-starts with Xiaoruan AI Agent
+- ✅ Server auto-starts with 晓软Agent
 - ✅ Searches complete in < 3 seconds
 - ✅ Claude uses skill automatically when appropriate
 - ✅ Connection caching improves performance
