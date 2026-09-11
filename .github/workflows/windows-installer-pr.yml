@@ -26,7 +26,7 @@ jobs:
           bun-version: '1.4.0'
       - name: Restore packaging caches
         id: packaging-cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.bun/install/cache
@@ -82,7 +82,7 @@ jobs:
           -ProjectRoot ${{ github.workspace }}
       - name: Save shared packaging caches from verified main builds
         if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.packaging-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: |
             ~/.bun/install/cache
