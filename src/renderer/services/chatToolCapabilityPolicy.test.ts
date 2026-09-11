@@ -28,6 +28,22 @@ test('unknown models are attempted without notices even if no tool was called', 
   expect(input.onProgress).not.toHaveBeenCalled();
 });
 
+test('upstream gateway and status-less rejections use the existing guarded fallback cache', async () => {
+  for (const error of [
+    rejection(404, 'Function calling is not supported in this model'),
+    rejection(400, 'auto tool choice requires --enable-auto-tool-choice'),
+    new Error('tool parser is not configured'),
+  ]) {
+    const policy = new ChatToolCapabilityPolicy();
+    const input = request();
+    input.attempt.mockRejectedValue(error);
+    await expect(policy.run(input)).resolves.toMatchObject({ content: expect.stringContaining('plain answer') });
+    await policy.run(input);
+    expect(input.attempt).toHaveBeenCalledOnce();
+    expect(input.plain).toHaveBeenCalledTimes(2);
+  }
+});
+
 test('only explicit tool support rejections are classified, not schema or transient failures', () => {
   for (const message of [
     'tools are not supported',
