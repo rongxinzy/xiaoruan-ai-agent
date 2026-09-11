@@ -323,6 +323,7 @@ contextBridge.exposeInMainWorld('electron', {
       method: string;
       headers: Record<string, string>;
       body?: string;
+      timeoutMs?: number;
     }) => ipcRenderer.invoke(ApiIpc.Fetch, options),
 
     fetchModels: (input: ProviderModelDiscoveryRequest): Promise<ProviderModelDiscoveryResult> =>

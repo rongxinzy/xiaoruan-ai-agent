@@ -53,19 +53,24 @@ export const platformFetch: PlatformFetch = async (address, options = {}) => {
           reject(new Error('Platform redirects are not allowed.'));
           return;
         }
-        const headers = new Headers();
-        for (const [key, value] of Object.entries(incoming.headers)) {
-          if (value !== undefined)
-            headers.set(key, Array.isArray(value) ? value.join(', ') : value);
-        }
-        resolve(
-          new Response(
-            status === 204 || status === 304
-              ? null
-              : (Readable.toWeb(incoming) as ReadableStream<Uint8Array>),
+        try {
+          const headers = new Headers();
+          for (const [key, value] of Object.entries(incoming.headers)) {
+            if (value !== undefined)
+              headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+          }
+          const bodyless = options.method === 'HEAD' || status === 204 || status === 205;
+          const response = new Response(
+            bodyless ? null : (Readable.toWeb(incoming) as ReadableStream<Uint8Array>),
             { status, headers },
-          ),
-        );
+          );
+          if (bodyless) incoming.resume();
+          resolve(response);
+        } catch (error) {
+          // Exceptions in this asynchronous callback are outside the Promise executor.
+          incoming.destroy();
+          reject(error);
+        }
       });
       req.on('error', reject);
       req.end(options.body);

@@ -40,6 +40,9 @@ export class AISphereService {
   private changing = false;
   private active = 0;
   private gateway = '';
+  private recoveryTimer?: ReturnType<typeof setTimeout>;
+  private recoveryDelay = 5000;
+  private disposed = false;
   private readonly listeners = new Set<() => void>();
   private gatewayToken = randomBytes(32).toString('hex');
   get token(): string {
@@ -50,6 +53,7 @@ export class AISphereService {
   constructor(private readonly fetcher: PlatformFetch = platformFetch) {}
 
   async initialize(store: Store, gateway: string): Promise<void> {
+    this.disposed = false;
     this.store = store;
     this.gateway = gateway;
     const stored = store.get<string>(AISphere.StoreKey);
@@ -86,6 +90,27 @@ export class AISphereService {
 
   private notify() {
     for (const callback of this.listeners) callback();
+  }
+
+  private stopRecovery(): void {
+    clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = undefined;
+  }
+
+  private scheduleRecovery(): void {
+    if (this.disposed || this.ready || !this.address || this.recoveryTimer) return;
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = undefined;
+      // Discovery stays serialized with manual refresh and platform replacement.
+      void this.refresh().catch(() => this.scheduleRecovery());
+    }, this.recoveryDelay);
+    this.recoveryTimer.unref?.();
+    this.recoveryDelay = Math.min(this.recoveryDelay * 2, 60000);
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.stopRecovery();
   }
 
   private async json(url: string): Promise<unknown> {
@@ -148,6 +173,8 @@ export class AISphereService {
       this.address = address;
       this.models = models;
       this.ready = true;
+      this.stopRecovery();
+      this.recoveryDelay = 5000;
       this.checkedAt = Date.now();
       // A new binding must not retain an old platform's default selection.
       const current = this.store?.get<Config>(AISphere.AppConfigKey) ?? {};
@@ -179,6 +206,8 @@ export class AISphereService {
       try {
         this.models = await this.discover(this.address);
         this.ready = true;
+        this.stopRecovery();
+        this.recoveryDelay = 5000;
         this.checkedAt = Date.now();
       } catch (error) {
         this.ready = false;
@@ -188,6 +217,7 @@ export class AISphereService {
       }
     })().finally(() => {
       this.pending = undefined;
+      this.scheduleRecovery();
     });
     return this.pending;
   }
@@ -213,8 +243,8 @@ export class AISphereService {
   }
 
   selection(model?: string, provider?: string): { model: string; config: ProviderConfig } {
+    if (!this.ready) throw new Error(AISphereError.Unavailable);
     if (
-      !this.ready ||
       !model ||
       (provider && provider !== AISphere.Provider) ||
       !this.models.some(item => item.id === model)

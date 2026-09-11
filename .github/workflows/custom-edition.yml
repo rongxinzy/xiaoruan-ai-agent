@@ -37,7 +37,7 @@ jobs:
       - name: Verify configured chat transports and installer identity
         run: bunx vitest run src/renderer/services/chatChatTransport.test.ts src/renderer/services/ipcChatTransport.test.ts src/renderer/services/api.webSearch.test.ts src/renderer/services/chatToolCapabilityPolicy.test.ts src/renderer/services/i18n.modelCapabilities.test.ts tests/nsis-installer.test.ts
       - name: Verify AISphere exclusive access and transport
-        run: bunx vitest run src/main/aisphere src/main/libs/claudeSettings.test.ts src/renderer/services/managedModelUiPolicy.test.ts src/renderer/store/slices/modelSlice.test.ts
+        run: bunx vitest run src/main/aisphere src/main/libs/claudeSettings.test.ts src/renderer/services/managedModelUiPolicy.test.ts src/renderer/store/slices/modelSlice.test.ts src/renderer/services/providerModelConnection.test.ts src/renderer/services/providerModelDiscovery.test.ts
       - name: Verify theme packages and configuration
         run: bunx vitest run src/renderer/theme src/renderer/services/theme.test.ts src/renderer/services/config.test.ts
       - name: Verify Windows packaging contracts
