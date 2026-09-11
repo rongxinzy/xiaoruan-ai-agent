@@ -6038,6 +6038,7 @@ if (!gotTheLock) {
         method: options.method,
         headers,
         body: options.body,
+        signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
       });
 
       const contentType = response.headers.get('content-type') || '';
