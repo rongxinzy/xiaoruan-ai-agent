@@ -1,5 +1,6 @@
 import { i18nService } from './i18n';
 import type { WebSearchToolEventHandler } from './webSearchToolEvents';
+import { isToolCallUnsupportedError } from './toolCallUnsupported';
 
 type Progress = (content: string, reasoning?: string) => void;
 interface Result {
@@ -19,6 +20,7 @@ interface Request<T extends Result> {
 
 /** Only explicit endpoint rejections establish lack of tool support. */
 export function isToolCapabilityRejection(error: unknown): boolean {
+  if (isToolCallUnsupportedError(error)) return true;
   if (!(error instanceof Error) || !('statusCode' in error)) return false;
   if (![400, 422, 501].includes(Number(error.statusCode))) return false;
   const message = error.message.toLowerCase();
