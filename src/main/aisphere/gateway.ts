@@ -100,6 +100,7 @@ export async function startAISphereGateway(
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     close: async () => {
+      service.dispose();
       pool.close();
       server.closeAllConnections();
       await new Promise<void>(resolve => server.close(() => resolve()));

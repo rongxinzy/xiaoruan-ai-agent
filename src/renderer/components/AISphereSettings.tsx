@@ -27,6 +27,20 @@ export function AISphereSettings() {
   const t = (key: string) => i18nService.t(key);
   useEffect(() => {
     let disposed = false;
+    const unsubscribe = window.electron.managedProviders.onChanged(() => {
+      void window.electron.managedProviders
+        .aisphereSnapshot()
+        .then(value => {
+          if (!disposed) {
+            setSnapshot(value);
+            if (value.status === AISphereStatus.Ready)
+              setError(current => (current === AISphereError.Unavailable ? '' : current));
+          }
+        })
+        .catch(() => {
+          if (!disposed) setError(AISphereError.Unavailable);
+        });
+    });
     void window.electron.managedProviders
       .aisphereSnapshot()
       .then(value => {
@@ -40,6 +54,7 @@ export function AISphereSettings() {
       });
     return () => {
       disposed = true;
+      unsubscribe();
     };
   }, []);
 

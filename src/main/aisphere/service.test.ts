@@ -15,6 +15,7 @@ const model = {
   max_input: 0,
   max_output: 0,
 };
+const services: AISphereService[] = [];
 function setup() {
   const values = new Map<string, unknown>();
   const store = {
@@ -29,17 +30,67 @@ function setup() {
       url.endsWith(AISphere.VerifyPath) ? { data: 'ok' } : { code: 0, model_list: catalog },
     ),
   );
+  const service = new AISphereService(fetcher);
+  services.push(service);
   return {
     values,
     store,
     fetcher,
-    service: new AISphereService(fetcher),
+    service,
     setModels: (models: typeof catalog) => {
       catalog = models;
     },
   };
 }
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  services.splice(0).forEach(service => service.dispose());
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+test('recovers discovery after a startup outage without a request or manual refresh', async () => {
+  vi.useFakeTimers();
+  const { service, store, values, fetcher } = setup();
+  values.set(AISphere.StoreKey, 'http://platform.test');
+  fetcher.mockRejectedValueOnce(new Error('offline'));
+  await service.initialize(store, 'http://127.0.0.1:1234');
+  expect(() => service.selection(model.name)).toThrow(AISphereError.Unavailable);
+  const changed = vi.fn();
+  service.onChanged(changed);
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(service.snapshot().status).toBe(AISphereStatus.Ready);
+  expect(service.selection(model.name).model).toBe(model.name);
+  expect(changed).toHaveBeenCalledTimes(1);
+  const calls = fetcher.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(fetcher).toHaveBeenCalledTimes(calls);
+});
+
+test('recovery backs off, shares manual discovery, preserves removed models and stops on disposal', async () => {
+  vi.useFakeTimers();
+  const { service, store, fetcher, setModels } = setup();
+  await service.initialize(store, 'http://127.0.0.1:1234');
+  await service.connect('http://platform.test');
+  fetcher
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockRejectedValueOnce(new Error('still offline'));
+  await expect(service.refresh()).rejects.toThrow(AISphereError.Unavailable);
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(service.snapshot().status).toBe(AISphereStatus.Unavailable);
+  const calls = fetcher.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(9999);
+  expect(fetcher).toHaveBeenCalledTimes(calls);
+  setModels([]);
+  await Promise.all([service.refresh(), vi.advanceTimersByTimeAsync(1)]);
+  expect(fetcher).toHaveBeenCalledTimes(calls + 2);
+  expect(() => service.selection(model.name)).toThrow(AISphereError.MissingModel);
+  fetcher.mockRejectedValueOnce(new Error('offline'));
+  await expect(service.refresh()).rejects.toThrow();
+  service.dispose();
+  const disposedCalls = fetcher.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(120000);
+  expect(fetcher).toHaveBeenCalledTimes(disposedCalls);
+});
 
 test('accepts HTTP and HTTPS origins, rejecting paths, credentials and query strings', () => {
   expect(normalizePlatformAddress(' https://127.0.0.1:123/ ')).toBe('https://127.0.0.1:123');

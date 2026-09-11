@@ -8,6 +8,33 @@ import os from 'node:os';
 import { expect, test } from 'vitest';
 import { platformFetch } from './transport';
 
+test('handles empty responses and rejects response-conversion failures without escaping the request', async () => {
+  const server = httpServer((request, response) => {
+    response.writeHead(Number(request.url?.slice(1)));
+    response.end();
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing test server address');
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    for (const status of [204, 205]) {
+      const response = await platformFetch(`${base}/${status}`);
+      expect(response.status).toBe(status);
+      expect(response.body).toBeNull();
+      expect(await response.text()).toBe('');
+    }
+    // Node permits this status, but the Web Response constructor rejects it.
+    await expect(platformFetch(`${base}/700`)).rejects.toThrow();
+    expect((await platformFetch(`${base}/200`, { method: 'HEAD' })).body).toBeNull();
+    expect((await platformFetch(`${base}/200`)).status).toBe(200);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 test('supports HTTP and never follows redirects carrying credentials', async () => {
   let leaked = false;
   const server = httpServer((request, response) => {
