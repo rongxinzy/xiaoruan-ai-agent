@@ -28,6 +28,7 @@ import type {
 import {
   CodingAgentDriverKind,
   CodingAgentProfileStatus,
+  CodingElicitationStatus,
   CodingEventKind,
   CodingLaneStatus,
   CodingPermissionOutcome,
@@ -269,16 +270,16 @@ export const CodingWorkbenchView = ({
     return () => resizeObserver.disconnect();
   }, [activeLaneId, updateArtifactPanelMaxWidth]);
   const activeDriverKind = activeProfile?.driverKind ?? null;
-  const activeConfigOptionCount = activeLane?.configOptions.length ?? 0;
   const [draftConfigOptions, setDraftConfigOptions] = useState<CodingAgentConfigOption[]>([]);
   const [draftConfigOverrides, setDraftConfigOverrides] = useState<Record<string, string>>({});
   useEffect(() => {
     const needsPrepare =
       activeDriverKind === CodingAgentDriverKind.Acp
         ? !activeRemoteSessionId
-        : // Built-in lanes created before config options existed need one
-          // prepare pass to populate them.
-          activeDriverKind === CodingAgentDriverKind.Builtin && activeConfigOptionCount === 0;
+        : // Built-in lanes project their config options and slash commands from
+          // driver code, so a persisted row can be stale or empty; every open
+          // re-projects it (in-memory and idempotent for the built-in agent).
+          activeDriverKind === CodingAgentDriverKind.Builtin;
     if (!activeLaneId || !needsPrepare) {
       return;
     }
@@ -301,7 +302,6 @@ export const CodingWorkbenchView = ({
     activeDriverKind,
     activeLaneId,
     activeRemoteSessionId,
-    activeConfigOptionCount,
     setSnapshot,
     workspaceRoot,
   ]);
@@ -437,6 +437,17 @@ export const CodingWorkbenchView = ({
   }, [activeEvents, activeLane, snapshot]);
   const recoveryLane =
     activeLane?.pendingRecoveryPrompt && activeLane.pendingRecoveryContext ? activeLane : null;
+  const activeElicitation = useMemo(
+    () =>
+      activeLane?.status === CodingLaneStatus.WaitingElicitation
+        ? (snapshot?.elicitations.find(
+            elicitation =>
+              elicitation.laneId === activeLane.id &&
+              elicitation.status === CodingElicitationStatus.Pending,
+          ) ?? null)
+        : null,
+    [activeLane?.id, activeLane?.status, snapshot?.elicitations],
+  );
 
   // The activeLane object is re-created on every streamed snapshot update, so
   // an effect keyed on it would re-assign viewport.scrollTop on each streamed
@@ -607,6 +618,46 @@ export const CodingWorkbenchView = ({
     });
     if (result.success && result.snapshot) setSnapshot(result.snapshot);
     else showAppError(result.error, 'codingAgentActionFailed');
+  };
+  const respondElicitation = async (answer: string): Promise<boolean> => {
+    if (!activeElicitation) return false;
+    try {
+      const result = await window.electron.codingAgent.respondElicitation({
+        workspaceRoot,
+        response: { requestId: activeElicitation.id, answer },
+      });
+      if (result.success && result.snapshot) {
+        setSnapshot(result.snapshot);
+        return true;
+      }
+      showAppError(result.error, 'codingAgentActionFailed');
+    } catch (error) {
+      showAppError(
+        error instanceof Error ? error.message : undefined,
+        'codingAgentActionFailed',
+      );
+    }
+    return false;
+  };
+  const cancelElicitation = async (): Promise<boolean> => {
+    if (!activeElicitation) return false;
+    try {
+      const result = await window.electron.codingAgent.cancelElicitation({
+        workspaceRoot,
+        requestId: activeElicitation.id,
+      });
+      if (result.success && result.snapshot) {
+        setSnapshot(result.snapshot);
+        return true;
+      }
+      showAppError(result.error, 'codingAgentActionFailed');
+    } catch (error) {
+      showAppError(
+        error instanceof Error ? error.message : undefined,
+        'codingAgentActionFailed',
+      );
+    }
+    return false;
   };
   const sendPrompt = async (delivery?: 'followUp' | 'steer') => {
     if (!prompt.trim()) return;
@@ -998,6 +1049,9 @@ export const CodingWorkbenchView = ({
             scrollAreaRef={eventStreamRef}
             artifactSessionKey={artifactSessionKey}
             artifactBaseDir={activeLane?.executionRoot ?? null}
+            elicitation={activeElicitation}
+            onRespondElicitation={respondElicitation}
+            onCancelElicitation={cancelElicitation}
             onScrollPositionChange={scrollPosition => {
               if (activeLane) saveScrollPosition(activeLane.id, scrollPosition);
             }}
@@ -1028,7 +1082,9 @@ export const CodingWorkbenchView = ({
                 ? !draftSession.profileId ||
                   !draftSession.sourceRoot ||
                   activeProfile?.status !== CodingAgentProfileStatus.Ready
-                : !activeLane || activeLane.status === CodingLaneStatus.WaitingApproval
+                : !activeLane ||
+                  activeLane.status === CodingLaneStatus.WaitingApproval ||
+                  activeLane.status === CodingLaneStatus.WaitingElicitation
             }
             isRunning={activeLane?.status === CodingLaneStatus.Running}
             isSubmitting={isSubmitting}

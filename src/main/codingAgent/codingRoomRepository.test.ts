@@ -3,6 +3,7 @@ import { afterEach, expect, test } from 'vitest';
 
 import {
   CodingAgentProfileId,
+  CodingElicitationStatus,
   CodingEventKind,
   CodingStreamUpdateMode,
   CodingToolCallStatus,
@@ -164,3 +165,52 @@ test('coalesces streamed tool call snapshots with the same tool call ID', () => 
     status: CodingToolCallStatus.Completed,
   });
 });
+
+
+
+
+
+
+
+test('persists one pending elicitation per lane and rejects duplicate responses', () => {
+  db = new Database(':memory:');
+  initializeCodingAgentSchema(db);
+  const repository = new CodingRoomRepository(db);
+  const room = repository.getOrCreateRoom('/workspace/project');
+  const mission = repository.createMission(room.id, 'Clarify implementation');
+  const lane = repository.createLane(mission.id, CodingAgentProfileId.Builtin, '/workspace/project');
+
+  const elicitation = repository.createElicitation(lane.id, 'Which API should be used?');
+  expect(() => repository.createElicitation(lane.id, 'Another question')).toThrow('already pending');
+  expect(repository.answerElicitation(elicitation.id, 'Use v2.')).toMatchObject({
+    status: CodingElicitationStatus.Answered,
+    answer: 'Use v2.',
+  });
+  expect(() => repository.answerElicitation(elicitation.id, 'Again')).toThrow('no longer awaiting');
+  expect(repository.listElicitations([lane.id])).toHaveLength(1);
+});
+
+test('cancels the questions a previous application run left pending', () => {
+  db = new Database(':memory:');
+  initializeCodingAgentSchema(db);
+  const repository = new CodingRoomRepository(db);
+  const room = repository.getOrCreateRoom('/workspace/project');
+  const mission = repository.createMission(room.id, 'Resume after restart');
+  const lane = repository.createLane(mission.id, CodingAgentProfileId.Builtin, '/workspace/project');
+  const elicitation = repository.createElicitation(lane.id, 'Which endpoint should change?');
+
+  const cancelled = repository.cancelPendingElicitations('The application restarted.');
+
+  expect(cancelled).toEqual([
+    expect.objectContaining({
+      id: elicitation.id,
+      status: CodingElicitationStatus.Cancelled,
+      cancelReason: 'The application restarted.',
+    }),
+  ]);
+  expect(repository.listElicitations([lane.id])).toEqual([
+    expect.objectContaining({ id: elicitation.id, status: CodingElicitationStatus.Cancelled }),
+  ]);
+  expect(repository.cancelPendingElicitations('The application restarted.')).toEqual([]);
+});
+

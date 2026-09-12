@@ -1047,6 +1047,14 @@ interface IElectronAPI {
       includeRecoveryContext: boolean;
     }) => Promise<CodingAgentActionResult>;
     cancel: (input: { workspaceRoot: string; laneId: string }) => Promise<CodingAgentActionResult>;
+    respondElicitation: (input: {
+      workspaceRoot: string;
+      response: import('../../shared/codingAgent').CodingElicitationResponse;
+    }) => Promise<CodingAgentActionResult>;
+    cancelElicitation: (input: {
+      workspaceRoot: string;
+      requestId: string;
+    }) => Promise<CodingAgentActionResult>;
     previewHandoff: (input: {
       workspaceRoot: string;
       sourceLaneId: string;

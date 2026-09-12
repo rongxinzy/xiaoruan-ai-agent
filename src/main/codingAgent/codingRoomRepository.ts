@@ -16,6 +16,8 @@ import {
   type CodingAgentConfigOption,
   type CodingAssignment,
   type CodingEvent,
+  type CodingElicitation,
+  CodingElicitationStatus,
   type CodingMission,
   type CodingRoom,
   type CodingWorkspaceSource,
@@ -81,6 +83,15 @@ const rowWorkspaceSource = (row: Record<string, unknown>): CodingWorkspaceSource
   workspaceId: String(row.room_id),
   path: String(row.path),
   isPrimary: Boolean(row.is_primary),
+});
+const rowElicitation = (row: Record<string, unknown>): CodingElicitation => ({
+  id: String(row.id),
+  laneId: String(row.lane_id),
+  question: String(row.question),
+  status: row.status as CodingElicitationStatus,
+  createdAt: Number(row.created_at),
+  answer: (row.answer as string | null) ?? null,
+  cancelReason: (row.cancel_reason as string | null) ?? null,
 });
 
 export class CodingRoomRepository {
@@ -218,6 +229,9 @@ export class CodingRoomRepository {
           .prepare(`DELETE FROM coding_events WHERE lane_id IN (${laneMarks})`)
           .run(...laneIds);
         this.db
+          .prepare(`DELETE FROM coding_elicitations WHERE lane_id IN (${laneMarks})`)
+          .run(...laneIds);
+        this.db
           .prepare(`DELETE FROM coding_assignments WHERE lane_id IN (${laneMarks})`)
           .run(...laneIds);
       }
@@ -293,6 +307,99 @@ export class CodingRoomRepository {
       createdAt: Number(row.created_at),
     }));
   }
+  listElicitations(laneIds: string[]): CodingElicitation[] {
+    if (!laneIds.length) return [];
+    const marks = laneIds.map(() => '?').join(',');
+    return (
+      this.db
+        .prepare(`SELECT * FROM coding_elicitations WHERE lane_id IN (${marks}) ORDER BY created_at`)
+        .all(...laneIds) as Record<string, unknown>[]
+    ).map(rowElicitation);
+  }
+  createElicitation(
+    laneId: string,
+    question: string,
+    id: string = randomUUID(),
+  ): CodingElicitation {
+    const existing = this.db
+      .prepare('SELECT id FROM coding_elicitations WHERE lane_id = ? AND status = ?')
+      .get(laneId, CodingElicitationStatus.Pending) as Record<string, unknown> | undefined;
+    if (existing) throw new Error('A coding elicitation is already pending for this lane.');
+    const elicitation: CodingElicitation = {
+      id,
+      laneId,
+      question,
+      status: CodingElicitationStatus.Pending,
+      createdAt: Date.now(),
+      answer: null,
+      cancelReason: null,
+    };
+    this.db
+      .prepare(
+        'INSERT INTO coding_elicitations (id, lane_id, question, status, created_at, answer, cancel_reason) VALUES (?, ?, ?, ?, ?, NULL, NULL)',
+      )
+      .run(elicitation.id, laneId, question, elicitation.status, elicitation.createdAt);
+    return elicitation;
+  }
+  answerElicitation(id: string, answer: string): CodingElicitation {
+    const result = this.db
+      .prepare(
+        'UPDATE coding_elicitations SET status = ?, answer = ?, cancel_reason = NULL WHERE id = ? AND status = ?',
+      )
+      .run(CodingElicitationStatus.Answered, answer, id, CodingElicitationStatus.Pending);
+    if (result.changes !== 1) {
+      throw new Error('The coding elicitation is no longer awaiting a response.');
+    }
+    const row = this.db
+      .prepare('SELECT * FROM coding_elicitations WHERE id = ?')
+      .get(id) as Record<string, unknown>;
+    return rowElicitation(row);
+  }
+  cancelElicitation(id: string, reason: string): CodingElicitation {
+    const result = this.db
+      .prepare(
+        'UPDATE coding_elicitations SET status = ?, cancel_reason = ? WHERE id = ? AND status = ?',
+      )
+      .run(CodingElicitationStatus.Cancelled, reason, id, CodingElicitationStatus.Pending);
+    if (result.changes !== 1) {
+      throw new Error('The coding elicitation is no longer awaiting a response.');
+    }
+    const row = this.db
+      .prepare('SELECT * FROM coding_elicitations WHERE id = ?')
+      .get(id) as Record<string, unknown>;
+    return rowElicitation(row);
+  }
+  /**
+   * Cancels every question a previous application run left pending. An
+   * elicitation only lives in the process that asked it, so a row that is
+   * still pending at startup can never be answered by a live session.
+   */
+  cancelPendingElicitations(reason: string): CodingElicitation[] {
+    const pending = (
+      this.db
+        .prepare('SELECT * FROM coding_elicitations WHERE status = ? ORDER BY created_at')
+        .all(CodingElicitationStatus.Pending) as Record<string, unknown>[]
+    ).map(rowElicitation);
+    if (!pending.length) return [];
+    const update = this.db.prepare(
+      'UPDATE coding_elicitations SET status = ?, cancel_reason = ? WHERE id = ? AND status = ?',
+    );
+    this.db.transaction(() => {
+      for (const elicitation of pending) {
+        update.run(
+          CodingElicitationStatus.Cancelled,
+          reason,
+          elicitation.id,
+          CodingElicitationStatus.Pending,
+        );
+      }
+    })();
+    return pending.map(elicitation => ({
+      ...elicitation,
+      status: CodingElicitationStatus.Cancelled,
+      cancelReason: reason,
+    }));
+  }
   createMission(roomId: string, title: string, gitBaseline: string | null = null): CodingMission {
     const now = Date.now();
     const mission = {
@@ -326,6 +433,9 @@ export class CodingRoomRepository {
         const marks = laneIds.map(() => '?').join(',');
         this.db.prepare(`DELETE FROM coding_events WHERE lane_id IN (${marks})`).run(...laneIds);
         this.db
+          .prepare(`DELETE FROM coding_elicitations WHERE lane_id IN (${marks})`)
+          .run(...laneIds);
+        this.db
           .prepare(`DELETE FROM coding_assignments WHERE lane_id IN (${marks})`)
           .run(...laneIds);
       }
@@ -343,6 +453,7 @@ export class CodingRoomRepository {
   deleteLane(roomId: string, laneId: string): void {
     const remove = this.db.transaction(() => {
       this.db.prepare('DELETE FROM coding_events WHERE lane_id = ?').run(laneId);
+      this.db.prepare('DELETE FROM coding_elicitations WHERE lane_id = ?').run(laneId);
       this.db.prepare('DELETE FROM coding_assignments WHERE lane_id = ?').run(laneId);
       this.db
         .prepare('DELETE FROM coding_handoffs WHERE source_lane_id = ? OR target_lane_id = ?')
@@ -629,11 +740,12 @@ export class CodingRoomRepository {
   recoverInterruptedLanes(): CodingAgentLane[] {
     const interrupted = (
       this.db
-        .prepare('SELECT * FROM coding_agent_lanes WHERE status IN (?, ?)')
-        .all(CodingLaneStatus.Running, CodingLaneStatus.WaitingApproval) as Record<
-        string,
-        unknown
-      >[]
+        .prepare('SELECT * FROM coding_agent_lanes WHERE status IN (?, ?, ?)')
+        .all(
+          CodingLaneStatus.Running,
+          CodingLaneStatus.WaitingApproval,
+          CodingLaneStatus.WaitingElicitation,
+        ) as Record<string, unknown>[]
     ).map(rowLane);
     if (!interrupted.length) return [];
     const laneIds = interrupted.map(lane => lane.id);
@@ -649,7 +761,7 @@ export class CodingRoomRepository {
         .run(CodingLaneStatus.Idle, now, ...laneIds);
       this.db
         .prepare(
-          `UPDATE coding_assignments SET status = ?, updated_at = ? WHERE lane_id IN (${laneMarks}) AND status IN (?, ?)`,
+          `UPDATE coding_assignments SET status = ?, updated_at = ? WHERE lane_id IN (${laneMarks}) AND status IN (?, ?, ?)`,
         )
         .run(
           CodingAssignmentStatus.Planned,
@@ -657,10 +769,11 @@ export class CodingRoomRepository {
           ...laneIds,
           CodingAssignmentStatus.Running,
           CodingAssignmentStatus.WaitingApproval,
+          CodingAssignmentStatus.WaitingElicitation,
         );
       this.db
         .prepare(
-          `UPDATE coding_missions SET status = ?, updated_at = ? WHERE id IN (${missionMarks}) AND status IN (?, ?)`,
+          `UPDATE coding_missions SET status = ?, updated_at = ? WHERE id IN (${missionMarks}) AND status IN (?, ?, ?)`,
         )
         .run(
           CodingMissionStatus.NeedsReview,
@@ -668,6 +781,7 @@ export class CodingRoomRepository {
           ...missionIds,
           CodingMissionStatus.Running,
           CodingMissionStatus.WaitingApproval,
+          CodingMissionStatus.WaitingElicitation,
         );
       this.db
         .prepare('UPDATE coding_workspace_leases SET lane_id = NULL, acquired_at = NULL')

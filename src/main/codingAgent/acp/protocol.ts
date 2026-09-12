@@ -11,6 +11,48 @@ import { CodingErrorDetailMessage } from '../../../shared/codingAgent';
 export const ACP_PROTOCOL_VERSION = PROTOCOL_VERSION;
 export const ACP_AUTH_REQUIRED_CODE = RequestError.authRequired().code;
 
+/**
+ * Lowest protocol version this client can speak. `InitializeResponse` carries
+ * the version the client asked for when the agent supports it and the agent's
+ * own latest version otherwise, so only a lower version is incompatible.
+ */
+export const ACP_MINIMUM_PROTOCOL_VERSION = PROTOCOL_VERSION;
+
+/** Stop reasons an agent may return from `session/prompt`. */
+export const AcpStopReason = {
+  EndTurn: 'end_turn',
+  MaxTokens: 'max_tokens',
+  MaxTurnRequests: 'max_turn_requests',
+  Refusal: 'refusal',
+  Cancelled: 'cancelled',
+} as const;
+export type AcpStopReason = (typeof AcpStopReason)[keyof typeof AcpStopReason];
+
+/** JSON-RPC error codes reserved by ACP for client-side request failures. */
+export const AcpErrorCode = {
+  MethodNotFound: -32601,
+  InvalidParams: -32602,
+  InternalError: -32603,
+  RequestCancelled: -32800,
+  AuthRequired: -32000,
+  ResourceNotFound: -32002,
+} as const;
+export type AcpErrorCode = (typeof AcpErrorCode)[keyof typeof AcpErrorCode];
+
+/**
+ * Thrown by a request handler to choose the JSON-RPC error code sent back to
+ * the agent. Anything else is reported as an internal error.
+ */
+export class AcpRequestError extends Error {
+  constructor(
+    readonly code: AcpErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'AcpRequestError';
+  }
+}
+
 /** Capabilities implemented by the long-lived ACP driver. */
 export const ACP_CLIENT_CAPABILITIES = {
   fs: { readTextFile: true, writeTextFile: true },

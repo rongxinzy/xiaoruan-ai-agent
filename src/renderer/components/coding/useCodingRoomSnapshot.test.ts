@@ -28,6 +28,7 @@ function snapshot(root: string): CodingRoomSnapshot {
     missions: [],
     assignments: [],
     events: [],
+    elicitations: [],
     lanes: [
       {
         id: `${root}-lane`,

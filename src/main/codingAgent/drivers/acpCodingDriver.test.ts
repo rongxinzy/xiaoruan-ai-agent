@@ -11,6 +11,111 @@ import {
 } from '../../../shared/codingAgent';
 import { AcpCodingDriver } from './acpCodingDriver';
 import { AcpSessionUpdateKind } from '../acp/protocol';
+import { t } from '../../i18n';
+
+const promptScript = (promptBody: string): string =>
+  [
+    "let buffer='';",
+    "process.stdin.on('data', chunk => { buffer += chunk; while (buffer.includes('\\n')) { const index = buffer.indexOf('\\n'); const request = JSON.parse(buffer.slice(0, index)); buffer = buffer.slice(index + 1);",
+    "if (request.method === 'initialize') process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { protocolVersion: 1, agentCapabilities: {} } }) + '\\n');",
+    "if (request.method === 'session/new') process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { sessionId: 'remote-session' } }) + '\\n');",
+    `if (request.method === 'session/prompt') { ${promptBody} }`,
+    '} });',
+  ].join('');
+
+
+const answerPrompt =
+  "process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { stopReason: 'end_turn' } }) + '\\n');";
+
+const answerWithStopReason = (stopReason: string): string =>
+  `process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { stopReason: '${stopReason}' } }) + '\\n');`;
+
+const TEST_TIMEOUTS = { inactivityMs: 2_000, absoluteMs: 5_000 };
+
+test('surfaces an agent refusal instead of a clean turn end', async () => {
+  const { failure } = await runTurn(promptScript(answerWithStopReason('refusal')), TEST_TIMEOUTS);
+  expect(failure).toBe(t('codingAgentStopRefusal'));
+});
+
+test('surfaces an output limit instead of a clean turn end', async () => {
+  const { failure } = await runTurn(promptScript(answerWithStopReason('max_tokens')), TEST_TIMEOUTS);
+  expect(failure).toBe(t('codingAgentStopMaxTokens'));
+});
+
+test('treats an end turn and a cancellation as a completed prompt', async () => {
+  await expect(
+    runTurn(promptScript(answerWithStopReason('end_turn')), TEST_TIMEOUTS),
+  ).resolves.toMatchObject({ failure: '' });
+  await expect(
+    runTurn(promptScript(answerWithStopReason('cancelled')), TEST_TIMEOUTS),
+  ).resolves.toMatchObject({ failure: '' });
+});
+
+test('accepts an agent that negotiates a newer protocol version', async () => {
+  const { failure } = await runTurn(
+    promptScript(answerPrompt).replace('protocolVersion: 1', 'protocolVersion: 2'),
+    TEST_TIMEOUTS,
+  );
+  expect(failure).toBe('');
+});
+
+test('rejects an agent that negotiates an older protocol version', async () => {
+  const driver = new AcpCodingDriver(
+    {
+      executable: execPath,
+      args: ['-e', promptScript(answerPrompt).replace('protocolVersion: 1', 'protocolVersion: 0')],
+      environment: process.env as Record<string, string>,
+    },
+    TEST_TIMEOUTS,
+  );
+  try {
+    await expect(driver.createSession({ workspaceRoot: process.cwd() })).rejects.toThrow(
+      /protocol version 0/,
+    );
+  } finally {
+    await driver.dispose();
+  }
+});
+
+const runTurn = async (
+  script: string,
+  timeouts: { inactivityMs: number; absoluteMs: number },
+): Promise<{ events: number; failure: string }> => {
+  const driver = new AcpCodingDriver(
+    {
+      executable: execPath,
+      args: ['-e', script],
+      environment: process.env as Record<string, string>,
+    },
+    timeouts,
+  );
+  try {
+    const session = await driver.createSession({ workspaceRoot: process.cwd() });
+    return await runPrompt(driver, session.id);
+  } finally {
+    await driver.dispose();
+  }
+};
+
+const runPrompt = async (
+  driver: AcpCodingDriver,
+  sessionId: string,
+): Promise<{ events: number; failure: string }> => {
+  let events = 0;
+  let failure = '';
+  try {
+    for await (const event of driver.prompt({
+      sessionId,
+      workspaceRoot: process.cwd(),
+      prompt: 'Run the build.',
+    })) {
+      if (event) events += 1;
+    }
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+  }
+  return { events, failure };
+};
 
 test('normalizes ACP session updates into coding events', async () => {
   const script = [
