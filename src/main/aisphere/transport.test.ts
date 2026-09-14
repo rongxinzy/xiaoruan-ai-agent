@@ -61,7 +61,54 @@ test('supports HTTP and never follows redirects carrying credentials', async () 
   }
 });
 
+test('follows same-host redirects without credentials and preserves POST bodies', async () => {
+  let seenMethod = '';
+  let seenBody = '';
+  let hits = 0;
+  const server = httpServer((request, response) => {
+    hits += 1;
+    if (request.url === '/v1/chat/completions') {
+      response.writeHead(301, { Location: '/v1/chat/completions-final' }).end();
+      return;
+    }
+    seenMethod = request.method ?? '';
+    const chunks: Buffer[] = [];
+    request.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    request.on('end', () => {
+      seenBody = Buffer.concat(chunks).toString('utf8');
+      response.end('ok');
+    });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing test server address');
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    const response = await platformFetch(`${base}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"model":"demo"}',
+    });
+    expect(await response.text()).toBe('ok');
+    expect(hits).toBe(2);
+    expect(seenMethod).toBe('POST');
+    expect(seenBody).toBe('{"model":"demo"}');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 test('continues for a self-signed HTTPS platform without disabling global certificate validation', async () => {
+  let opensslAvailable = true;
+  try {
+    execFileSync('openssl', ['version'], { stdio: 'ignore' });
+  } catch {
+    opensslAvailable = false;
+  }
+  if (!opensslAvailable) return;
+
   const directory = await mkdtemp(path.join(os.tmpdir(), 'aisphere-tls-'));
   const keyFile = path.join(directory, 'key.pem');
   const certFile = path.join(directory, 'cert.pem');

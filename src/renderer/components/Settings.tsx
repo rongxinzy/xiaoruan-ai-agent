@@ -849,9 +849,11 @@ const Settings: React.FC<SettingsProps> = ({
 
   // About tab
   const [appVersion, setAppVersion] = useState('');
+  const [isDevBuild, setIsDevBuild] = useState(false);
   const [isExportingLogs, setIsExportingLogs] = useState(false);
   useEffect(() => {
     window.electron.appInfo.getVersion().then(setAppVersion);
+    window.electron.appInfo.isDev().then(setIsDevBuild).catch(() => setIsDevBuild(false));
   }, []);
 
   useEffect(() => {
@@ -5081,7 +5083,25 @@ const Settings: React.FC<SettingsProps> = ({
                 <span className="text-sm text-muted-foreground">{appVersion}</span>
               </div>
             </div>
-            <div className="mt-auto w-full pt-14 pb-2 flex flex-col items-center">
+            <div className="mt-auto w-full pt-14 pb-2 flex flex-col items-center gap-2">
+              {isDevBuild && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={e => {
+                      e.stopPropagation();
+                      void window.electron.window.openDevTools();
+                    }}
+                  >
+                    {i18nService.t('aboutOpenDevTools')}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {i18nService.t('aboutDevToolsHint')}
+                  </span>
+                </>
+              )}
               <Button type="button" variant="ghost" size="sm" onClick={e => { e.stopPropagation(); void handleExportLogs(); }} disabled={isExportingLogs}>
                 {isExportingLogs ? i18nService.t('aboutExportingLogs') : i18nService.t('aboutExportLogs')}
               </Button>

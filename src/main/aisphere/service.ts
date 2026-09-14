@@ -137,6 +137,18 @@ export class AISphereService {
     }
   }
 
+  /** Platforms often advertise http model URLs that nginx immediately upgrades to https. */
+  private alignModelUrls(address: string, models: PlatformModel[]): PlatformModel[] {
+    const platform = new URL(address);
+    if (platform.protocol !== 'https:') return models;
+    return models.map(model => {
+      const url = new URL(model.url);
+      if (url.protocol !== 'http:' || url.hostname !== platform.hostname) return model;
+      url.protocol = 'https:';
+      return { ...model, url: url.href };
+    });
+  }
+
   private async discover(address: string): Promise<PlatformModel[]> {
     try {
       const identity = await this.json(address + AISphere.VerifyPath);
@@ -148,7 +160,10 @@ export class AISphereService {
       ) {
         throw new Error(AISphereError.InvalidPlatform);
       }
-      return parsePlatformModels(await this.json(address + AISphere.ModelsPath));
+      return this.alignModelUrls(
+        address,
+        parsePlatformModels(await this.json(address + AISphere.ModelsPath)),
+      );
     } catch (error) {
       if (
         error instanceof Error &&

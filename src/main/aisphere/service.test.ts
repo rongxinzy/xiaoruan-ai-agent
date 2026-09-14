@@ -176,6 +176,30 @@ test('active requests and tasks block rebinding, successful switches invalidate 
   expect(service.token).not.toBe(oldToken);
 });
 
+test('upgrades same-host http model URLs when the platform itself is https', async () => {
+  const { service, store, setModels } = setup();
+  setModels([
+    {
+      ...model,
+      url: 'http://platform.test/v1-openai/chat/completions',
+    },
+    {
+      ...model,
+      name: 'other-host',
+      url: 'http://inference.test/v1/chat/completions',
+      api_key: 'secret-b',
+    },
+  ]);
+  await service.initialize(store, 'http://127.0.0.1:1234');
+  await service.connect('https://platform.test');
+  const sameHost = await service.acquire(model.name);
+  expect(sameHost.model.url).toBe('https://platform.test/v1-openai/chat/completions');
+  sameHost.release();
+  const otherHost = await service.acquire('other-host');
+  expect(otherHost.model.url).toBe('http://inference.test/v1/chat/completions');
+  otherHost.release();
+});
+
 test('IPC rejects direct external URLs and request methods outside the gateway contract', async () => {
   const { service, store } = setup();
   await service.initialize(store, 'http://127.0.0.1:1234');

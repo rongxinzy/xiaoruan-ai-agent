@@ -1,5 +1,5 @@
 import { request as httpRequest } from 'node:http';
-import { request as httpsRequest, type RequestOptions } from 'node:https';
+import { request as httpsRequest, type IncomingMessage, type RequestOptions } from 'node:https';
 import { Readable } from 'node:stream';
 
 export interface PlatformRequest {
@@ -31,61 +31,138 @@ const CERTIFICATE_ERRORS = new Set([
   'CERT_SIGNATURE_FAILURE',
 ]);
 
+const MAX_REDIRECTS = 5;
+
+function isCertificateError(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    CERTIFICATE_ERRORS.has(String(error.code))
+  );
+}
+
+function isHttpToHttpsUpgrade(from: URL, to: URL): boolean {
+  return from.protocol === 'http:' && to.protocol === 'https:' && from.hostname === to.hostname;
+}
+
+function requestOnce(
+  url: URL,
+  options: PlatformRequest,
+  headers: Record<string, string> | undefined,
+  verify: boolean,
+): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
+    const requestOptions: RequestOptions = {
+      method: options.method ?? 'GET',
+      headers,
+      signal: options.signal,
+      rejectUnauthorized: verify,
+    };
+    const req = request(url, requestOptions, resolve);
+    req.on('error', reject);
+    req.end(options.body);
+  });
+}
+
+function toWebResponse(incoming: IncomingMessage, method: string | undefined): Response {
+  const status = incoming.statusCode ?? 502;
+  const responseHeaders = new Headers();
+  for (const [key, value] of Object.entries(incoming.headers)) {
+    if (value !== undefined) {
+      responseHeaders.set(key, Array.isArray(value) ? value.join(', ') : value);
+    }
+  }
+  const bodyless = method === 'HEAD' || status === 204 || status === 205;
+  const response = new Response(
+    bodyless ? null : (Readable.toWeb(incoming) as ReadableStream<Uint8Array>),
+    { status, headers: responseHeaders },
+  );
+  if (bodyless) incoming.resume();
+  return response;
+}
+
 /** Scoped to discovered AISphere traffic, never changes Electron/global TLS settings. */
 export const platformFetch: PlatformFetch = async (address, options = {}) => {
-  const url = new URL(address);
-  if (!['http:', 'https:'].includes(url.protocol))
+  const initial = new URL(address);
+  if (!['http:', 'https:'].includes(initial.protocol)) {
     throw new Error('Unsupported platform protocol.');
-  const send = (verify: boolean): Promise<Response> =>
-    new Promise((resolve, reject) => {
-      const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
-      const requestOptions: RequestOptions = {
-        method: options.method ?? 'GET',
-        headers: options.headers,
-        signal: options.signal,
-        rejectUnauthorized: verify,
-      };
-      const req = request(url, requestOptions, incoming => {
-        const status = incoming.statusCode ?? 502;
-        // Do not follow redirects, especially with platform-issued credentials.
-        if (status >= 300 && status < 400) {
-          incoming.destroy();
-          reject(new Error('Platform redirects are not allowed.'));
-          return;
-        }
-        try {
-          const headers = new Headers();
-          for (const [key, value] of Object.entries(incoming.headers)) {
-            if (value !== undefined)
-              headers.set(key, Array.isArray(value) ? value.join(', ') : value);
-          }
-          const bodyless = options.method === 'HEAD' || status === 204 || status === 205;
-          const response = new Response(
-            bodyless ? null : (Readable.toWeb(incoming) as ReadableStream<Uint8Array>),
-            { status, headers },
-          );
-          if (bodyless) incoming.resume();
-          resolve(response);
-        } catch (error) {
-          // Exceptions in this asynchronous callback are outside the Promise executor.
-          incoming.destroy();
-          reject(error);
-        }
-      });
-      req.on('error', reject);
-      req.end(options.body);
-    });
-  try {
-    return await send(true);
-  } catch (error) {
-    if (
-      url.protocol !== 'https:' ||
-      !error ||
-      typeof error !== 'object' ||
-      !('code' in error) ||
-      !CERTIFICATE_ERRORS.has(String(error.code))
-    )
-      throw error;
-    return send(false);
   }
+
+  const send = async (
+    url: URL,
+    headers: Record<string, string> | undefined,
+    redirects: number,
+  ): Promise<Response> => {
+    let incoming: IncomingMessage;
+    try {
+      incoming = await requestOnce(url, options, headers, true);
+    } catch (error) {
+      if (url.protocol !== 'https:' || !isCertificateError(error)) throw error;
+      incoming = await requestOnce(url, options, headers, false);
+    }
+
+    const status = incoming.statusCode ?? 502;
+    // Follow redirects manually so https downgrades are rejected while
+    // same-or-upgraded schemes (e.g. http -> https behind nginx) proceed.
+    if (status < 300 || status >= 400) {
+      try {
+        return toWebResponse(incoming, options.method);
+      } catch (error) {
+        incoming.destroy();
+        throw error;
+      }
+    }
+
+    const location = incoming.headers.location;
+    incoming.destroy();
+    if (options.redirect === 'error') {
+      throw new Error('Platform redirect is not allowed.');
+    }
+    if (!location || typeof location !== 'string') {
+      throw new Error('Platform redirect is missing a location.');
+    }
+    if (redirects >= MAX_REDIRECTS) {
+      throw new Error('Platform redirect limit exceeded.');
+    }
+
+    let next: URL;
+    try {
+      next = new URL(location, url);
+    } catch {
+      throw new Error('Platform redirect location is invalid.');
+    }
+    if (!['http:', 'https:'].includes(next.protocol)) {
+      throw new Error('Platform redirect location is invalid.');
+    }
+    if (next.protocol === 'http:' && url.protocol === 'https:') {
+      throw new Error('Platform redirects may not downgrade to http.');
+    }
+    if (next.username || next.password) {
+      throw new Error('Platform redirect credentials are not allowed.');
+    }
+
+    const nextHeaders = { ...headers };
+    const schemeUpgrade = isHttpToHttpsUpgrade(url, next);
+    if (next.origin !== url.origin && !schemeUpgrade) {
+      if (nextHeaders.Authorization) {
+        throw new Error('Platform redirects may not carry credentials.');
+      }
+      delete nextHeaders.Authorization;
+    }
+    // Same-origin redirects still must not bounce credentialed requests to a
+    // different path unless this is an http→https host upgrade.
+    if (
+      nextHeaders.Authorization &&
+      !schemeUpgrade &&
+      (next.pathname !== url.pathname || next.search !== url.search)
+    ) {
+      throw new Error('Platform redirects may not carry credentials.');
+    }
+
+    return send(next, nextHeaders, redirects + 1);
+  };
+
+  return send(initial, options.headers, 0);
 };
