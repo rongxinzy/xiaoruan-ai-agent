@@ -3304,6 +3304,11 @@ const translations: Record<LanguageType, Record<string, string>> = {
     todoSuggestionDue: '有日期',
     todoParsedDue: '已识别截止日期',
     todoParsedImportant: '已识别为重要',
+    linkSafetyOpenExternalTitle: '打开外部链接？',
+    linkSafetyOpenExternalWarning: '你即将访问外部网站，请确认链接可信。',
+    linkSafetyCopyLink: '复制链接',
+    linkSafetyCopied: '已复制',
+    linkSafetyConfirmOpen: '打开链接',
   },
   en: {
     aisphereAddress: 'AISphere address',
@@ -6804,6 +6809,12 @@ const translations: Record<LanguageType, Record<string, string>> = {
     todoSuggestionDue: 'Has a date',
     todoParsedDue: 'Due date detected',
     todoParsedImportant: 'Marked important',
+    linkSafetyOpenExternalTitle: 'Open external link?',
+    linkSafetyOpenExternalWarning:
+      "You're about to visit an external website. Make sure you trust this link.",
+    linkSafetyCopyLink: 'Copy link',
+    linkSafetyCopied: 'Copied',
+    linkSafetyConfirmOpen: 'Open link',
   },
 };
 
