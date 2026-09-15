@@ -46,6 +46,8 @@ export async function startAISphereGateway(
       const limited = acquired.model.maxTokens
         ? await pool.run(prepared.body, controller.signal, acquired.model.maxTokens)
         : prepared;
+      // Allow same-host http→https upgrades from platform catalogs; credentialed
+      // redirects to other hosts remain rejected inside platformFetch.
       const upstream = await fetcher(acquired.model.url, {
         method: 'POST',
         headers: {
@@ -54,7 +56,6 @@ export async function startAISphereGateway(
         },
         body: limited.body,
         signal: controller.signal,
-        redirect: 'error',
       });
       response.writeHead(upstream.status, {
         'Content-Type': upstream.headers.get('content-type') ?? 'application/json',
