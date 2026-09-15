@@ -18,11 +18,14 @@ import {
   isSuccessfulMarketplaceInstallProgress,
 } from './utils/progress';
 
-const localInferenceViewSource = readFileSync(
-  fileURLToPath(new URL('./LocalInferenceView.tsx', import.meta.url)),
-  'utf8',
+const normalizeLineEndings = (source: string): string => source.replace(/\r\n?/g, '\n');
+
+const localInferenceViewSource = normalizeLineEndings(
+  readFileSync(fileURLToPath(new URL('./LocalInferenceView.tsx', import.meta.url)), 'utf8'),
 );
-const appSource = readFileSync(fileURLToPath(new URL('../../App.tsx', import.meta.url)), 'utf8');
+const appSource = normalizeLineEndings(
+  readFileSync(fileURLToPath(new URL('../../App.tsx', import.meta.url)), 'utf8'),
+);
 
 test('refreshes local inference data when the kept-alive view becomes visible', () => {
   expect(localInferenceViewSource).toContain('if (!isVisible) return;');
