@@ -1,6 +1,7 @@
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest, type IncomingMessage, type RequestOptions } from 'node:https';
+import { request as httpRequest, type IncomingMessage } from 'node:http';
+import { request as httpsRequest, type RequestOptions } from 'node:https';
 import { Readable } from 'node:stream';
+
 
 export interface PlatformRequest {
   method?: string;
@@ -70,8 +71,11 @@ function toWebResponse(incoming: IncomingMessage, method: string | undefined): R
   const status = incoming.statusCode ?? 502;
   const responseHeaders = new Headers();
   for (const [key, value] of Object.entries(incoming.headers)) {
-    if (value !== undefined) {
-      responseHeaders.set(key, Array.isArray(value) ? value.join(', ') : value);
+    // 2026/09/15 lixiang  Object.entries 将 header 值收窄为 unknown，显式转成 string
+    if (typeof value === 'string') {
+      responseHeaders.set(key, value);
+    } else if (Array.isArray(value)) {
+      responseHeaders.set(key, value.join(', '));
     }
   }
   const bodyless = method === 'HEAD' || status === 204 || status === 205;
