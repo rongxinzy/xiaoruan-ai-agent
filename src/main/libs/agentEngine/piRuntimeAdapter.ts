@@ -149,6 +149,11 @@ import { PiPendingMessageQueue } from './piPendingMessageQueue';
 import { shouldExposeAskUserQuestionTool } from './piUnattendedPolicy';
 import { createPiWorkLoop } from './piWorkLoop';
 import { PiWriteTokenLimitRecovery } from './piWriteTokenLimit';
+import {
+  createPiBoundedFileMutationTools,
+  createPiBoundedReadTool,
+  type PiFileMutationToolDefinition,
+} from './piBoundedFileMutationTools';
 import { collectPiSystemPromptContributions } from './piSystemPromptContributions';
 import {
   getPiPreparingToolActivity,
@@ -343,6 +348,9 @@ interface PiModules {
     context: ReturnType<typeof buildPiBackgroundCompletionContext>,
     options?: { apiKey?: string },
   ) => Promise<PiBackgroundCompletionResult>;
+  createWriteTool: (cwd: string) => PiFileMutationToolDefinition;
+  createEditTool: (cwd: string) => PiFileMutationToolDefinition;
+  createReadTool: (cwd: string) => PiFileMutationToolDefinition;
 }
 
 interface PiResourceLoader {
@@ -481,6 +489,9 @@ async function getPiModules(): Promise<PiModules> {
         // getModel is the current API (deprecated but functional); will migrate to createModels() later
         getModel: compat.getModel as unknown as PiModules['getModel'],
         completeSimple: compat.completeSimple as unknown as PiModules['completeSimple'],
+        createWriteTool: codingAgent.createWriteTool as PiModules['createWriteTool'],
+        createEditTool: codingAgent.createEditTool as PiModules['createEditTool'],
+        createReadTool: codingAgent.createReadTool as PiModules['createReadTool'],
       };
     } catch (err) {
       throw new Error(
@@ -901,6 +912,13 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         );
       }
       if (resourceState.fileToolsEnabled) {
+        customTools.push(
+          ...createPiBoundedFileMutationTools({
+            write: pi.createWriteTool(workspaceRoot),
+            edit: pi.createEditTool(workspaceRoot),
+          }),
+          createPiBoundedReadTool(pi.createReadTool(workspaceRoot)),
+        );
         customTools.push(buildPiDocumentReaderTool({ workspaceRoot }));
         customTools.push(
           buildDeclareArtifactTool({

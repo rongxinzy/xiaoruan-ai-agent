@@ -61,6 +61,44 @@ const hoisted = vi.hoisted(() => {
     content: [{ type: 'text', text: 'Hello from Pi' }],
     stopReason: 'stop',
   });
+  const mockBuiltinToolExecute = vi.fn().mockResolvedValue({ content: [], details: undefined });
+  const mockCreateWriteTool = vi.fn(() => ({
+    name: 'write',
+    parameters: {
+      type: 'object',
+      properties: { path: { type: 'string' }, content: { type: 'string' } },
+    },
+    execute: mockBuiltinToolExecute,
+  }));
+  const mockCreateEditTool = vi.fn(() => ({
+    name: 'edit',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        edits: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { oldText: { type: 'string' }, newText: { type: 'string' } },
+          },
+        },
+      },
+    },
+    execute: mockBuiltinToolExecute,
+  }));
+  const mockCreateReadTool = vi.fn(() => ({
+    name: 'read',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        offset: { type: 'number' },
+        limit: { type: 'number' },
+      },
+    },
+    execute: mockBuiltinToolExecute,
+  }));
 
   return {
     mockSession,
@@ -74,6 +112,9 @@ const hoisted = vi.hoisted(() => {
     mockGetAgentDir: vi.fn(() => '/tmp/pi-agent'),
     mockApplyApplicationRuntimeEnv: vi.fn(),
     mockCompleteSimple,
+    mockCreateWriteTool,
+    mockCreateEditTool,
+    mockCreateReadTool,
     mockGetModel: vi.fn((provider: string, modelId: string) => ({
       provider,
       id: modelId,
@@ -206,6 +247,9 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
     inMemory: hoisted.mockSettingsManagerInMemory,
   },
   getAgentDir: hoisted.mockGetAgentDir,
+  createWriteTool: hoisted.mockCreateWriteTool,
+  createEditTool: hoisted.mockCreateEditTool,
+  createReadTool: hoisted.mockCreateReadTool,
   ModelRuntime: {
     create: hoisted.mockModelRuntimeCreate,
   },
