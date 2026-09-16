@@ -1,4 +1,5 @@
 export const PiAssistantStopReason = {
+  Aborted: 'aborted',
   Error: 'error',
   Length: 'length',
   Stop: 'stop',
@@ -13,6 +14,13 @@ export const PiContentBlockType = {
   Text: 'text',
   ToolCall: 'toolCall',
 } as const;
+
+// A write call can be lost by truncation or by a transport failure that
+// interrupts its arguments mid-stream, so recovery covers both stop reasons.
+const WRITE_RECOVERY_STOP_REASONS: ReadonlySet<string> = new Set<string>([
+  PiAssistantStopReason.Length,
+  PiAssistantStopReason.Error,
+]);
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
 const MAX_CHUNK_CHARACTERS = 8000;
@@ -64,8 +72,11 @@ export const createPiLargeFileWriteSystemPrompt = (maxOutputTokens: number): str
   ].join('\n');
 };
 
+const isWriteRecoveryStopReason = (stopReason: string | undefined): boolean =>
+  stopReason !== undefined && WRITE_RECOVERY_STOP_REASONS.has(stopReason);
+
 const getWriteCallKeys = (message: PiWriteRecoveryMessage): string[] => {
-  if (message.stopReason !== PiAssistantStopReason.Length || !Array.isArray(message.content)) {
+  if (!isWriteRecoveryStopReason(message.stopReason) || !Array.isArray(message.content)) {
     return [];
   }
 
@@ -87,6 +98,11 @@ const getWriteCallKeys = (message: PiWriteRecoveryMessage): string[] => {
 
   return [...new Set(keys)];
 };
+
+const buildWriteRecoveryOpener = (stopReason: string | undefined): string =>
+  stopReason === PiAssistantStopReason.Error
+    ? 'The previous built-in write call was interrupted by a transport failure and was not executed.'
+    : 'The previous built-in write call hit the output token limit and was not executed.';
 
 export class PiWriteTokenLimitRecovery {
   private readonly recoveredWriteCalls = new Set<string>();
@@ -113,7 +129,7 @@ export class PiWriteTokenLimitRecovery {
     for (const key of newKeys) this.recoveredWriteCalls.add(key);
     this.recoveryAttempts += 1;
     const prompt = [
-      'The previous built-in write call hit the output token limit and was not executed.',
+      buildWriteRecoveryOpener(message.stopReason),
       'Do not retry the complete content in one call.',
       'Use write to create a small skeleton with a unique continuation marker, then use edit to replace the marker with one chunk plus the marker on each subsequent model turn.',
       `Keep each write.content or edit.edits[].newText payload at or below ${this.chunkCharacterLimit} characters and emit only one content-bearing file mutation per response.`,

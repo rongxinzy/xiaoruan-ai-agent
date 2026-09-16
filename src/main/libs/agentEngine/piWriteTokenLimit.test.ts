@@ -64,6 +64,79 @@ test('does not steer normal responses or truncated non-write calls', () => {
   expect(session.steer).not.toHaveBeenCalled();
 });
 
+test('steers a write call that a transport failure interrupted mid-stream', () => {
+  const recovery = new PiWriteTokenLimitRecovery(4096);
+  const session = { steer: vi.fn().mockResolvedValue(undefined) };
+
+  expect(
+    recovery.queueIfNeeded(
+      {
+        stopReason: PiAssistantStopReason.Error,
+        content: [
+          {
+            type: PiContentBlockType.ToolCall,
+            id: 'call_ee8e3fb90cf64cfaad4a95ea',
+            name: PiBuiltinFileToolName.Write,
+            arguments: {},
+          },
+        ],
+      },
+      session,
+    ),
+  ).toBe(true);
+  expect(session.steer).toHaveBeenCalledWith(
+    expect.stringContaining('interrupted by a transport failure'),
+  );
+  expect(session.steer).toHaveBeenCalledWith(expect.stringContaining('2048 characters'));
+});
+
+test('keeps the token-limit wording for truncated write calls', () => {
+  const recovery = new PiWriteTokenLimitRecovery(4096);
+  const session = { steer: vi.fn().mockResolvedValue(undefined) };
+
+  expect(
+    recovery.queueIfNeeded(
+      {
+        stopReason: PiAssistantStopReason.Length,
+        content: [writeCall('write-1', 'invite.html')],
+      },
+      session,
+    ),
+  ).toBe(true);
+  expect(session.steer).toHaveBeenCalledWith(expect.stringContaining('output token limit'));
+});
+
+test('does not steer aborted turns or errors without a write call', () => {
+  const recovery = new PiWriteTokenLimitRecovery(4096);
+  const session = { steer: vi.fn().mockResolvedValue(undefined) };
+
+  expect(
+    recovery.queueIfNeeded(
+      {
+        stopReason: PiAssistantStopReason.Aborted,
+        content: [writeCall('write-1', 'invite.html')],
+      },
+      session,
+    ),
+  ).toBe(false);
+  expect(
+    recovery.queueIfNeeded(
+      {
+        stopReason: PiAssistantStopReason.Error,
+        content: [{ type: PiContentBlockType.Text, text: 'boom' }],
+      },
+      session,
+    ),
+  ).toBe(false);
+  expect(
+    recovery.queueIfNeeded(
+      { stopReason: PiAssistantStopReason.Error, content: 'boom' },
+      session,
+    ),
+  ).toBe(false);
+  expect(session.steer).not.toHaveBeenCalled();
+});
+
 test('steers each truncated write call once and resets for the next user turn', () => {
   const recovery = new PiWriteTokenLimitRecovery(4096);
   const session = { steer: vi.fn().mockResolvedValue(undefined) };
