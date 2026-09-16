@@ -1733,7 +1733,8 @@
   line-height: var(--zy-component-text-sm--line-height);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -1962,7 +1963,8 @@
   line-height: var(--zy-component-text-sm--line-height);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -4271,7 +4273,8 @@
   animation-name: zy-component-legacy-modal-backdrop-1rmx7o8;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -4318,6 +4321,7 @@
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -9325,7 +9329,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="xiaoruan-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -9554,7 +9559,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="xiaoruan-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -11865,7 +11871,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-yqm47u;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="xiaoruan-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -11912,6 +11919,7 @@ to {
 }
 [data-theme="xiaoruan-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="xiaoruan-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -16932,7 +16940,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="classic-light"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -17161,7 +17170,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="classic-light"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -19470,7 +19480,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-h41hlf;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="classic-light"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -19517,6 +19528,7 @@ to {
 }
 [data-theme="classic-light"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="classic-light"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -24524,7 +24536,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="classic-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -24753,7 +24766,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="classic-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -27064,7 +27078,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-1a8g2ez;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="classic-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -27111,6 +27126,7 @@ to {
 }
 [data-theme="classic-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="classic-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -32131,7 +32147,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="daming-light"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -32360,7 +32377,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="daming-light"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -34669,7 +34687,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-1ndhedz;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="daming-light"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -34716,6 +34735,7 @@ to {
 }
 [data-theme="daming-light"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="daming-light"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -39723,7 +39743,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="daming-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -39952,7 +39973,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="daming-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -42263,7 +42285,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-1jte1h3;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="daming-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -42310,6 +42333,7 @@ to {
 }
 [data-theme="daming-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="daming-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -47332,7 +47356,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="changan-light"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -47561,7 +47586,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="changan-light"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -49870,7 +49896,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-1j4hgn9;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="changan-light"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -49917,6 +49944,7 @@ to {
 }
 [data-theme="changan-light"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="changan-light"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -54929,7 +54957,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="changan-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -55158,7 +55187,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="changan-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -57469,7 +57499,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-lvvvv1;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="changan-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -57516,6 +57547,7 @@ to {
 }
 [data-theme="changan-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="changan-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -62541,7 +62573,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="weiyang-light"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -62770,7 +62803,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="weiyang-light"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -65079,7 +65113,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-6l9g7h;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="weiyang-light"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -65126,6 +65161,7 @@ to {
 }
 [data-theme="weiyang-light"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="weiyang-light"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -70138,7 +70174,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="weiyang-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -70367,7 +70404,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="weiyang-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -72678,7 +72716,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-114pwxx;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="weiyang-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -72725,6 +72764,7 @@ to {
 }
 [data-theme="weiyang-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="weiyang-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);

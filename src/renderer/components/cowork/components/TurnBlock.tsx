@@ -24,7 +24,12 @@ import {
   isCoworkTerminalErrorMessage,
 } from '../../../services/coworkTerminalError';
 import { ArtifactRole, type Artifact } from '../../../types/artifact';
-import type { CoworkMessage, CoworkMessageMetadata } from '../../../types/cowork';
+import type {
+  CoworkMessage,
+  CoworkMessageMetadata,
+  CoworkPermissionRequest,
+  CoworkPermissionResult,
+} from '../../../types/cowork';
 import ArtifactPreviewCard from '../../artifacts/ArtifactPreviewCard';
 import {
   ExecutionStatusKind,
@@ -37,6 +42,7 @@ import {
 } from '../helpers/executionStatus';
 import type { AssistantTurnItem, ConversationTurn } from '../helpers/messageGrouping';
 import { getToolResultLineCount, getVisibleAssistantItems } from '../helpers/messageGrouping';
+import { findToolGroupForPermission } from '../helpers/toolPermissionMatch';
 import { getThinkingPresentation } from '../helpers/thinkingPresentation';
 import { getToolResultDisplay, hasText } from '../helpers/toolUtils';
 import { AssistantBubble } from './AssistantBubble';
@@ -91,6 +97,9 @@ const TurnBlockComponent: React.FC<{
   recoverableTaskId?: string | null;
   resumeTaskId?: string | null;
   onResumeTask?: (interruption: CoworkSessionInterruption) => void;
+  // 2026/09/16 lixiang  把当前轮次的工具授权嵌进对应 ToolCard，不再叠在底部输入框上
+  pendingPermission?: CoworkPermissionRequest | null;
+  onRespondToPermission?: (result: CoworkPermissionResult) => void;
   /** Expand long tool results fully (image export capture). */
   expandToolResults?: boolean;
 }> = ({
@@ -105,10 +114,17 @@ const TurnBlockComponent: React.FC<{
   recoverableTaskId,
   resumeTaskId,
   onResumeTask,
+  pendingPermission = null,
+  onRespondToPermission,
   expandToolResults = false,
 }) => {
   const visibleAssistantItems = getVisibleAssistantItems(turn.assistantItems);
   const primaryExpert = getTurnPrimaryExpert(turn);
+  // 2026/09/16 lixiang  只把授权挂到匹配到的那一个正在执行的工具上
+  const pendingToolGroup =
+    pendingPermission && onRespondToPermission
+      ? findToolGroupForPermission(visibleAssistantItems, pendingPermission)
+      : null;
 
   const renderSystemMessage = (message: CoworkMessage) => {
     const interruption = message.metadata?.interruption as CoworkSessionInterruption | undefined;
@@ -254,6 +270,7 @@ const TurnBlockComponent: React.FC<{
 
     // ── Tool call + result ──
     if (item.type === 'tool_group') {
+      const isPendingTool = pendingToolGroup?.toolUse.id === item.group.toolUse.id;
       return (
         <ToolCard
           key={item.group.toolUse.id}
@@ -262,6 +279,8 @@ const TurnBlockComponent: React.FC<{
           muted={mutedExecution}
           mapDisplayText={mapDisplayText}
           forceExpand={expandToolResults}
+          pendingPermission={isPendingTool ? pendingPermission : null}
+          onRespondToPermission={isPendingTool ? onRespondToPermission : undefined}
         />
       );
     }
@@ -418,6 +437,14 @@ const TurnBlockComponent: React.FC<{
         key={`${groupKey}-${showCompletedSummary ? 'summarized' : 'working'}`}
         persistKey={`cot-${turn.id}-${groupKey}`}
         defaultOpen={false}
+        // 2026/09/16 lixiang  本组有待授权工具时展开思考链，让终端里的授权按钮露出来
+        forceOpen={Boolean(
+          pendingToolGroup &&
+          group.items.some(
+            item =>
+              item.type === 'tool_group' && item.group.toolUse.id === pendingToolGroup.toolUse.id,
+          ),
+        )}
       >
         <ChainOfThoughtHeader icon={isActiveTool ? Wrench : SparklesIcon}>
           {showCompletedSummary ? (
