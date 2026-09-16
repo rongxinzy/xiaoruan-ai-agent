@@ -41,5 +41,7 @@ test('getToolTextPreview joins text blocks', () => {
 test('looksLikeTransportErrorText detects network-style failures', () => {
   expect(looksLikeTransportErrorText('fetch failed')).toBe(true);
   expect(looksLikeTransportErrorText('socket hang up while calling upstream')).toBe(true);
+  expect(looksLikeTransportErrorText('Stream ended without finish_reason')).toBe(true);
+  expect(looksLikeTransportErrorText('TypeError: terminated')).toBe(true);
   expect(looksLikeTransportErrorText('Detailed Results: example.com')).toBe(false);
 });

@@ -1,3 +1,5 @@
+import { looksLikeTransportErrorText } from '../sanitizeForLog';
+
 export const PiAssistantStopReason = {
   Aborted: 'aborted',
   Error: 'error',
@@ -23,9 +25,10 @@ const WRITE_RECOVERY_STOP_REASONS: ReadonlySet<string> = new Set<string>([
 ]);
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
-const MAX_CHUNK_CHARACTERS = 8000;
-const CHUNK_CHARACTERS_PER_OUTPUT_TOKEN = 0.5;
-const MAX_WRITE_RECOVERY_ATTEMPTS = 3;
+const DEFAULT_WRITE_CHUNK_CHARACTERS = 4000;
+const RECOVERY_WRITE_CHUNK_CHARACTERS = [2000, 1000] as const;
+const CHUNK_CHARACTERS_PER_OUTPUT_TOKEN = 1;
+const MAX_WRITE_RECOVERY_ATTEMPTS = RECOVERY_WRITE_CHUNK_CHARACTERS.length;
 const UNKNOWN_WRITE_CALL_KEY = '__unknown_write_call__';
 
 type PiMessageContentBlock = {
@@ -38,6 +41,7 @@ type PiMessageContentBlock = {
 
 export type PiWriteRecoveryMessage = {
   stopReason?: string;
+  errorMessage?: string;
   content: string | PiMessageContentBlock[];
 };
 
@@ -52,7 +56,7 @@ const normalizeMaxOutputTokens = (maxOutputTokens: number): number =>
 
 export const calculatePiWriteChunkCharacterLimit = (maxOutputTokens: number): number =>
   Math.min(
-    MAX_CHUNK_CHARACTERS,
+    DEFAULT_WRITE_CHUNK_CHARACTERS,
     Math.max(
       1,
       Math.floor(normalizeMaxOutputTokens(maxOutputTokens) * CHUNK_CHARACTERS_PER_OUTPUT_TOKEN),
@@ -68,15 +72,24 @@ export const createPiLargeFileWriteSystemPrompt = (maxOutputTokens: number): str
     `- Limit each write.content or edit.edits[].newText to ${chunkCharacterLimit} characters for large files.`,
     '- For larger files, write a skeleton with a unique continuation marker; use edit to replace it with one chunk plus the marker. Emit only one content-bearing write or edit call per response, waiting for its result before continuing.',
     '- Remove the marker and verify with read or grep before reporting success. For existing-file rewrites, build and verify a sibling temporary file before replacing the target with the built-in bash tool.',
-    '- On output token limit, switch to chunking immediately; never retry the full content.',
+    '- On output token limit or a transport interruption, switch to chunking immediately; never retry the full content.',
   ].join('\n');
 };
 
 const isWriteRecoveryStopReason = (stopReason: string | undefined): boolean =>
   stopReason !== undefined && WRITE_RECOVERY_STOP_REASONS.has(stopReason);
 
+const isTransportInterruptedWrite = (message: PiWriteRecoveryMessage): boolean =>
+  message.stopReason === PiAssistantStopReason.Error &&
+  looksLikeTransportErrorText(message.errorMessage || '');
+
 const getWriteCallKeys = (message: PiWriteRecoveryMessage): string[] => {
-  if (!isWriteRecoveryStopReason(message.stopReason) || !Array.isArray(message.content)) {
+  if (
+    (!isWriteRecoveryStopReason(message.stopReason) ||
+      (message.stopReason === PiAssistantStopReason.Error &&
+        !isTransportInterruptedWrite(message))) ||
+    !Array.isArray(message.content)
+  ) {
     return [];
   }
 
@@ -104,14 +117,18 @@ const buildWriteRecoveryOpener = (stopReason: string | undefined): string =>
     ? 'The previous built-in write call was interrupted by a transport failure and was not executed.'
     : 'The previous built-in write call hit the output token limit and was not executed.';
 
+const getRecoveryChunkCharacterLimit = (recoveryAttempt: number): number =>
+  RECOVERY_WRITE_CHUNK_CHARACTERS[recoveryAttempt] ??
+  RECOVERY_WRITE_CHUNK_CHARACTERS[RECOVERY_WRITE_CHUNK_CHARACTERS.length - 1];
+
 export class PiWriteTokenLimitRecovery {
   private readonly recoveredWriteCalls = new Set<string>();
-  private readonly chunkCharacterLimit: number;
+  private readonly defaultChunkCharacterLimit: number;
   private recoveryAttempts = 0;
   private generation = 0;
 
   constructor(maxOutputTokens: number) {
-    this.chunkCharacterLimit = calculatePiWriteChunkCharacterLimit(maxOutputTokens);
+    this.defaultChunkCharacterLimit = calculatePiWriteChunkCharacterLimit(maxOutputTokens);
   }
 
   reset(): void {
@@ -126,13 +143,17 @@ export class PiWriteTokenLimitRecovery {
     if (newKeys.length === 0 || this.recoveryAttempts >= MAX_WRITE_RECOVERY_ATTEMPTS) return false;
 
     const queuedGeneration = this.generation;
+    const chunkCharacterLimit = Math.min(
+      this.defaultChunkCharacterLimit,
+      getRecoveryChunkCharacterLimit(this.recoveryAttempts),
+    );
     for (const key of newKeys) this.recoveredWriteCalls.add(key);
     this.recoveryAttempts += 1;
     const prompt = [
       buildWriteRecoveryOpener(message.stopReason),
       'Do not retry the complete content in one call.',
       'Use write to create a small skeleton with a unique continuation marker, then use edit to replace the marker with one chunk plus the marker on each subsequent model turn.',
-      `Keep each write.content or edit.edits[].newText payload at or below ${this.chunkCharacterLimit} characters and emit only one content-bearing file mutation per response.`,
+      `Keep each write.content or edit.edits[].newText payload at or below ${chunkCharacterLimit} characters and emit only one content-bearing file mutation per response.`,
       'Remove the marker and verify the completed file before reporting success.',
     ].join(' ');
 
