@@ -5,6 +5,7 @@ export const PiAssistantStopReason = {
   Error: 'error',
   Length: 'length',
   Stop: 'stop',
+  ToolUse: 'toolUse',
 } as const;
 
 export const PiBuiltinFileToolName = {
