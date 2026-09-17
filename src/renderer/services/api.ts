@@ -23,6 +23,14 @@ import {
 } from './localInferenceSlotRetry';
 import { probeRuntimeModelCapabilities } from './modelCapabilityProbe';
 import { StreamRequestRegistry } from './streamRequestRegistry';
+import {
+  apiCancelStream,
+  apiOnStreamAbort,
+  apiOnStreamData,
+  apiOnStreamDone,
+  apiOnStreamError,
+  apiStream,
+} from './visibleApiTransport';
 import { WebSearchToolEventType, type WebSearchToolEventHandler } from './webSearchToolEvents';
 
 export interface ApiConfig {
@@ -95,7 +103,7 @@ class ApiService {
   cancelOngoingRequest(requestId?: string) {
     const targetRequestId = requestId ?? this.streamRequests.getLatestRequestId();
     if (targetRequestId) {
-      window.electron.api.cancelStream(targetRequestId);
+      apiCancelStream(targetRequestId);
       return true;
     }
     return false;
@@ -807,22 +815,22 @@ class ApiService {
         }
       };
 
-      const removeData = window.electron.api.onStreamData(requestId, chunk => {
+      const removeData = apiOnStreamData(requestId, chunk => {
         buffer += chunk;
         parseBuffer();
       });
-      const removeDone = window.electron.api.onStreamDone(requestId, () => {
+      const removeDone = apiOnStreamDone(requestId, () => {
         parseBuffer(true);
         settle();
       });
-      const removeError = window.electron.api.onStreamError(requestId, error => {
+      const removeError = apiOnStreamError(requestId, error => {
         settle(new ApiError(typeof error === 'string' ? error : error.message));
       });
-      const removeAbort = window.electron.api.onStreamAbort(requestId, () => {
+      const removeAbort = apiOnStreamAbort(requestId, () => {
         settle(new DOMException('The request was aborted.', 'AbortError'));
       });
       const handleSignalAbort = () => {
-        void window.electron.api.cancelStream(requestId);
+        void apiCancelStream(requestId);
         settle(new DOMException('The request was aborted.', 'AbortError'));
       };
       abortSignal?.addEventListener('abort', handleSignalAbort, { once: true });
@@ -839,8 +847,7 @@ class ApiService {
         handleSignalAbort();
         return;
       }
-      window.electron.api
-        .stream({
+      apiStream({
           url,
           method: 'POST',
           headers,
@@ -1659,7 +1666,7 @@ class ApiService {
         let aborted = false;
 
         // 设置流式监听器
-        const removeDataListener = window.electron.api.onStreamData(requestId, chunk => {
+        const removeDataListener = apiOnStreamData(requestId, chunk => {
           const lines = chunk.split('\n');
 
           for (const line of lines) {
@@ -1711,7 +1718,7 @@ class ApiService {
           }
         });
 
-        const removeDoneListener = window.electron.api.onStreamDone(requestId, () => {
+        const removeDoneListener = apiOnStreamDone(requestId, () => {
           this.cleanup(requestId);
           if (!fullContent && !fullReasoning) {
             reject(new ApiError('No content received from the API. Please try again.'));
@@ -1720,12 +1727,12 @@ class ApiService {
           }
         });
 
-        const removeErrorListener = window.electron.api.onStreamError(requestId, error => {
+        const removeErrorListener = apiOnStreamError(requestId, error => {
           this.cleanup(requestId);
           reject(new ApiError(typeof error === 'string' ? error : error.message));
         });
 
-        const removeAbortListener = window.electron.api.onStreamAbort(requestId, () => {
+        const removeAbortListener = apiOnStreamAbort(requestId, () => {
           aborted = true;
           this.cleanup(requestId);
           resolve({
@@ -1746,8 +1753,7 @@ class ApiService {
         console.log(
           `[api-chat] Anthropic request: baseUrl=${config.baseUrl}, finalUrl=${requestUrl}, model=${modelId}, apiFormat=${config.apiFormat}`,
         );
-        window.electron.api
-          .stream({
+        apiStream({
             url: requestUrl,
             method: 'POST',
             headers: {
@@ -1874,7 +1880,7 @@ class ApiService {
       return new Promise((resolve, reject) => {
         let aborted = false;
 
-        const removeDataListener = window.electron.api.onStreamData(requestId, chunk => {
+        const removeDataListener = apiOnStreamData(requestId, chunk => {
           const lines = chunk.split('\n');
 
           for (const line of lines) {
@@ -1910,7 +1916,7 @@ class ApiService {
           }
         });
 
-        const removeDoneListener = window.electron.api.onStreamDone(requestId, () => {
+        const removeDoneListener = apiOnStreamDone(requestId, () => {
           this.cleanup(requestId);
           if (!fullContent && !fullReasoning) {
             reject(new ApiError('No content received from the API. Please try again.'));
@@ -1919,12 +1925,12 @@ class ApiService {
           }
         });
 
-        const removeErrorListener = window.electron.api.onStreamError(requestId, error => {
+        const removeErrorListener = apiOnStreamError(requestId, error => {
           this.cleanup(requestId);
           reject(new ApiError(typeof error === 'string' ? error : error.message));
         });
 
-        const removeAbortListener = window.electron.api.onStreamAbort(requestId, () => {
+        const removeAbortListener = apiOnStreamAbort(requestId, () => {
           aborted = true;
           this.cleanup(requestId);
           resolve({
@@ -1943,8 +1949,7 @@ class ApiService {
         console.log(
           `[api-chat] Gemini request: baseUrl=${config.baseUrl}, finalUrl=${requestUrl}, model=${modelId}`,
         );
-        window.electron.api
-          .stream({
+        apiStream({
             url: requestUrl,
             method: 'POST',
             headers: {
@@ -2036,7 +2041,7 @@ class ApiService {
         let currentEvent = '';
 
         // 设置流式监听器
-        const removeDataListener = window.electron.api.onStreamData(requestId, chunk => {
+        const removeDataListener = apiOnStreamData(requestId, chunk => {
           sseBuffer += chunk;
           const lines = sseBuffer.split('\n');
           sseBuffer = lines.pop() ?? '';
@@ -2146,7 +2151,7 @@ class ApiService {
           }
         });
 
-        const removeDoneListener = window.electron.api.onStreamDone(requestId, () => {
+        const removeDoneListener = apiOnStreamDone(requestId, () => {
           this.cleanup(requestId);
           if (!fullContent && !fullReasoning) {
             reject(new ApiError('No content received from the API. Please try again.'));
@@ -2155,12 +2160,12 @@ class ApiService {
           }
         });
 
-        const removeErrorListener = window.electron.api.onStreamError(requestId, error => {
+        const removeErrorListener = apiOnStreamError(requestId, error => {
           this.cleanup(requestId);
           reject(new ApiError(typeof error === 'string' ? error : error.message));
         });
 
-        const removeAbortListener = window.electron.api.onStreamAbort(requestId, () => {
+        const removeAbortListener = apiOnStreamAbort(requestId, () => {
           aborted = true;
           this.cleanup(requestId);
           resolve({
@@ -2223,8 +2228,7 @@ class ApiService {
           requestBody.stream_options = { include_usage: true };
         }
 
-        window.electron.api
-          .stream({
+        apiStream({
             url: requestUrl,
             method: 'POST',
             headers,
