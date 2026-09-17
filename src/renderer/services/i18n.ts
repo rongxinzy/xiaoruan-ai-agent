@@ -1971,7 +1971,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     workbenchTaskArtifactPending: '待验证',
     workbenchTaskArtifactVerified: '已验证',
     workbenchTaskArtifactFailed: '验证失败',
-    coworkResumeTaskAction: '继续此任务',
+    coworkResumeTaskAction: '继续执行', // 2026/09/17 lixiang  暂停提示旁继续执行按钮文案
     coworkResumeTaskContext: '继续已暂停任务',
     coworkCancelTaskResume: '取消继续任务',
     coworkResumeTaskFailed: '恢复任务失败',
@@ -5441,7 +5441,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     workbenchTaskArtifactPending: 'Pending verification',
     workbenchTaskArtifactVerified: 'Verified',
     workbenchTaskArtifactFailed: 'Verification failed',
-    coworkResumeTaskAction: 'Continue this task',
+    coworkResumeTaskAction: 'Continue',
     coworkResumeTaskContext: 'Continue paused task',
     coworkCancelTaskResume: 'Cancel task resume',
     coworkResumeTaskFailed: 'Failed to resume task',

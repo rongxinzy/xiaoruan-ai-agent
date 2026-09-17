@@ -5217,9 +5217,10 @@ const Settings: React.FC<SettingsProps> = ({
                 >
                   {i18nService.t('cancel')}
                 </Button>
+                {/* 2026/09/17 lixiang  设置保存按钮使用主题色 default 风格 */}
                 <Button
                   type="submit"
-                  variant="outline"
+                  variant="default"
                   className={localInferenceCompactButtonClass}
                   disabled={isSaving}
                 >

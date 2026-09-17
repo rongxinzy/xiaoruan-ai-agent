@@ -281,6 +281,11 @@ body {
   display: none;
 }
 
+/* 2026/09/17 lixiang  用户气泡正文与同行 skill 顶对齐 */
+.cowork-message {
+  vertical-align: top;
+}
+
 /* Style for select options to match theme */
 option {
   background-color: var(--zy-surface);

@@ -41,7 +41,6 @@ import {
   selectIsSessionArtifactPanelOpen,
   selectSessionArtifactLayoutMode,
   selectSessionArtifacts,
-  togglePanel,
 } from '../../store/slices/artifactSlice';
 import { setActiveSkillIds } from '../../store/slices/skillSlice';
 import { resolveArtifactPanelMaxWidth } from '../artifacts/artifactPanelResize';
@@ -142,6 +141,8 @@ interface CoworkSessionDetailProps {
   inlinePermission?: CoworkPermissionRequest | null;
   onRespondToInlinePermission?: (result: CoworkPermissionResult) => void | Promise<void>;
   resumeTaskId?: string | null;
+  // 2026/09/17 lixiang  父级传入恢复中禁用；本组件再叠加 isStreaming
+  resumeDisabled?: boolean;
   onResumeTask?: (interruption: CoworkSessionInterruption) => void;
   onCancelTaskResume?: () => void;
 }
@@ -209,6 +210,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
   inlinePermission,
   onRespondToInlinePermission,
   resumeTaskId,
+  resumeDisabled = false,
   onResumeTask,
   onCancelTaskResume,
 }) => {
@@ -229,6 +231,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
 
   const handleResumeTask = useCallback(
     (interruption: CoworkSessionInterruption) => {
+      // 2026/09/17 lixiang  点击继续执行只嵌入输入框并聚焦，不直接开跑
       onResumeTask?.(interruption);
       requestAnimationFrame(() => promptInputRef.current?.focus());
     },
@@ -1090,6 +1093,8 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
                 isTurnComplete={!isStreaming || !isLastTurn}
                 recoverableTaskId={recoverableTaskId}
                 resumeTaskId={resumeTaskId}
+                // 2026/09/17 lixiang  流式或恢复中禁用继续执行按钮
+                resumeDisabled={resumeDisabled || isStreaming}
                 onResumeTask={onResumeTask ? handleResumeTask : undefined}
                 // 2026/09/16 lixiang  仅末轮需要工具授权，避免历史轮次误挂授权按钮
                 pendingPermission={isLastTurn ? inlinePermission : null}
@@ -1120,10 +1125,8 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       sessionId={sessionId}
       isSessionSwitching={isSessionSwitching}
       isSidebarCollapsed={isSidebarCollapsed}
-      isArtifactPanelOpen={isPanelOpen}
       onToggleSidebar={onToggleSidebar}
       onNewChat={onNewChat}
-      onToggleArtifactPanel={() => dispatch(togglePanel())}
       updateBadge={updateBadge}
     >
       {/* Export Options Modal */}
