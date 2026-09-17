@@ -62,31 +62,6 @@ const hoisted = vi.hoisted(() => {
     stopReason: 'stop',
   });
   const mockBuiltinToolExecute = vi.fn().mockResolvedValue({ content: [], details: undefined });
-  const mockCreateWriteTool = vi.fn(() => ({
-    name: 'write',
-    parameters: {
-      type: 'object',
-      properties: { path: { type: 'string' }, content: { type: 'string' } },
-    },
-    execute: mockBuiltinToolExecute,
-  }));
-  const mockCreateEditTool = vi.fn(() => ({
-    name: 'edit',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: { type: 'string' },
-        edits: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: { oldText: { type: 'string' }, newText: { type: 'string' } },
-          },
-        },
-      },
-    },
-    execute: mockBuiltinToolExecute,
-  }));
   const mockCreateReadTool = vi.fn(() => ({
     name: 'read',
     parameters: {
@@ -112,8 +87,6 @@ const hoisted = vi.hoisted(() => {
     mockGetAgentDir: vi.fn(() => '/tmp/pi-agent'),
     mockApplyApplicationRuntimeEnv: vi.fn(),
     mockCompleteSimple,
-    mockCreateWriteTool,
-    mockCreateEditTool,
     mockCreateReadTool,
     mockGetModel: vi.fn((provider: string, modelId: string) => ({
       provider,
@@ -247,8 +220,6 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
     inMemory: hoisted.mockSettingsManagerInMemory,
   },
   getAgentDir: hoisted.mockGetAgentDir,
-  createWriteTool: hoisted.mockCreateWriteTool,
-  createEditTool: hoisted.mockCreateEditTool,
   createReadTool: hoisted.mockCreateReadTool,
   ModelRuntime: {
     create: hoisted.mockModelRuntimeCreate,
@@ -279,6 +250,7 @@ vi.mock('../coworkUtil', async importOriginal => {
 });
 
 import { PiRuntimeAdapter } from './piRuntimeAdapter';
+import { registerPiTurnStallCases } from './piRuntimeAdapterStallCases.test.helpers';
 import { PiAskUserQuestionSystemPrompt } from './piAskUserQuestion';
 import { PiUnattendedSystemPrompt } from './piUnattendedPolicy';
 import { DeclareArtifactSystemPrompt } from '../../declareArtifact/tool';
@@ -3379,5 +3351,16 @@ describe('PiRuntimeAdapter', () => {
         success: false,
       });
     });
+  });
+
+  // A stall needs a live adapter plus control of the Pi event stream, so these
+  // cases live in their own module. They are registered last on purpose: the
+  // adapter applies the application runtime env once per process, and the first
+  // startSession in this file has to stay the one that asserts it.
+  registerPiTurnStallCases({
+    getAdapter: () => adapter,
+    startSession: (sessionId, prompt) => adapter.startSession(sessionId, prompt),
+    getPiListener: () => mockSession.subscribe.mock.calls[0]?.[0] as (event: unknown) => void,
+    hasAbortedTurn: () => mockSession.abort.mock.calls.length > 0,
   });
 });

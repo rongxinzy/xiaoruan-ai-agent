@@ -21,7 +21,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import path from 'path';
 
-import { classifyCoworkError, type CoworkError } from '../../../common/coworkError';
+import {
+  classifyCoworkError,
+  CoworkErrorKind,
+  makeCoworkError,
+  type CoworkError,
+} from '../../../common/coworkError';
 import {
   CoworkSessionExpertSource,
   normalizeSingleExpertIds,
@@ -149,8 +154,9 @@ import { PiPendingMessageQueue } from './piPendingMessageQueue';
 import { shouldExposeAskUserQuestionTool } from './piUnattendedPolicy';
 import { createPiWorkLoop } from './piWorkLoop';
 import { PiWriteTokenLimitRecovery } from './piWriteTokenLimit';
+import { createPiTurnStallHandlers } from './piTurnStallHandlers';
+import { PiTurnStallWatchdog } from './piTurnStallWatchdog';
 import {
-  createPiBoundedFileMutationTools,
   createPiBoundedReadTool,
   type PiFileMutationToolDefinition,
 } from './piBoundedFileMutationTools';
@@ -303,13 +309,21 @@ interface ActivePiSession {
   /** Whether this Work session was explicitly started in Goal mode. */
   goalMode: boolean;
   writeTokenLimitRecovery: PiWriteTokenLimitRecovery;
+  /** Stops a turn the model stopped making progress on. Null until the session
+   * is registered, because the watchdog needs the session it observes. */
+  stallWatchdog: PiTurnStallWatchdog | null;
   /**
    * Error from the latest failed attempt (message_end with stopReason=error).
    * Deferred — not persisted/emitted — because Pi may auto-retry the turn;
    * flushPendingError surfaces it once the run settles (auto_retry_end /
    * agent_settled). Cleared when a retry succeeds or the turn is reset.
+   *
+   * `sticky` marks an error the runtime itself recorded (a stalled turn, an
+   * unrecoverable truncated file payload). Pi reports those turns with a plain
+   * stop reason, so a later successful-looking assistant message must not erase
+   * them the way it erases a recovered retry.
    */
-  pendingError: { message: string; classified: CoworkError } | null;
+  pendingError: { message: string; classified: CoworkError; sticky: boolean } | null;
   workbenchRunId: string | null;
   workbenchContract: WorkbenchTaskContract;
   workspaceRoot: string;
@@ -348,8 +362,6 @@ interface PiModules {
     context: ReturnType<typeof buildPiBackgroundCompletionContext>,
     options?: { apiKey?: string },
   ) => Promise<PiBackgroundCompletionResult>;
-  createWriteTool: (cwd: string) => PiFileMutationToolDefinition;
-  createEditTool: (cwd: string) => PiFileMutationToolDefinition;
   createReadTool: (cwd: string) => PiFileMutationToolDefinition;
 }
 
@@ -489,8 +501,6 @@ async function getPiModules(): Promise<PiModules> {
         // getModel is the current API (deprecated but functional); will migrate to createModels() later
         getModel: compat.getModel as unknown as PiModules['getModel'],
         completeSimple: compat.completeSimple as unknown as PiModules['completeSimple'],
-        createWriteTool: codingAgent.createWriteTool as PiModules['createWriteTool'],
-        createEditTool: codingAgent.createEditTool as PiModules['createEditTool'],
         createReadTool: codingAgent.createReadTool as PiModules['createReadTool'],
       };
     } catch (err) {
@@ -912,13 +922,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         );
       }
       if (resourceState.fileToolsEnabled) {
-        customTools.push(
-          ...createPiBoundedFileMutationTools({
-            write: pi.createWriteTool(workspaceRoot),
-            edit: pi.createEditTool(workspaceRoot),
-          }),
-          createPiBoundedReadTool(pi.createReadTool(workspaceRoot)),
-        );
+        customTools.push(createPiBoundedReadTool(pi.createReadTool(workspaceRoot)));
         customTools.push(buildPiDocumentReaderTool({ workspaceRoot }));
         customTools.push(
           buildDeclareArtifactTool({
@@ -1182,7 +1186,10 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         productionLoop,
         productionControlsAvailable,
         goalMode: options.goalMode === true,
-        writeTokenLimitRecovery: new PiWriteTokenLimitRecovery(resolvedModel.maxOutputTokens),
+        writeTokenLimitRecovery: new PiWriteTokenLimitRecovery(resolvedModel.maxOutputTokens, {
+          onBudgetExhausted: () => this.reportTruncatedFileMutation(sessionId, active),
+        }),
+        stallWatchdog: null,
         pendingError: null,
         workbenchRunId,
         workbenchContract,
@@ -1196,6 +1203,30 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         mcpToolManifestGeneration: this.mcpToolManifestGeneration,
       };
       activeSession = active;
+
+      // Only model-waiting time counts: tool execution, a pending approval, or a
+      // question waiting on the user all suspend the watchdog.
+      const stallHandlers = createPiTurnStallHandlers({
+        isReportable: () => !active.aborted && !active.turnFailed && !active.pendingError,
+        hasPendingError: () => active.pendingError !== null,
+        reportTimeout: classified => {
+          active.pendingError = { message: classified.message, classified, sticky: true };
+          active.turnFailed = true;
+        },
+        abortTurn: () => {
+          active.piSession.abortBash();
+          void active.piSession.abort().catch((error: unknown) => {
+            console.warn('[PiRuntime] failed to abort a stalled turn:', error);
+          });
+        },
+        surfaceUnsettled: () => this.flushPendingError(sessionId, active),
+      });
+      active.stallWatchdog = new PiTurnStallWatchdog({
+        isRunning: () => this.activeSessions.get(sessionId) === active && active.isRunning,
+        isSuspended: () => active.toolStartedAtByCallId.size > 0,
+        onStall: stallHandlers.onStall,
+        onUnsettled: stallHandlers.onUnsettled,
+      });
 
       // Subscribe to Pi events before sending the prompt
       active.unsubscribe = session.subscribe(event => {
@@ -1635,7 +1666,12 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         workflowKind: active.workbenchContract.kind,
         harnessVersion: HarnessVersion,
       };
-      active.writeTokenLimitRecovery = new PiWriteTokenLimitRecovery(resolvedModel.maxOutputTokens);
+      active.writeTokenLimitRecovery = new PiWriteTokenLimitRecovery(
+        resolvedModel.maxOutputTokens,
+        {
+          onBudgetExhausted: () => this.reportTruncatedFileMutation(sessionId, active),
+        },
+      );
       if (active.resourceState.maxOutputTokens !== resolvedModel.maxOutputTokens) {
         active.resourceState.maxOutputTokens = resolvedModel.maxOutputTokens;
         await active.piSession.reload();
@@ -1837,7 +1873,10 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
   }
 
   hasRunningSessions(): boolean {
-    return this.initializingSessions.size > 0 || [...this.activeSessions.values()].some(session => session.isRunning && !session.aborted);
+    return (
+      this.initializingSessions.size > 0 ||
+      [...this.activeSessions.values()].some(session => session.isRunning && !session.aborted)
+    );
   }
 
   isSessionRunning(sessionId: string): boolean {
@@ -2361,13 +2400,18 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         event.message?.stopReason ? `stopReason=${event.message.stopReason}` : '',
       );
     }
+    // Any event is progress; the watchdog only fires on genuine silence.
+    active.stallWatchdog?.noteActivity();
     switch (event.type) {
       case 'agent_start':
         active.isRunning = true;
+        active.stallWatchdog?.arm();
         break;
 
       case 'turn_start':
         active.isRunning = true;
+        // Each turn is one model request; the duration limit restarts here.
+        active.stallWatchdog?.arm();
         active.toolStartedAtByCallId.clear();
         active.preparingToolCallIdByContentIndex.clear();
         {
@@ -2462,15 +2506,23 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             // Persisting/emitting here would produce one error bubble per failed
             // attempt — flushPendingError surfaces the error exactly once when
             // the run settles (auto_retry_end / agent_settled).
-            active.pendingError = { message: errMsg, classified: classifyCoworkError(errMsg) };
+            active.pendingError = {
+              message: errMsg,
+              classified: classifyCoworkError(errMsg),
+              sticky: false,
+            };
             active.turnFailed = true;
             return;
           }
 
           // A successful assistant message after failed attempts means the retry
-          // recovered — drop the deferred error so it is never surfaced.
-          active.pendingError = null;
-          active.turnFailed = false;
+          // recovered — drop the deferred error so it is never surfaced. Errors
+          // the runtime recorded itself are sticky: Pi reports those turns as a
+          // plain aborted or truncated turn, which must not erase them.
+          if (!active.pendingError?.sticky) {
+            active.pendingError = null;
+            active.turnFailed = false;
+          }
 
           const { text, thinking } = active.streamAccumulator.reconcile(event.message);
           const finalThinking = thinking || active.thinkingText;
@@ -2774,6 +2826,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           active.pendingError = {
             message: event.finalError,
             classified: classifyCoworkError(event.finalError),
+            sticky: false,
           };
         }
         this.flushPendingError(sessionId, active);
@@ -2834,6 +2887,32 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     }
     this.emit('message', sessionId, errorMessage);
     this.emit('error', sessionId, pending.classified);
+  }
+
+  /**
+   * Report a file mutation payload that was truncated after the chunked-write
+   * guidance budget was spent, so nothing will steer the model back to a payload
+   * the tool can execute.
+   *
+   * The turn is not aborted, because Pi has already stopped retrying the full
+   * payload: the run ends on its own, and the deferred error makes that end a
+   * visible failure instead of a silent no-op. flushPendingError surfaces it
+   * once the run settles.
+   */
+  private reportTruncatedFileMutation(sessionId: string, active: ActivePiSession): void {
+    if (active.aborted || active.turnFailed || active.pendingError) return;
+
+    const message =
+      'A built-in file mutation payload was truncated and the chunked-write guidance budget is exhausted.';
+    console.warn(
+      `[PiRuntime] session ${sessionId} file mutation payload was truncated and the chunked-write guidance budget is exhausted.`,
+    );
+    active.pendingError = {
+      message,
+      classified: makeCoworkError(CoworkErrorKind.FileWriteTruncated, message),
+      sticky: true,
+    };
+    active.turnFailed = true;
   }
 
   // ── Private: assistant message lifecycle ──
@@ -3734,8 +3813,7 @@ async function resolvePiModel(
     existingModelRuntime,
   );
   const modelRuntime = customRuntime.modelRuntime;
-  const customModel =
-    customRuntime.customModel ?? buildPiCustomModel(resolution);
+  const customModel = customRuntime.customModel ?? buildPiCustomModel(resolution);
   const registeredModel = modelRuntime?.getModel(
     resolution.providerMetadata.providerName,
     resolution.config.model,

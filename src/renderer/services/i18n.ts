@@ -2127,6 +2127,12 @@ const translations: Record<LanguageType, Record<string, string>> = {
     coworkErrorRateLimit: '请求过于频繁，请稍后再试。',
     coworkErrorContentFiltered: '内容未通过安全审核，请修改后重试。',
     coworkErrorServerError: '服务端出现错误，请稍后重试。',
+    coworkErrorStreamInterrupted: '与模型的连接中断，本次任务已停止。请重试。',
+    coworkErrorFileWriteTruncated: '文件内容被截断，未能完整写入。请让模型分块写入或减少单次写入长度。',
+    coworkErrorTurnTimeout: '模型长时间没有响应，本次任务已中断。请重试，或减少同时运行的任务数。',
+    coworkErrorToolTimeout: '工具执行超时，已中断该步骤。',
+    coworkErrorToolPermissionDenied: '该操作未获授权，已跳过。',
+    coworkErrorMaxIterations: '任务步骤过多，已停止。请把任务拆小后重试。',
     coworkErrorSessionStartFailed: '会话启动失败：{error}',
     coworkErrorSessionContinueFailed: '发送消息失败：{error}',
     chatAgentWorkingDirectoryRequired:
@@ -5607,6 +5613,16 @@ const translations: Record<LanguageType, Record<string, string>> = {
     coworkErrorContentFiltered:
       'Content did not pass the safety review. Please modify and try again.',
     coworkErrorServerError: 'Server error occurred. Please try again later.',
+    coworkErrorStreamInterrupted:
+      'The connection to the model was interrupted, so the task stopped. Please retry.',
+    coworkErrorFileWriteTruncated:
+      'A file payload was truncated and was not written completely. Write smaller chunks and retry.',
+    coworkErrorTurnTimeout:
+      'The model stopped responding, so this task was interrupted. Please retry, or run fewer tasks at the same time.',
+    coworkErrorToolTimeout: 'A tool call timed out and that step was stopped.',
+    coworkErrorToolPermissionDenied: 'That action was not approved and was skipped.',
+    coworkErrorMaxIterations:
+      'The task used too many steps and was stopped. Please split it into smaller tasks and retry.',
     coworkErrorSessionStartFailed: 'Failed to start session: {error}',
     coworkErrorSessionContinueFailed: 'Failed to send message: {error}',
     chatAgentWorkingDirectoryRequired:

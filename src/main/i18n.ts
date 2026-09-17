@@ -131,6 +131,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     imErrorTransient: 'AI 助手暂时不可用 ({error})，正在自动恢复中，请稍后重试。',
     imErrorContentFiltered: '消息内容未通过安全审核，请修改后重试。',
     imErrorInputTooLong: '消息内容过长，请精简后重试。',
+    imErrorStreamInterrupted: '与模型的连接中断，本次任务已停止。请重试。',
+    imErrorFileWriteTruncated: '文件内容被截断，未能完整写入。请减少单次写入内容后重试。',
     imErrorExecutionLimit: '任务执行超时或达到上限，请简化需求后重试。',
     imErrorUnknown: '处理消息时遇到错误: {error}。请稍后重试。',
 
@@ -457,6 +459,10 @@ const translations: Record<LanguageType, Record<string, string>> = {
     imErrorContentFiltered:
       'Message content did not pass safety review. Please revise and try again.',
     imErrorInputTooLong: 'Message content too long. Please shorten and try again.',
+    imErrorStreamInterrupted:
+      'The connection to the model was interrupted. The task stopped, please retry.',
+    imErrorFileWriteTruncated:
+      'The file payload was truncated and was not written completely. Send less content per write.',
     imErrorExecutionLimit: 'Task timed out or reached limit. Please simplify and try again.',
     imErrorUnknown: 'Error processing message: {error}. Please try again.',
 
