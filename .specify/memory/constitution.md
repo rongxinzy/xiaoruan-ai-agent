@@ -39,7 +39,7 @@ Follow-up TODOs:
 MUST 在交付时逐项盘点并说明。
 
 ### III. 质量验证优先 (NON-NEGOTIABLE)
-
+每次修改代码之后要检验下是否有冗余代码，如有冗余代码则要进行剔除；
 提交代码前 MUST 通过本地质量门禁：`npm run lint`（oxlint + 主题检查/审计）与 `npm test`。
 改动主题或品牌资源后 MUST 运行 `bun run theme:generate` 并通过 `theme:check` 与
 `theme:audit`。涉及渲染器打包体积的改动 MUST 满足 bundle budget 检查
@@ -101,5 +101,6 @@ stable 清单或更新 feed。每次交付 MUST 可追溯：对象键包含源�
 - 所有 PR 与代码审查 MUST 核对是否符合 Core Principles；无法判定的边界问题在 PR 中
   显式列出，不默认放行。
 - 运行时开发指引以 README 与 CUSTOMIZATION.md 为准；本文只承载治理规则。
+
 
 **Version**: 1.0.0 | **Ratified**: 2026-09-16 | **Last Amended**: 2026-09-16

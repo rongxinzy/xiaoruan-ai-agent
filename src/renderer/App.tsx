@@ -133,6 +133,8 @@ const App: React.FC = () => {
   const [localInferenceRefreshRequestId, setLocalInferenceRefreshRequestId] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
   const [bootScreenVisible, setBootScreenVisible] = useState(true);
+  // 2026/09/17 lixiang  测试阶段常驻粒子启动屏，测完将 previewParticleBoot 改回 false
+  const previewParticleBoot = false;
   const [initError, setInitError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isToastError, setIsToastError] = useState(false);
@@ -803,13 +805,16 @@ const App: React.FC = () => {
     </div>
   ) : null;
 
-  if (bootScreenVisible) {
+  // 2026/09/17 lixiang  预览模式下强制展示粒子启动屏且不自动退出
+  if (bootScreenVisible || previewParticleBoot) {
     return (
       <div className="h-screen overflow-hidden flex flex-col">
         {windowsStandaloneTitleBar}
         <BrandBootScreen
-          exiting={isInitialized}
-          onExitComplete={() => setBootScreenVisible(false)}
+          exiting={previewParticleBoot ? false : isInitialized}
+          onExitComplete={() => {
+            if (!previewParticleBoot) setBootScreenVisible(false);
+          }}
         />
       </div>
     );
