@@ -45,8 +45,12 @@ function clearStream(requestId: string): void {
   streamListeners.delete(requestId);
 }
 
-/** Vite DEV：请求在页面发起，会出现在调试器 Network。 */
+/** Vite DEV + Electron 渲染进程：页面 fetch，DevTools Network 可见。Vitest 仍走 IPC mock。 */
 export function shouldExposeApiInDevtoolsNetwork(): boolean {
+  // 2026/09/17 lixiang  单测里 DEV=true，但不能走真实 page fetch，否则会绕过 electron.api mock
+  if (import.meta.env.MODE === 'test' || import.meta.env.VITEST) {
+    return false;
+  }
   return import.meta.env.DEV === true;
 }
 
