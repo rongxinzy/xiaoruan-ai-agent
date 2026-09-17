@@ -6081,7 +6081,16 @@ if (!gotTheLock) {
       `[api:fetch] ${options.method} ${options.url}, headers: ${serializeForLog(options.headers)}, body: ${options.body}`,
     );
 
-    const doFetch = async (headers: Record<string, string>) => {
+    type ApiFetchResult = {
+      ok: boolean;
+      status: number;
+      statusText: string;
+      headers: Record<string, string>;
+      data: string | object | null;
+      error?: string;
+    };
+
+    const doFetch = async (headers: Record<string, string>): Promise<ApiFetchResult> => {
       const response = await session.defaultSession.fetch(options.url, {
         method: options.method,
         headers,
@@ -6118,7 +6127,7 @@ if (!gotTheLock) {
       getRequestBody: () => truncateNetworkBody(options.body),
       getResponseBody: result =>
         truncateNetworkBody(result.error ?? result.data ?? result.statusText),
-      run: async () => {
+      run: async (): Promise<ApiFetchResult> => {
         try {
           let result = await doFetch(options.headers);
           console.log(
