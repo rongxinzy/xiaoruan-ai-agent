@@ -16,6 +16,11 @@ export type LanguageType = 'zh' | 'en';
 
 const translations: Record<LanguageType, Record<string, string>> = {
   zh: {
+    workbenchDeliveryHashFailed: '最终交付物内容校验失败。',
+    workbenchDeliveryMissing: '尚未声明最终交付物；临时文件和执行脚本不能作为最终交付。',
+    workbenchDeliveryNotReady: '结果尚未达到交付条件，不能人工验收。',
+    workbenchDeliverablesRequireAcceptance: '有 {count} 个最终交付物需要人工验收。',
+    workbenchArtifactCollectionFailed: '交付物采集失败，结果暂不能验收。',
     aisphereMissingModel: '所选模型不在当前 AISphere 平台列表中，请刷新后重新选择。',
     aisphereUnavailable: '无法连接 AISphere 平台，请检查平台地址和网络后重试。',
     aisphereBusy: '请先停止正在运行的任务，再切换 AISphere地址。',
@@ -314,6 +319,13 @@ const translations: Record<LanguageType, Record<string, string>> = {
     'enterprise.updateBlocked': '版本更新由企业统一管理',
   },
   en: {
+    workbenchDeliveryHashFailed: 'Final deliverable content verification failed.',
+    workbenchDeliveryMissing:
+      'No final deliverable was declared. Temporary files and execution scripts are not final outputs.',
+    workbenchDeliveryNotReady: 'The result is not ready for delivery and cannot be accepted.',
+    workbenchDeliverablesRequireAcceptance: '{count} final deliverable(s) require user acceptance.',
+    workbenchArtifactCollectionFailed:
+      'Artifact collection failed; the result cannot be accepted yet.',
     aisphereMissingModel: 'The selected model is not available on AISphere. Refresh and select a platform model.',
     aisphereUnavailable: 'Cannot connect to AISphere. Check the platform address and network, then retry.',
     aisphereBusy: 'Stop running tasks before switching the AISphere address.',
