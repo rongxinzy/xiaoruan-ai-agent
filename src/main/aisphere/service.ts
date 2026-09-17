@@ -176,13 +176,16 @@ export class AISphereService {
 
   async connect(input: unknown): Promise<AISphereSnapshot> {
     const address = normalizePlatformAddress(input);
-    if (this.changing || this.active || this.busy()) throw new Error(AISphereError.Busy);
+    // 2026/09/17 lixiang  仅「换地址」受运行中任务拦截；同地址重新获取模型允许
+    const switching = address !== this.address;
+    if (this.changing || (switching && (this.active > 0 || this.busy()))) {
+      throw new Error(AISphereError.Busy);
+    }
     this.changing = true;
     try {
       await this.pending?.catch((): void => {});
       const models = await this.discover(address);
-      if (this.active || this.busy()) throw new Error(AISphereError.Busy);
-      const switching = address !== this.address;
+      if (switching && (this.active > 0 || this.busy())) throw new Error(AISphereError.Busy);
       this.store?.set(AISphere.StoreKey, address);
       if (switching) this.gatewayToken = randomBytes(32).toString('hex');
       this.address = address;
