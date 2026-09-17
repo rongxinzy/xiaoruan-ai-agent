@@ -61,6 +61,44 @@ const hoisted = vi.hoisted(() => {
     content: [{ type: 'text', text: 'Hello from Pi' }],
     stopReason: 'stop',
   });
+  const mockBuiltinToolExecute = vi.fn().mockResolvedValue({ content: [], details: undefined });
+  const mockCreateWriteTool = vi.fn(() => ({
+    name: 'write',
+    parameters: {
+      type: 'object',
+      properties: { path: { type: 'string' }, content: { type: 'string' } },
+    },
+    execute: mockBuiltinToolExecute,
+  }));
+  const mockCreateEditTool = vi.fn(() => ({
+    name: 'edit',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        edits: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { oldText: { type: 'string' }, newText: { type: 'string' } },
+          },
+        },
+      },
+    },
+    execute: mockBuiltinToolExecute,
+  }));
+  const mockCreateReadTool = vi.fn(() => ({
+    name: 'read',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        offset: { type: 'number' },
+        limit: { type: 'number' },
+      },
+    },
+    execute: mockBuiltinToolExecute,
+  }));
 
   return {
     mockSession,
@@ -74,6 +112,9 @@ const hoisted = vi.hoisted(() => {
     mockGetAgentDir: vi.fn(() => '/tmp/pi-agent'),
     mockApplyApplicationRuntimeEnv: vi.fn(),
     mockCompleteSimple,
+    mockCreateWriteTool,
+    mockCreateEditTool,
+    mockCreateReadTool,
     mockGetModel: vi.fn((provider: string, modelId: string) => ({
       provider,
       id: modelId,
@@ -206,6 +247,9 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
     inMemory: hoisted.mockSettingsManagerInMemory,
   },
   getAgentDir: hoisted.mockGetAgentDir,
+  createWriteTool: hoisted.mockCreateWriteTool,
+  createEditTool: hoisted.mockCreateEditTool,
+  createReadTool: hoisted.mockCreateReadTool,
   ModelRuntime: {
     create: hoisted.mockModelRuntimeCreate,
   },
@@ -1963,7 +2007,7 @@ describe('PiRuntimeAdapter', () => {
         appendSystemPromptOverride: () => string[];
       };
       expect(loaderOptions.appendSystemPromptOverride()).toEqual(
-        expect.arrayContaining([expect.stringContaining('8000 characters')]),
+        expect.arrayContaining([expect.stringContaining('4000 characters')]),
       );
     });
 
@@ -2575,7 +2619,34 @@ describe('PiRuntimeAdapter', () => {
       });
 
       expect(mockSession.steer).toHaveBeenCalledOnce();
-      expect(mockSession.steer).toHaveBeenCalledWith(expect.stringContaining('2048 characters'));
+      expect(mockSession.steer).toHaveBeenCalledWith(expect.stringContaining('2000 characters'));
+    });
+
+    it('should steer an interrupted built-in write into the smaller recovery chunk', async () => {
+      await adapter.startSession('test', 'Write a large file');
+
+      listener!({
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          stopReason: PiAssistantStopReason.Error,
+          errorMessage: 'Stream ended without finish_reason',
+          content: [
+            {
+              type: PiContentBlockType.ToolCall,
+              id: 'write-1',
+              name: PiBuiltinFileToolName.Write,
+              arguments: { path: 'large.md' },
+            },
+          ],
+        },
+      });
+
+      expect(mockSession.steer).toHaveBeenCalledOnce();
+      expect(mockSession.steer).toHaveBeenCalledWith(
+        expect.stringContaining('interrupted by a transport failure'),
+      );
+      expect(mockSession.steer).toHaveBeenCalledWith(expect.stringContaining('2000 characters'));
     });
 
     it('should mark an answer as final only after the agent run ends', async () => {

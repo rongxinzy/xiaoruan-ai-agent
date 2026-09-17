@@ -19,6 +19,8 @@ const TRANSPORT_ERROR_TEXT_PATTERNS = [
   /socket hang up/i,
   /connection refused/i,
   /connection reset/i,
+  /stream ended without finish_reason/i,
+  /typeerror:\s*terminated/i,
   /timed out/i,
   /certificate/i,
   /tls/i,
