@@ -219,6 +219,7 @@
     "sign": false
   },
   "win": {
+    "signExts": ["!engram.exe"],
     "target": [
       "nsis"
     ],

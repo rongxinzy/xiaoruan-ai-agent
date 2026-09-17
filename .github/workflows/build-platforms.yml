@@ -9,6 +9,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RUNTIME_SIGNER_THUMBPRINT: ${{ vars.RUNTIME_SIGNER_THUMBPRINT }}
 
 jobs:
   build-platforms:
@@ -60,6 +61,10 @@ jobs:
           bun run setup:uv-runtime
           bun run setup:python-runtime
           bun run engram:runtime:win-x64
+      - name: Verify publisher signatures before Windows packaging
+        uses: ./.github/actions/verify-windows-runtime-signatures
+        with:
+          signer-thumbprint: ${{ vars.RUNTIME_SIGNER_THUMBPRINT }}
       - name: Build Windows
         run: bun run dist:win
         env:
