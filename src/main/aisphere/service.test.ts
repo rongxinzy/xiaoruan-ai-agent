@@ -170,6 +170,11 @@ test('active requests and tasks block rebinding, successful switches invalidate 
   acquired.release();
   service.busy = () => true;
   await expect(service.connect('http://other.test')).rejects.toThrow(AISphereError.Busy);
+  // Same-address reconnect is allowed while tasks are running (refresh models).
+  await expect(service.connect('http://platform.test')).resolves.toMatchObject({
+    address: 'http://platform.test',
+    status: AISphereStatus.Ready,
+  });
   service.busy = () => false;
   const oldToken = service.token;
   await service.connect('http://other.test');
