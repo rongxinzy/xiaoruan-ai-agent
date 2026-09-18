@@ -763,7 +763,12 @@ interface IElectronAPI {
       expertIds?: string[];
       permissionMode?: CoworkPermissionMode;
       permissionModeBySession?: Record<string, CoworkPermissionMode>;
-      imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }>;
+      imageAttachments?: Array<{
+        name: string;
+        mimeType: string;
+        base64Data?: string;
+        path?: string;
+      }>;
       fileAttachments?: Array<{ name: string; path: string; extension: string; isImage?: boolean }>;
     }) => Promise<{
       success: boolean;
@@ -780,7 +785,12 @@ interface IElectronAPI {
       productionLoopMode?: ProductionLoopMode;
       expertIds?: string[];
       permissionMode?: CoworkPermissionMode;
-      imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }>;
+      imageAttachments?: Array<{
+        name: string;
+        mimeType: string;
+        base64Data?: string;
+        path?: string;
+      }>;
       fileAttachments?: Array<{ name: string; path: string; extension: string; isImage?: boolean }>;
     }) => Promise<{
       success: boolean;
@@ -794,7 +804,12 @@ interface IElectronAPI {
     enqueuePendingMessage: (options: {
       sessionId: string;
       text: string;
-      imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }>;
+      imageAttachments?: Array<{
+        name: string;
+        mimeType: string;
+        base64Data?: string;
+        path?: string;
+      }>;
       fileAttachments?: Array<{ name: string; path: string; extension: string; isImage?: boolean }>;
       skillIds?: string[];
       skillPrompt?: string;
@@ -835,6 +850,7 @@ interface IElectronAPI {
     }) => Promise<{ success: boolean; session?: CoworkSession | null; error?: string }>;
     getSession: (
       sessionId: string,
+      options?: { messageLimit?: number | null },
     ) => Promise<{ success: boolean; session?: CoworkSession; error?: string }>;
     remoteManaged: (
       sessionId: string,
@@ -933,7 +949,11 @@ interface IElectronAPI {
     onStreamQueueUpdated: (
       callback: (data: { sessionId: string; items: CoworkPendingMessage[] }) => void,
     ) => () => void;
-    onSessionsChanged: (callback: (data: { sessionId?: string }) => void) => () => void;
+    onSessionsChanged: (callback: (data: {
+      sessionId?: string;
+      deletedSessionIds?: string[];
+      agentId?: string;
+    }) => void) => () => void;
   };
   workbenchTask: {
     getCurrent: (sessionId: string) => Promise<WorkbenchTaskActionResult>;

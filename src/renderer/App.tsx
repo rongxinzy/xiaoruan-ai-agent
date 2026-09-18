@@ -70,9 +70,11 @@ interface AppToastOptions {
 
 // Feature areas outside the default cowork view are code-split so they stay
 // out of the initial preload graph (see issue #141).
-const CoworkView = React.lazy(() =>
-  import('./components/cowork').then(module => ({ default: module.CoworkView })),
-);
+const loadCoworkView = () =>
+  import('./components/cowork').then(module => ({ default: module.CoworkView }));
+// Start the default view chunk during the boot animation so first paint isn't waiting on it.
+const coworkViewPromise = loadCoworkView();
+const CoworkView = React.lazy(() => coworkViewPromise);
 const Settings = React.lazy(() => import('./components/Settings'));
 const SkillsView = React.lazy(() =>
   import('./components/skills').then(module => ({ default: module.SkillsView })),
