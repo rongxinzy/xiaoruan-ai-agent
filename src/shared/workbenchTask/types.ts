@@ -174,7 +174,8 @@ export interface WorkbenchTaskResumeInput {
   imageAttachments?: Array<{
     name: string;
     mimeType: string;
-    base64Data: string;
+    base64Data?: string;
+    path?: string;
   }>;
   fileAttachments?: Array<{
     name: string;
