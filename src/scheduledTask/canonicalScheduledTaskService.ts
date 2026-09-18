@@ -1,4 +1,5 @@
 import { CcConnectSchedulerRuntime } from './ccConnectSchedulerRuntime';
+import { recoverScheduledTasksOnStartup } from './scheduledTaskStartupRecovery';
 import { SqliteScheduledTaskStore } from './sqliteScheduledTaskStore';
 import type { ScheduledTaskService } from './scheduledTaskService';
 import type {
@@ -77,6 +78,11 @@ export class CanonicalScheduledTaskService implements ScheduledTaskService {
   /** State is pushed by the sidecar; no runtime polling is needed. */
   startPolling(): void {}
   stopPolling(): void {}
+
+  /** Rebuilds the durable schedule picture once per app launch. */
+  async recoverOnStartup(): Promise<void> {
+    await recoverScheduledTasksOnStartup({ store: this.store, runtime: this.runtime });
+  }
 
   private async projectBestEffort(task: ScheduledTask): Promise<void> {
     try {

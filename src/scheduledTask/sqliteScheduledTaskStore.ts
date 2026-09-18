@@ -2,7 +2,9 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type Database from 'better-sqlite3';
 
+import { t } from '../main/i18n';
 import { DeliveryMode, TaskStatus } from './constants';
+import { computeNextRunAtMs } from './scheduleOccurrences';
 import type {
   ScheduledTask,
   ScheduledTaskDeliveryRecord,
@@ -133,8 +135,9 @@ export class SqliteScheduledTaskStore {
       createdAt: now,
       updatedAt: now,
     });
-    this.insert(task);
-    return task;
+    const persisted = this.withNextRun(task, Date.parse(now));
+    this.insert(persisted);
+    return persisted;
   }
 
   update(id: string, patch: Partial<ScheduledTaskInput>): ScheduledTask {
@@ -149,8 +152,9 @@ export class SqliteScheduledTaskStore {
       ...(triggerDefinitionChanged ? { scheduleVersion: undefined } : {}),
       updatedAt: new Date().toISOString(),
     });
-    this.insert(next);
-    return next;
+    const persisted = this.withNextRun(next, Date.now());
+    this.insert(persisted);
+    return persisted;
   }
 
   remove(id: string): void {
@@ -210,7 +214,8 @@ export class SqliteScheduledTaskStore {
             null,
             null,
           );
-        const state = { ...task.state, runningAtMs: Date.parse(run.startedAt) };
+        const startedAtMs = Date.parse(run.startedAt);
+        const state = { ...this.withNextRun(task, startedAtMs).state, runningAtMs: startedAtMs };
         this.db
           .prepare('UPDATE zhiyuan_scheduled_tasks SET state_json = ?, updated_at = ? WHERE id = ?')
           .run(JSON.stringify(state), run.startedAt, task.id);
@@ -243,13 +248,15 @@ export class SqliteScheduledTaskStore {
         result.error ?? null,
         id,
       );
-    const state = this.get(row.task_id)?.state ?? initialState();
+    const task = this.get(row.task_id);
+    const state = task?.state ?? initialState();
     state.runningAtMs = null;
     state.lastRunAtMs = Date.parse(finishedAt);
     state.lastStatus = result.status;
     state.lastError = result.error ?? null;
     state.lastDurationMs = durationMs;
     state.consecutiveErrors = result.status === TaskStatus.Error ? state.consecutiveErrors + 1 : 0;
+    if (task) state.nextRunAtMs = this.nextRunAtMsOf(task, state, Date.parse(finishedAt));
     this.db
       .prepare('UPDATE zhiyuan_scheduled_tasks SET state_json = ?, updated_at = ? WHERE id = ?')
       .run(JSON.stringify(state), finishedAt, row.task_id);
@@ -295,6 +302,74 @@ export class SqliteScheduledTaskStore {
         )
         .all(taskId) as RunRow[]
     ).map(row => this.runFromRow(row));
+  }
+
+  /** Refreshes the displayed next trigger for every task, once per app launch. */
+  refreshAllNextRunAtMs(nowMs: number = Date.now()): ScheduledTask[] {
+    return this.list().map(task => this.persistNextRun(task, nowMs));
+  }
+
+  /**
+   * Records one summarized `skipped` Run for the boundaries that elapsed while
+   * the app was closed. The gap is identified by its oldest missed boundary, so
+   * a second startup inside the same gap conflicts and is ignored.
+   */
+  recordSkippedRun(input: {
+    taskId: string;
+    firstMissedAtMs: number;
+    missedCount: number;
+    missedCountTruncated: boolean;
+  }): ScheduledTaskRun | null {
+    const task = this.get(input.taskId);
+    if (!task) return null;
+    const now = new Date().toISOString();
+    const skipMessage = t('scheduledTaskSkippedWhileOffline', {
+      count: input.missedCountTruncated ? `${input.missedCount}+` : input.missedCount,
+    });
+    const run: ScheduledTaskRun = {
+      id: randomUUID(),
+      taskId: task.id,
+      sessionId: null,
+      sessionKey: task.sessionKey,
+      status: TaskStatus.Skipped,
+      startedAt: now,
+      finishedAt: now,
+      durationMs: 0,
+      error: skipMessage,
+    };
+    try {
+      this.db.transaction(() => {
+        this.db
+          .prepare(`INSERT INTO zhiyuan_scheduled_task_runs
+        (id, task_id, schedule_version, scheduled_at, session_id, session_key, status, started_at, finished_at, duration_ms, error)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(
+            run.id,
+            run.taskId,
+            task.scheduleVersion ?? '',
+            new Date(input.firstMissedAtMs).toISOString(),
+            run.sessionId,
+            run.sessionKey,
+            run.status,
+            run.startedAt,
+            run.finishedAt,
+            run.durationMs,
+            run.error,
+          );
+        const state: TaskState = {
+          ...this.withNextRun(task, Date.parse(now)).state,
+          lastStatus: TaskStatus.Skipped,
+          lastError: skipMessage,
+        };
+        this.db
+          .prepare('UPDATE zhiyuan_scheduled_tasks SET state_json = ?, updated_at = ? WHERE id = ?')
+          .run(JSON.stringify(state), now, task.id);
+      })();
+    } catch (error) {
+      if (String(error).includes('UNIQUE constraint failed')) return null;
+      throw error;
+    }
+    return run;
   }
 
   createDelivery(
@@ -391,12 +466,46 @@ export class SqliteScheduledTaskStore {
           lastDurationMs: durationMs,
           consecutiveErrors: task.state.consecutiveErrors + 1,
         };
+        state.nextRunAtMs = this.nextRunAtMsOf(task, state, Date.parse(finishedAt));
         this.db
           .prepare('UPDATE zhiyuan_scheduled_tasks SET state_json = ?, updated_at = ? WHERE id = ?')
           .run(JSON.stringify(state), finishedAt, task.id);
       }
     }
     return rows.length;
+  }
+
+  private withNextRun(task: ScheduledTask, nowMs: number): ScheduledTask {
+    return {
+      ...task,
+      state: { ...task.state, nextRunAtMs: this.nextRunAtMsOf(task, task.state, nowMs) },
+    };
+  }
+
+  /** Writes the refreshed next trigger, but only when it actually changed. */
+  private persistNextRun(task: ScheduledTask, nowMs: number): ScheduledTask {
+    const next = this.withNextRun(task, nowMs);
+    if (next.state.nextRunAtMs === task.state.nextRunAtMs) return next;
+    this.db
+      .prepare('UPDATE zhiyuan_scheduled_tasks SET state_json = ?, updated_at = ? WHERE id = ?')
+      .run(JSON.stringify(next.state), new Date(nowMs).toISOString(), task.id);
+    return next;
+  }
+
+  /**
+   * `cron` and `at` are wall-clock definitions, so the current time and the last
+   * recorded run fully decide the next trigger. `every` is only estimated: the
+   * sidecar re-anchors that kind on every registration.
+   */
+  private nextRunAtMsOf(task: ScheduledTask, state: TaskState, nowMs: number): number | null {
+    const createdAtMs = Date.parse(task.createdAt);
+    return computeNextRunAtMs({
+      schedule: task.schedule,
+      enabled: task.enabled,
+      nowMs,
+      lastRunAtMs: state.lastRunAtMs,
+      createdAtMs: Number.isFinite(createdAtMs) ? createdAtMs : nowMs,
+    });
   }
 
   private insert(task: ScheduledTask): void {

@@ -24,7 +24,7 @@ import type {
 import { cn } from '@shared/lib/utils';
 import { i18nService } from '../../services/i18n';
 import { scheduledTaskService } from '../../services/scheduledTask';
-import { RootState, store } from '../../store';
+import { RootState } from '../../store';
 import DateInput from './DateInput';
 import FailureDetailModal from './FailureDetailModal';
 import RunSessionModal from './RunSessionModal';
@@ -112,13 +112,10 @@ const AllRunsHistory: React.FC<AllRunsHistoryProps> = ({ task, showRunning = tru
 
   useEffect(() => {
     setFilter(EMPTY_FILTER);
-    // Cache-aware: switching tabs remounts this panel; skip the refetch when
-    // the store already holds runs so tab switches stay instant.
-    const state = store.getState().scheduledTask;
-    const hasCached = taskId ? (state.runs[taskId]?.length ?? 0) > 0 : state.allRuns.length > 0;
-    if (!hasCached) {
-      loadInitial(EMPTY_FILTER);
-    }
+    // Always revalidate: this panel remounts on tab switches and can therefore
+    // miss runs that completed while it was unmounted. Cached rows stay visible
+    // until the fetch resolves, so revalidating costs no layout shift.
+    void loadInitial(EMPTY_FILTER);
   }, [loadInitial, taskId]);
 
   const handleFilterChange = (newFilter: RunFilter) => {

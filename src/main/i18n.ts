@@ -27,6 +27,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     aisphereUnavailable: '无法连接 AISphere 平台，请检查平台地址和网络后重试。',
     aisphereBusy: '请先停止正在运行的任务，再切换 AISphere地址。',
     scheduledTaskDeliveryAccountMismatch: '频道账号与所选会话不匹配',
+    scheduledTaskSkippedWhileOffline: '应用离线期间跳过 {count} 次',
     todoReminderTitle: '待办提醒',
     todoReminderBody: '该完成：{title}',
     // Tray menu
@@ -339,6 +340,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     todoReminderBody: 'Due now: {title}',
     scheduledTaskDeliveryAccountMismatch:
       'The channel account does not match the selected conversation',
+    scheduledTaskSkippedWhileOffline: 'Skipped {count} run(s) while the app was offline',
     // Tray menu
     trayShowWindow: 'Open 晓软智能体',
     trayNewTask: 'New Task',

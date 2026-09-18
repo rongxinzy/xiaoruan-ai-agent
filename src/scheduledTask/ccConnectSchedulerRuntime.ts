@@ -1,11 +1,11 @@
-import { TaskStatus } from './constants';
+import { PayloadKind, TaskStatus } from './constants';
 import { ActivitySource, ActivityStatus } from '../shared/activity/constants';
 import type { ActivityService } from '../main/activity/activityService';
 import { SchedulerClockAccount, type CcConnectCronTask } from './ccConnectCronClient';
 import type { ScheduledTaskDeliveryDispatcher } from './deliveryDispatcher';
-import type { SchedulerRuntime } from './schedulerRuntime';
+import type { SchedulerNotifier, SchedulerRuntime } from './schedulerRuntime';
 import { SqliteScheduledTaskStore } from './sqliteScheduledTaskStore';
-import type { ScheduledTask, ScheduledTaskRun } from './types';
+import type { ScheduledTask, ScheduledTaskPayload, ScheduledTaskRun } from './types';
 
 type TriggerClient = {
   upsert(task: CcConnectCronTask): Promise<void>;
@@ -23,6 +23,7 @@ export class CcConnectSchedulerRuntime implements SchedulerRuntime {
     private readonly execute: (task: ScheduledTask, run: ScheduledTaskRun) => Promise<{ sessionId?: string | null; output?: string | null }>,
     private readonly deliveryDispatcher?: ScheduledTaskDeliveryDispatcher,
     private readonly activityService?: ActivityService,
+    private readonly notifier?: SchedulerNotifier,
   ) {}
 
   async reconcile(tasks: readonly ScheduledTask[]): Promise<void> {
@@ -61,6 +62,23 @@ export class CcConnectSchedulerRuntime implements SchedulerRuntime {
       scheduledAt: `${new Date().toISOString()}:manual:${crypto.randomUUID()}`,
     });
     if (!run) throw new Error(`Unable to claim scheduled task: ${taskId}`);
+    this.publishClaim(task, run);
+    await this.executeAndFinish(task, run);
+  }
+
+  /**
+   * Runs one boundary that elapsed while the app was not running. It goes
+   * through the ordinary claim path so a late sidecar trigger for the same
+   * instant is still rejected as a duplicate.
+   */
+  async runCatchUp(task: ScheduledTask, scheduledAt: string): Promise<void> {
+    const run = this.store.claimTrigger({
+      taskId: task.id,
+      scheduleVersion: task.scheduleVersion ?? '',
+      scheduledAt,
+    });
+    if (!run) return;
+    this.publishClaim(task, run);
     await this.executeAndFinish(task, run);
   }
 
@@ -71,6 +89,7 @@ export class CcConnectSchedulerRuntime implements SchedulerRuntime {
     if (!Number.isFinite(scheduledAtMs)) return;
     const run = this.store.claimTrigger({ ...input, scheduledAt: new Date(scheduledAtMs).toISOString() });
     if (!run) return; // disabled/stale/duplicate triggers are intentionally harmless.
+    this.publishClaim(task, run);
     await this.executeAndFinish(task, run);
   }
 
@@ -79,6 +98,8 @@ export class CcConnectSchedulerRuntime implements SchedulerRuntime {
     try {
       const result = await this.execute(task, run);
       const completedRun = this.store.finishRun(run.id, { status: TaskStatus.Success, sessionId: result.sessionId ?? null });
+      this.publishRun(task, completedRun);
+      this.publishState(task.id);
       this.activityService?.upsertBestEffort({ id: run.id, source: ActivitySource.ScheduledTask, status: ActivityStatus.Completed, taskName: task.name, sessionId: result.sessionId ?? undefined, replyPreview: result.output ?? undefined });
       // Delivery is independently durable and best effort: a channel failure
       // must not turn a Pi-successful Run into an execution failure.
@@ -89,12 +110,42 @@ export class CcConnectSchedulerRuntime implements SchedulerRuntime {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.store.finishRun(run.id, {
+      const failedRun = this.store.finishRun(run.id, {
         status: TaskStatus.Error,
         error: message,
       });
+      this.publishRun(task, failedRun);
+      this.publishState(task.id);
       this.activityService?.upsertBestEffort({ id: run.id, source: ActivitySource.ScheduledTask, status: ActivityStatus.Failed, taskName: task.name, errorMessage: message });
       throw error;
+    }
+  }
+
+  /** A claimed Run is pushed immediately so the UI shows it as running. */
+  private publishClaim(task: ScheduledTask, run: ScheduledTaskRun): void {
+    this.publishRun(task, run);
+    this.publishState(task.id);
+  }
+
+  private publishRun(task: ScheduledTask, run: ScheduledTaskRun): void {
+    if (!this.notifier) return;
+    try {
+      this.notifier.runUpdated({
+        run: { ...run, taskName: task.name, taskPayload: payloadText(task.payload) },
+      });
+    } catch (error) {
+      console.warn(`[Scheduler] failed to push run ${run.id} to the renderer:`, error);
+    }
+  }
+
+  private publishState(taskId: string): void {
+    if (!this.notifier) return;
+    const state = this.store.get(taskId)?.state;
+    if (!state) return;
+    try {
+      this.notifier.statusUpdated({ taskId, state });
+    } catch (error) {
+      console.warn(`[Scheduler] failed to push task state for ${taskId}:`, error);
     }
   }
 
@@ -106,4 +157,8 @@ export class CcConnectSchedulerRuntime implements SchedulerRuntime {
       if (!String(error).includes('HTTP 404')) throw error;
     }
   }
+}
+
+function payloadText(payload: ScheduledTaskPayload): string {
+  return payload.kind === PayloadKind.AgentTurn ? payload.message : payload.text;
 }

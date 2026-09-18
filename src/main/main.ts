@@ -36,6 +36,7 @@ import { CcConnectDeliveryTransport } from '../scheduledTask/ccConnectDeliveryTr
 import { ScheduledTaskDeliveryDispatcher } from '../scheduledTask/deliveryDispatcher';
 import { PiScheduledTaskExecutor } from '../scheduledTask/piScheduledTaskExecutor';
 import { SqliteScheduledTaskStore } from '../scheduledTask/sqliteScheduledTaskStore';
+import { broadcastScheduledTaskRun, broadcastScheduledTaskState } from './scheduledTaskBroadcast';
 import { ActivityService } from './activity/activityService';
 import { registerActivityIpcHandlers } from './activity/ipcHandlers';
 import { ActivitySource, ActivityStatus } from '../shared/activity/constants';
@@ -1214,6 +1215,10 @@ const getPiRuntimeAdapter = (): PiRuntimeAdapter => {
     console.log('[PiRuntime] Late-injecting mcpServerManager (was null at init)');
     piRuntimeAdapter.setMcpServerManager(mcpServerManager);
   }
+  // Startup recovery may create the canonical scheduler before this adapter.
+  if (canonicalScheduledTaskService) {
+    piRuntimeAdapter.setScheduledTaskService(canonicalScheduledTaskService);
+  }
   return piRuntimeAdapter;
 };
 let skillManager: SkillManager | null = null;
@@ -1292,6 +1297,7 @@ const getCanonicalScheduledTaskService = (): CanonicalScheduledTaskService => {
       executor.execute.bind(executor),
       new ScheduledTaskDeliveryDispatcher(taskStore, ccConnectDeliveryTransport),
       activityService,
+      { runUpdated: broadcastScheduledTaskRun, statusUpdated: broadcastScheduledTaskState },
     );
     canonicalScheduledTaskService = new CanonicalScheduledTaskService(
       taskStore,
@@ -6964,6 +6970,13 @@ if (!gotTheLock) {
     if (recoveredScheduledRuns > 0) {
       console.warn(`[Scheduler] marked ${recoveredScheduledRuns} interrupted Run(s) as failed`);
     }
+    // Closing the app discards sidecar triggers. Replay the newest missed
+    // boundary and summarize the rest so a restart cannot hide skipped work.
+    void getCanonicalScheduledTaskService()
+      .recoverOnStartup()
+      .catch(error => {
+        console.error('[Scheduler] startup schedule recovery failed:', error);
+      });
     const recoveredWorkbenchTasks = getWorkbenchTaskService().recoverInterruptedState();
     if (recoveredWorkbenchTasks > 0) {
       console.log(
