@@ -13,8 +13,9 @@ type Phase = (typeof Phase)[keyof typeof Phase];
 
 const MAX_PARTICLES = 4200;
 const ALPHA_THRESHOLD = 140;
-const MIN_TOTAL_MS = 2400;
-const DISPERSE_DURATION_MS = 750;
+// Hold only long enough for particles to land; init is usually done well before this.
+const MIN_TOTAL_MS = 1100;
+const DISPERSE_DURATION_MS = 480;
 const FADE_IN_MS = 420;
 const LOGO_WIDTH_RATIO = 0.42;
 const LOGO_WIDTH_MAX_PX = 440;
