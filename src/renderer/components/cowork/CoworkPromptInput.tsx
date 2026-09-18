@@ -21,9 +21,7 @@ import {
   ProductionLoopMode,
   type ProductionLoopMode as ProductionLoopModeValue,
 } from '../../../shared/productionLoop';
-import { agentService } from '../../services/agent';
 import { configService } from '../../services/config';
-import { coworkService } from '../../services/cowork';
 import { i18nService } from '../../services/i18n';
 import { skillService } from '../../services/skill';
 import { RootState } from '../../store';
@@ -35,25 +33,13 @@ import {
   type DraftAttachment,
   setDraftAttachments,
   setDraftPrompt,
-  updateCurrentSessionModelOverride,
 } from '../../store/slices/coworkSlice';
 import { clearSelection } from '../../store/slices/quickActionSlice';
-import {
-  type Model,
-  setDefaultSelectedModel,
-  setSelectedModel,
-} from '../../store/slices/modelSlice';
 import { clearActiveSkills, setSkills } from '../../store/slices/skillSlice';
 import { WorkMode } from '../../store/workMode/constants';
 import { CoworkFileAttachment, CoworkImageAttachment } from '../../types/cowork';
 import { Skill } from '../../types/skill';
-import { toAgentModelRef } from '../../utils/agentModelRef';
 import ActiveMcpBadge from '../mcp/ActiveMcpBadge';
-import {
-  resolveAgentModelSelection,
-  resolveEffectiveModel,
-  useAgentSelectedModel,
-} from './agentModelSelection';
 import ActiveExpertBadge from './ActiveExpertBadge';
 import { CoworkInlineAttachments } from './CoworkInlineAttachments';
 import { ContextUsageIndicator } from './ContextUsageIndicator';
@@ -65,7 +51,7 @@ import { LocalThinkingToggle } from './LocalThinkingToggle';
 import PermissionModeMenu from './PermissionModeMenu';
 import PromptPlusMenu from './PromptPlusMenu';
 import { ResumeTaskContextBadge } from './ResumeTaskContextBadge';
-import { usePersistAgentModelSelection } from './usePersistAgentModelSelection';
+import { useCoworkModelSelection } from './useCoworkModelSelection';
 
 // CoworkAttachment is aliased from the Redux-persisted DraftAttachment type
 // so that attachment state survives view switches (cowork ↔ skills, etc.)
@@ -262,9 +248,6 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
     const agents = useSelector((state: RootState) => state.agent.agents);
     const currentAgent = agents.find(agent => agent.id === currentAgentId);
     const availableModels = useSelector((state: RootState) => state.model.availableModels);
-    const defaultSelectedModel = useSelector(
-      (state: RootState) => state.model.defaultSelectedModel,
-    );
     const currentSession = useSelector((state: RootState) => state.cowork.currentSession);
     const contextMessage = useMemo(
       () =>
@@ -311,7 +294,6 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
     const [isDraggingFiles, setIsDraggingFiles] = useState(false);
     const [isAddingFile, setIsAddingFile] = useState(false);
     const [imageVisionHint, setImageVisionHint] = useState(false);
-    const [isPatchingModel, setIsPatchingModel] = useState(false);
     const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
     const [isCompactToolbar, setIsCompactToolbar] = useState(false);
     const [isTightToolbar, setIsTightToolbar] = useState(false);
@@ -320,7 +302,6 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
     const promptRootRef = useRef<HTMLDivElement>(null);
     const dragDepthRef = useRef(0);
     const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const modelPatchRequestIdRef = useRef(0);
     // 暴露方法给父组件
     React.useImperativeHandle(ref, () => ({
       setValue: (newValue: string) => {
@@ -345,88 +326,18 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
 
     const activeSkillIds = useSelector((state: RootState) => state.skill.activeSkillIds);
     const skills = useSelector((state: RootState) => state.skill.skills);
-    const currentAgentSelectedModel = useAgentSelectedModel(
-      currentAgentId,
-      currentAgent?.model ?? '',
-    );
-    const { isPersistingAgentModel, persistAgentModelSelection } = usePersistAgentModelSelection({
+    const {
+      selectedModel: effectiveSelectedModel,
+      handleModelSelect,
+      validateModelSelection,
+      isPatchingModel,
+    } = useCoworkModelSelection({
+      sessionId,
       agentId: currentAgentId,
+      agentModelRef: currentAgent?.model ?? '',
+      isDirectChat,
       syncDefaultModel: currentAgentId === 'main' || currentAgent?.isDefault === true,
     });
-
-    const {
-      selectedModel: agentSelectedModel,
-      hasInvalidExplicitModel: agentModelIsInvalid,
-      hasUnavailableLlamaCppModel,
-    } = resolveAgentModelSelection({
-      sessionModel:
-        currentSession && currentSession.id === sessionId ? currentSession.modelOverride : '',
-      agentModel: currentAgent?.model ?? '',
-      availableModels,
-      fallbackModel: currentAgentSelectedModel,
-    });
-
-    const handleModelSelect = useCallback(
-      async (nextModel: Model) => {
-        if (isPatchingModel || isPersistingAgentModel) return;
-        if (isDirectChat) {
-          dispatch(setDefaultSelectedModel(nextModel));
-          return;
-        }
-        const modelRef = toAgentModelRef(nextModel);
-        // Always update the agent-level model selection so that CoworkView's
-        // currentAgentSelectedModel (used to build ChatChatTransport) reflects
-        // the user's latest choice — even when switching model inside a session.
-        dispatch(setSelectedModel({ agentId: currentAgentId, model: nextModel }));
-        if (sessionId) {
-          const reqId = modelPatchRequestIdRef.current + 1;
-          modelPatchRequestIdRef.current = reqId;
-          const prev = currentSession?.id === sessionId ? currentSession.modelOverride : '';
-          setIsPatchingModel(true);
-          dispatch(updateCurrentSessionModelOverride({ sessionId, modelOverride: modelRef }));
-          try {
-            const ok = await coworkService.updateSessionModel(sessionId, modelRef);
-            if (reqId !== modelPatchRequestIdRef.current) return;
-            if (!ok) {
-              dispatch(updateCurrentSessionModelOverride({ sessionId, modelOverride: prev }));
-              window.dispatchEvent(
-                new CustomEvent('app:showToast', {
-                  detail: i18nService.t('coworkModelSwitchFailed'),
-                }),
-              );
-            } else if (currentAgent && agentModelIsInvalid) {
-              void agentService.updateAgent(currentAgent.id, { model: modelRef });
-            }
-          } catch {
-            if (reqId === modelPatchRequestIdRef.current)
-              dispatch(updateCurrentSessionModelOverride({ sessionId, modelOverride: prev }));
-          } finally {
-            if (reqId === modelPatchRequestIdRef.current) setIsPatchingModel(false);
-          }
-          return;
-        }
-        await persistAgentModelSelection(nextModel);
-      },
-      [
-        isPatchingModel,
-        isPersistingAgentModel,
-        isDirectChat,
-        sessionId,
-        currentSession,
-        currentAgentId,
-        dispatch,
-        currentAgent,
-        agentModelIsInvalid,
-        persistAgentModelSelection,
-      ],
-    );
-
-    const agentEffectiveModel = resolveEffectiveModel({
-      sessionId,
-      agentSelectedModel,
-      globalSelectedModel: currentAgentSelectedModel,
-    });
-    const effectiveSelectedModel = isDirectChat ? defaultSelectedModel : agentEffectiveModel;
     const modelSupportsImage = !!effectiveSelectedModel?.supportsImage;
 
     // Load skills on mount
@@ -490,11 +401,6 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
     }, [workingDirectory]);
 
     useEffect(() => {
-      modelPatchRequestIdRef.current += 1;
-      setIsPatchingModel(false);
-    }, [sessionId]);
-
-    useEffect(() => {
       const element = promptRootRef.current;
       if (!element || typeof ResizeObserver === 'undefined') return;
       const updateCompactState = () => {
@@ -547,14 +453,7 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
         isPatchingModel
       )
         return;
-      if (!isDirectChat && hasUnavailableLlamaCppModel) {
-        window.dispatchEvent(
-          new CustomEvent('app:showToast', {
-            detail: i18nService.t('agentLlamaCppModelNotRunningBlocked'),
-          }),
-        );
-        return;
-      }
+      if (!validateModelSelection()) return;
       setShowFolderRequiredWarning(false);
 
       // Get active skills prompts and combine them
@@ -692,8 +591,7 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
       disabled,
       sessionContextPending,
       isPatchingModel,
-      isDirectChat,
-      hasUnavailableLlamaCppModel,
+      validateModelSelection,
       onSubmit,
       activeSkillIds,
       skills,
