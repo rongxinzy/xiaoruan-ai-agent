@@ -1,11 +1,14 @@
-export const PiFileMutationCharacterLimit = 4000;
+// Bounds Pi's built-in read tool only. Write and edit payload limits were
+// removed: the schema rejects an oversized payload after the model has already
+// generated it, so the limit discarded completed work without preventing the
+// long response it was meant to avoid.
 export const PiReadResultCharacterLimit = 12000;
 export const PiReadLineLimit = 300;
 
 type PiToolParameterSchema = {
   properties?: Record<string, PiToolParameterSchema>;
   items?: PiToolParameterSchema;
-  maxLength?: number;
+  maximum?: number;
   [key: string]: unknown;
 };
 
@@ -20,14 +23,6 @@ export type PiFileMutationToolDefinition = Record<string, unknown> & {
   name: string;
   parameters: PiToolParameterSchema;
   execute: PiToolExecute;
-};
-
-type PiWriteInput = {
-  content?: unknown;
-};
-
-type PiEditInput = {
-  edits?: unknown;
 };
 
 type PiReadInput = {
@@ -54,78 +49,6 @@ const getSchemaProperty = (
     throw new Error(`The built-in tool schema is missing the "${name}" parameter.`);
   }
   return property;
-};
-
-const withMaxLength = (
-  schema: PiToolParameterSchema,
-  maxLength: number,
-): PiToolParameterSchema => ({
-  ...schema,
-  maxLength,
-});
-
-const assertTextWithinLimit = (value: unknown, field: string): void => {
-  if (typeof value !== 'string') {
-    throw new Error(`The "${field}" parameter must be a string.`);
-  }
-  if (value.length > PiFileMutationCharacterLimit) {
-    throw new Error(
-      `The "${field}" parameter is ${value.length} characters; each file mutation chunk must be at most ${PiFileMutationCharacterLimit} characters. Split the change into smaller write or edit calls.`,
-    );
-  }
-};
-
-const assertWriteInputWithinLimit = (params: unknown): void => {
-  const input = params as PiWriteInput;
-  assertTextWithinLimit(input.content, 'content');
-};
-
-const assertEditInputWithinLimit = (params: unknown): void => {
-  const input = params as PiEditInput;
-  if (!Array.isArray(input.edits)) {
-    throw new Error('The "edits" parameter must be an array.');
-  }
-  input.edits.forEach((edit, index) => {
-    const replacement =
-      typeof edit === 'object' && edit !== null
-        ? (edit as { newText?: unknown }).newText
-        : undefined;
-    assertTextWithinLimit(replacement, `edits[${index}].newText`);
-  });
-};
-
-const constrainWriteParameters = (parameters: PiToolParameterSchema): PiToolParameterSchema => ({
-  ...parameters,
-  properties: {
-    ...parameters.properties,
-    content: withMaxLength(getSchemaProperty(parameters, 'content'), PiFileMutationCharacterLimit),
-  },
-});
-
-const constrainEditParameters = (parameters: PiToolParameterSchema): PiToolParameterSchema => {
-  const edits = getSchemaProperty(parameters, 'edits');
-  if (!edits.items) {
-    throw new Error('The built-in edit tool schema is missing edit item parameters.');
-  }
-  return {
-    ...parameters,
-    properties: {
-      ...parameters.properties,
-      edits: {
-        ...edits,
-        items: {
-          ...edits.items,
-          properties: {
-            ...edits.items.properties,
-            newText: withMaxLength(
-              getSchemaProperty(edits.items, 'newText'),
-              PiFileMutationCharacterLimit,
-            ),
-          },
-        },
-      },
-    },
-  };
 };
 
 const constrainReadParameters = (parameters: PiToolParameterSchema): PiToolParameterSchema => ({
@@ -194,41 +117,6 @@ const truncateReadResult = (result: unknown, params: unknown): unknown => {
     ],
   };
 };
-
-const withExecutionLimit = (
-  definition: PiFileMutationToolDefinition,
-  parameters: PiToolParameterSchema,
-  assertInputWithinLimit: (params: unknown) => void,
-): PiFileMutationToolDefinition => ({
-  ...definition,
-  parameters,
-  execute: async (toolCallId, params, signal, onUpdate) => {
-    assertInputWithinLimit(params);
-    return await definition.execute(toolCallId, params, signal, onUpdate);
-  },
-});
-
-/**
- * Re-register Pi's built-in file mutation tools under their original names.
- * The SDK resolves custom tool names after built-ins, so these schemas replace
- * the unbounded built-in schemas while retaining Pi's path validation, atomic
- * writes, diff rendering, and argument compatibility handling.
- */
-export const createPiBoundedFileMutationTools = (tools: {
-  write: PiFileMutationToolDefinition;
-  edit: PiFileMutationToolDefinition;
-}): PiFileMutationToolDefinition[] => [
-  withExecutionLimit(
-    tools.write,
-    constrainWriteParameters(tools.write.parameters),
-    assertWriteInputWithinLimit,
-  ),
-  withExecutionLimit(
-    tools.edit,
-    constrainEditParameters(tools.edit.parameters),
-    assertEditInputWithinLimit,
-  ),
-];
 
 /**
  * Re-register Pi's read tool with a bounded result. The stock tool can return

@@ -1189,8 +1189,13 @@ export class IMCoworkHandler extends EventEmitter {
       case CoworkErrorKind.InputTooLong:
         return t('imErrorInputTooLong');
       case CoworkErrorKind.ToolTimeout:
+      case CoworkErrorKind.TurnTimeout:
       case CoworkErrorKind.MaxIterations:
         return t('imErrorExecutionLimit');
+      case CoworkErrorKind.StreamInterrupted:
+        return t('imErrorStreamInterrupted');
+      case CoworkErrorKind.FileWriteTruncated:
+        return t('imErrorFileWriteTruncated');
       default:
         return t('imErrorUnknown', { error: error.message });
     }

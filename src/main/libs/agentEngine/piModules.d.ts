@@ -38,8 +38,6 @@ declare module '@earendil-works/pi-coding-agent' {
 
   export function getAgentDir(): string;
 
-  export function createWriteTool(cwd: string): Record<string, unknown>;
-  export function createEditTool(cwd: string): Record<string, unknown>;
   export function createReadTool(cwd: string): Record<string, unknown>;
 
   export const ModelRuntime: {
