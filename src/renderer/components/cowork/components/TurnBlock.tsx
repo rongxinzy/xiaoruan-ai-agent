@@ -4,9 +4,9 @@ import {
   ChainOfThoughtHeader,
 } from '@shared/components/ai-elements/chain-of-thought';
 import { ReasoningContent, ReasoningTrigger } from '@shared/components/ai-elements/reasoning';
-import { MessageAction, MessageActions } from '@shared/components/ai-elements/message';
+import { Button } from '@shared/components/ui/button';
 import { Shimmer } from '@shared/components/ai-elements/shimmer';
-import { Info, RotateCcw, SparklesIcon, TriangleAlert, Wrench } from 'lucide-react';
+import { Info, SparklesIcon, TriangleAlert, Wrench } from 'lucide-react';
 import React from 'react';
 
 import { CoworkErrorKind, getUserErrorI18nKey } from '../../../../common/coworkError';
@@ -24,7 +24,12 @@ import {
   isCoworkTerminalErrorMessage,
 } from '../../../services/coworkTerminalError';
 import { ArtifactRole, type Artifact } from '../../../types/artifact';
-import type { CoworkMessage, CoworkMessageMetadata } from '../../../types/cowork';
+import type {
+  CoworkMessage,
+  CoworkMessageMetadata,
+  CoworkPermissionRequest,
+  CoworkPermissionResult,
+} from '../../../types/cowork';
 import ArtifactPreviewCard from '../../artifacts/ArtifactPreviewCard';
 import {
   ExecutionStatusKind,
@@ -37,9 +42,11 @@ import {
 } from '../helpers/executionStatus';
 import type { AssistantTurnItem, ConversationTurn } from '../helpers/messageGrouping';
 import { getToolResultLineCount, getVisibleAssistantItems } from '../helpers/messageGrouping';
+import { findToolGroupForPermission } from '../helpers/toolPermissionMatch';
 import { getThinkingPresentation } from '../helpers/thinkingPresentation';
 import { getToolResultDisplay, hasText } from '../helpers/toolUtils';
 import { AssistantBubble } from './AssistantBubble';
+import { CopyButton } from './CopyButton';
 import { ExpertAvatar } from '../../expert/expertAvatars';
 import { ExecutionSummary } from './ExecutionSummary';
 import { PersistentChainOfThought, PersistentReasoning } from './PersistentCollapsible';
@@ -90,7 +97,12 @@ const TurnBlockComponent: React.FC<{
   toolActivities?: CoworkToolActivity[];
   recoverableTaskId?: string | null;
   resumeTaskId?: string | null;
+  // 2026/09/17 lixiang  流式/恢复中禁用继续执行，避免重复点击
+  resumeDisabled?: boolean;
   onResumeTask?: (interruption: CoworkSessionInterruption) => void;
+  // 2026/09/16 lixiang  把当前轮次的工具授权嵌进对应 ToolCard，不再叠在底部输入框上
+  pendingPermission?: CoworkPermissionRequest | null;
+  onRespondToPermission?: (result: CoworkPermissionResult) => void;
   /** Expand long tool results fully (image export capture). */
   expandToolResults?: boolean;
 }> = ({
@@ -104,11 +116,19 @@ const TurnBlockComponent: React.FC<{
   toolActivities = [],
   recoverableTaskId,
   resumeTaskId,
+  resumeDisabled = false,
   onResumeTask,
+  pendingPermission = null,
+  onRespondToPermission,
   expandToolResults = false,
 }) => {
   const visibleAssistantItems = getVisibleAssistantItems(turn.assistantItems);
   const primaryExpert = getTurnPrimaryExpert(turn);
+  // 2026/09/16 lixiang  只把授权挂到匹配到的那一个正在执行的工具上
+  const pendingToolGroup =
+    pendingPermission && onRespondToPermission
+      ? findToolGroupForPermission(visibleAssistantItems, pendingPermission)
+      : null;
 
   const renderSystemMessage = (message: CoworkMessage) => {
     const interruption = message.metadata?.interruption as CoworkSessionInterruption | undefined;
@@ -142,26 +162,26 @@ const TurnBlockComponent: React.FC<{
       onResumeTask,
     );
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2">
-        <div className="flex items-center gap-2">
-          {isError ? (
-            <TriangleAlert className="size-4 text-muted-foreground shrink-0" />
-          ) : (
-            <Info className="size-4 text-muted-foreground shrink-0" />
-          )}
-          <div className="text-xs whitespace-pre-wrap text-muted-foreground">{content}</div>
-        </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-background px-3 py-2">
+        {/* 2026/09/17 lixiang  暂停提示与继续执行按钮同一行展示 */}
+        {isError ? (
+          <TriangleAlert className="size-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <Info className="size-4 shrink-0 text-muted-foreground" />
+        )}
+        <div className="min-w-0 text-xs whitespace-pre-wrap text-muted-foreground">{content}</div>
         {canResume && interruption && onResumeTask && (
-          <MessageActions>
-            <MessageAction
-              tooltip={i18nService.t('coworkResumeTaskAction')}
-              label={i18nService.t('coworkResumeTaskAction')}
-              disabled={resumeTaskId === interruption.taskId}
-              onClick={() => onResumeTask(interruption)}
-            >
-              <RotateCcw />
-            </MessageAction>
-          </MessageActions>
+          // 2026/09/17 lixiang  继续执行用主题色按钮，与提示文案同一行；可点手型、禁用禁止光标
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            className="shrink-0 cursor-pointer disabled:cursor-not-allowed disabled:pointer-events-auto"
+            disabled={resumeDisabled || resumeTaskId === interruption.taskId}
+            onClick={() => onResumeTask(interruption)}
+          >
+            {i18nService.t('coworkResumeTaskAction')}
+          </Button>
         )}
       </div>
     );
@@ -254,6 +274,7 @@ const TurnBlockComponent: React.FC<{
 
     // ── Tool call + result ──
     if (item.type === 'tool_group') {
+      const isPendingTool = pendingToolGroup?.toolUse.id === item.group.toolUse.id;
       return (
         <ToolCard
           key={item.group.toolUse.id}
@@ -262,6 +283,8 @@ const TurnBlockComponent: React.FC<{
           muted={mutedExecution}
           mapDisplayText={mapDisplayText}
           forceExpand={expandToolResults}
+          pendingPermission={isPendingTool ? pendingPermission : null}
+          onRespondToPermission={isPendingTool ? onRespondToPermission : undefined}
         />
       );
     }
@@ -293,16 +316,16 @@ const TurnBlockComponent: React.FC<{
 
     // ── Assistant answer ──
     if (item.type === 'assistant') {
-      const isLastAssistant = showCopyButtons && isFinalAnswer;
       return (
         <AssistantBubble
           key={item.message.id}
           message={item.message}
           resolveLocalFilePath={resolveLocalFilePath}
           mapDisplayText={mapDisplayText}
-          showCopyButton={isLastAssistant}
           turnMetadata={
-            isLastAssistant ? (item.message.metadata as CoworkMessageMetadata) : undefined
+            showCopyButtons && isFinalAnswer
+              ? (item.message.metadata as CoworkMessageMetadata)
+              : undefined
           }
         />
       );
@@ -366,7 +389,12 @@ const TurnBlockComponent: React.FC<{
   };
   const visibleGroups = groups.filter(group => !isEmptyAnswerGroup(group));
   const finalAnswerIndex = getFinalAnswerIndex(visibleAssistantItems, isTurnComplete);
-  const finalAnswerItem = finalAnswerIndex >= 0 ? visibleAssistantItems[finalAnswerIndex] : null;
+  // Historical interruptions belong before the resumed answer, not after it.
+  const finalAnswerItem =
+    finalAnswerIndex >= 0 &&
+    !visibleAssistantItems.slice(0, finalAnswerIndex).some(isStandaloneSystemItem)
+      ? visibleAssistantItems[finalAnswerIndex]
+      : null;
   const standaloneSystemItems = visibleAssistantItems.filter(isStandaloneSystemItem);
   const executionItems =
     finalAnswerIndex >= 0
@@ -418,6 +446,14 @@ const TurnBlockComponent: React.FC<{
         key={`${groupKey}-${showCompletedSummary ? 'summarized' : 'working'}`}
         persistKey={`cot-${turn.id}-${groupKey}`}
         defaultOpen={false}
+        // 2026/09/16 lixiang  本组有待授权工具时展开思考链，让终端里的授权按钮露出来
+        forceOpen={Boolean(
+          pendingToolGroup &&
+          group.items.some(
+            item =>
+              item.type === 'tool_group' && item.group.toolUse.id === pendingToolGroup.toolUse.id,
+          ),
+        )}
       >
         <ChainOfThoughtHeader icon={isActiveTool ? Wrench : SparklesIcon}>
           {showCompletedSummary ? (
@@ -436,6 +472,28 @@ const TurnBlockComponent: React.FC<{
       </PersistentChainOfThought>
     );
   };
+  const hasDeliverableArtifacts = Boolean(
+    artifacts?.some(artifact => artifact.role === ArtifactRole.Deliverable && artifact.declared),
+  );
+  // 2026/09/17 lixiang  轮次结束后在文件卡片下方常显复制（参考豆包）
+  const copyContent = (() => {
+    if (!showCopyButtons) return null;
+    if (finalAnswerItem?.type === 'assistant' && hasText(finalAnswerItem.message.content)) {
+      return finalAnswerItem.message.content;
+    }
+    for (let i = visibleAssistantItems.length - 1; i >= 0; i -= 1) {
+      const item = visibleAssistantItems[i];
+      if (
+        item?.type === 'assistant' &&
+        !item.message.metadata?.isThinking &&
+        hasText(item.message.content)
+      ) {
+        return item.message.content;
+      }
+    }
+    return null;
+  })();
+
   return (
     <div className="py-2">
       <div className="mx-auto w-full max-w-5xl min-w-[320px] pl-4">
@@ -483,17 +541,25 @@ const TurnBlockComponent: React.FC<{
               </ChainOfThought>
             )}
             {showTypingIndicator && <WorkingIndicator />}
-            {artifacts?.some(
-              artifact => artifact.role === ArtifactRole.Deliverable && artifact.declared,
-            ) && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {artifacts
-                  .filter(
-                    artifact => artifact.role === ArtifactRole.Deliverable && artifact.declared,
-                  )
-                  .map(artifact => (
-                    <ArtifactPreviewCard key={artifact.id} artifact={artifact} />
-                  ))}
+            {/* 2026/09/17 lixiang  文件卡片与复制按钮上下间距收紧 */}
+            {(hasDeliverableArtifacts || copyContent) && (
+              <div className="-mt-1 flex flex-col gap-1">
+                {hasDeliverableArtifacts && artifacts && (
+                  <div className="flex flex-wrap gap-2">
+                    {artifacts
+                      .filter(
+                        artifact => artifact.role === ArtifactRole.Deliverable && artifact.declared,
+                      )
+                      .map(artifact => (
+                        <ArtifactPreviewCard key={artifact.id} artifact={artifact} />
+                      ))}
+                  </div>
+                )}
+                {copyContent && (
+                  <div className="flex items-center gap-1">
+                    <CopyButton content={copyContent} visible />
+                  </div>
+                )}
               </div>
             )}
           </div>

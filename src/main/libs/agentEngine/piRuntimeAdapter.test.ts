@@ -25,6 +25,7 @@ import { ProductionLoopAction } from '../../../shared/productionLoop';
 import {
   WorkbenchApprovalMode,
   WorkbenchContractKind,
+  WorkbenchOutputMode,
   WorkbenchRunTrigger,
   WorkbenchRunStatus,
   WorkbenchTaskStatus,
@@ -32,6 +33,13 @@ import {
 import { ExpertProductionWorkflowHeading } from './piExpertProductionPrompt';
 import { PiExtensionEventType } from './piExtensionTypes';
 import { PiMcpTool } from './piMcpCapabilityPrompt';
+import { collectWorkbenchArtifacts } from '../../workbenchTask/artifactCollector';
+import { setWorkbenchOutputRequirements } from '../../workbenchTask/outputContract';
+
+vi.mock('../../workbenchTask/artifactWorkerPool', () => ({
+  collectWorkbenchArtifactsAsync: async (input: Parameters<typeof collectWorkbenchArtifacts>[0]) =>
+    collectWorkbenchArtifacts(input),
+}));
 
 const hoisted = vi.hoisted(() => {
   const mockSession = {
@@ -61,6 +69,19 @@ const hoisted = vi.hoisted(() => {
     content: [{ type: 'text', text: 'Hello from Pi' }],
     stopReason: 'stop',
   });
+  const mockBuiltinToolExecute = vi.fn().mockResolvedValue({ content: [], details: undefined });
+  const mockCreateReadTool = vi.fn(() => ({
+    name: 'read',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        offset: { type: 'number' },
+        limit: { type: 'number' },
+      },
+    },
+    execute: mockBuiltinToolExecute,
+  }));
 
   return {
     mockSession,
@@ -74,6 +95,7 @@ const hoisted = vi.hoisted(() => {
     mockGetAgentDir: vi.fn(() => '/tmp/pi-agent'),
     mockApplyApplicationRuntimeEnv: vi.fn(),
     mockCompleteSimple,
+    mockCreateReadTool,
     mockGetModel: vi.fn((provider: string, modelId: string) => ({
       provider,
       id: modelId,
@@ -206,6 +228,7 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
     inMemory: hoisted.mockSettingsManagerInMemory,
   },
   getAgentDir: hoisted.mockGetAgentDir,
+  createReadTool: hoisted.mockCreateReadTool,
   ModelRuntime: {
     create: hoisted.mockModelRuntimeCreate,
   },
@@ -235,6 +258,7 @@ vi.mock('../coworkUtil', async importOriginal => {
 });
 
 import { PiRuntimeAdapter } from './piRuntimeAdapter';
+import { registerPiTurnStallCases } from './piRuntimeAdapterStallCases.test.helpers';
 import { PiAskUserQuestionSystemPrompt } from './piAskUserQuestion';
 import { PiUnattendedSystemPrompt } from './piUnattendedPolicy';
 import { DeclareArtifactSystemPrompt } from '../../declareArtifact/tool';
@@ -918,6 +942,7 @@ describe('PiRuntimeAdapter', () => {
         expect(greetingPrompt).not.toContain('## Production workflow decision');
         const greetingRunId = service.getCurrent('adaptive-gate')?.runs[0]?.id;
         expect(greetingRunId).toBeDefined();
+        setWorkbenchOutputRequirements(service.repository, 'adaptive-gate', greetingRunId!, [{ mode: WorkbenchOutputMode.Text, formats: [] }]);
         expect(service.productionLoop.repository.get(greetingRunId!)).toBeNull();
         const listener = mockSession.subscribe.mock.calls[0]?.[0] as (event: unknown) => void;
         listener({
@@ -1742,6 +1767,7 @@ describe('PiRuntimeAdapter', () => {
           workspaceRoot,
         });
         const first = service.getCurrent('denied-shortcut')!;
+        setWorkbenchOutputRequirements(service.repository, 'denied-shortcut', first.task.activeRunId!, [{ mode: WorkbenchOutputMode.File, formats: ['pptx'] }]);
         const authorization = service.authorizeToolCall({
           sessionId: 'denied-shortcut',
           runId: first.task.activeRunId!,
@@ -1963,7 +1989,7 @@ describe('PiRuntimeAdapter', () => {
         appendSystemPromptOverride: () => string[];
       };
       expect(loaderOptions.appendSystemPromptOverride()).toEqual(
-        expect.arrayContaining([expect.stringContaining('8000 characters')]),
+        expect.arrayContaining([expect.stringContaining('4000 characters')]),
       );
     });
 
@@ -2025,6 +2051,7 @@ describe('PiRuntimeAdapter', () => {
           workspaceRoot: createTemporaryWorkspace(),
         });
         const detail = service.getCurrent('denied-workbench');
+        setWorkbenchOutputRequirements(service.repository, 'denied-workbench', detail!.task.activeRunId!, [{ mode: WorkbenchOutputMode.File, formats: ['md'] }]);
         const authorization = service.authorizeToolCall({
           sessionId: 'denied-workbench',
           runId: detail!.task.activeRunId!,
@@ -2575,7 +2602,34 @@ describe('PiRuntimeAdapter', () => {
       });
 
       expect(mockSession.steer).toHaveBeenCalledOnce();
-      expect(mockSession.steer).toHaveBeenCalledWith(expect.stringContaining('2048 characters'));
+      expect(mockSession.steer).toHaveBeenCalledWith(expect.stringContaining('2000 characters'));
+    });
+
+    it('should steer an interrupted built-in write into the smaller recovery chunk', async () => {
+      await adapter.startSession('test', 'Write a large file');
+
+      listener!({
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          stopReason: PiAssistantStopReason.Error,
+          errorMessage: 'Stream ended without finish_reason',
+          content: [
+            {
+              type: PiContentBlockType.ToolCall,
+              id: 'write-1',
+              name: PiBuiltinFileToolName.Write,
+              arguments: { path: 'large.md' },
+            },
+          ],
+        },
+      });
+
+      expect(mockSession.steer).toHaveBeenCalledOnce();
+      expect(mockSession.steer).toHaveBeenCalledWith(
+        expect.stringContaining('interrupted by a transport failure'),
+      );
+      expect(mockSession.steer).toHaveBeenCalledWith(expect.stringContaining('2000 characters'));
     });
 
     it('should mark an answer as final only after the agent run ends', async () => {
@@ -3308,5 +3362,16 @@ describe('PiRuntimeAdapter', () => {
         success: false,
       });
     });
+  });
+
+  // A stall needs a live adapter plus control of the Pi event stream, so these
+  // cases live in their own module. They are registered last on purpose: the
+  // adapter applies the application runtime env once per process, and the first
+  // startSession in this file has to stay the one that asserts it.
+  registerPiTurnStallCases({
+    getAdapter: () => adapter,
+    startSession: (sessionId, prompt) => adapter.startSession(sessionId, prompt),
+    getPiListener: () => mockSession.subscribe.mock.calls[0]?.[0] as (event: unknown) => void,
+    hasAbortedTurn: () => mockSession.abort.mock.calls.length > 0,
   });
 });

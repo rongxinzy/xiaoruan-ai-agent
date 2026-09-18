@@ -146,7 +146,12 @@ export const runPiSubagent = (
           message?.role === PiMessageRole.Assistant
         ) {
           assistantTurns += 1;
-          recovery.queueIfNeeded(message, session);
+          // Subagent error handling resolves and aborts the session immediately below, so a
+          // transport-recovery steer could never be consumed. Keep error recovery scoped to
+          // top-level sessions until subagents wait through Pi's retry lifecycle.
+          if (message.stopReason !== PiAssistantStopReason.Error) {
+            recovery.queueIfNeeded(message, session);
+          }
           if (message.stopReason === PiAssistantStopReason.Error) {
             finish(
               `Error: ${message.errorMessage || 'Subagent encountered an error'}`,

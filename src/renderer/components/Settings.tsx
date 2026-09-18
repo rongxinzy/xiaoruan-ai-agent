@@ -62,6 +62,7 @@ import { shouldAutoDetectProviderModels } from './settings/providerModelAutoDete
 import { APP_ID, EXPORT_FORMAT_TYPE, EXPORT_PASSWORD } from '../constants/app';
 import { getProviderIcon } from '../providers/uiRegistry';
 import { apiService } from '../services/api';
+import { apiFetch } from '../services/visibleApiTransport';
 import { LLAMACPP_RUNNING_MODELS_CHANGED_EVENT } from '../services/availableModels';
 import { configService } from '../services/config';
 import { coworkService } from '../services/cowork';
@@ -1591,7 +1592,7 @@ const Settings: React.FC<SettingsProps> = ({
         `state=${encodeURIComponent(state)}`,
       ].join('&');
 
-      const codeRes = await window.electron.api.fetch({
+      const codeRes = await apiFetch({
         url: codeEndpoint,
         method: 'POST',
         headers: {
@@ -1659,7 +1660,7 @@ const Settings: React.FC<SettingsProps> = ({
           `code_verifier=${encodeURIComponent(verifier)}`,
         ].join('&');
 
-        const tokenRes = await window.electron.api.fetch({
+        const tokenRes = await apiFetch({
           url: tokenEndpoint,
           method: 'POST',
           headers: {
@@ -5122,7 +5123,8 @@ const Settings: React.FC<SettingsProps> = ({
       className="theme-settings-modal-shell w-auto sm:max-w-none p-0"
     >
       <div
-        className="relative flex h-[min(80vh,calc(100vh-24px))] w-[min(900px,calc(100vw-24px))] min-w-0 overflow-hidden modal-content theme-settings-modal-frame"
+        // 2026/09/16 lixiang  不要挂 modal-content：换风格会换 data-theme，入场动画重播看起来像弹窗先关再开
+        className="relative flex h-[min(80vh,calc(100vh-24px))] w-[min(900px,calc(100vw-24px))] min-w-0 overflow-hidden theme-settings-modal-frame"
         onClick={handleSettingsClick}
       >
         {/* Left sidebar */}
@@ -5215,9 +5217,10 @@ const Settings: React.FC<SettingsProps> = ({
                 >
                   {i18nService.t('cancel')}
                 </Button>
+                {/* 2026/09/17 lixiang  设置保存按钮使用主题色 default 风格 */}
                 <Button
                   type="submit"
-                  variant="outline"
+                  variant="default"
                   className={localInferenceCompactButtonClass}
                   disabled={isSaving}
                 >

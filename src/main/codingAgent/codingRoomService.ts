@@ -97,7 +97,7 @@ export interface CodingRoomRuntime {
     runId: string;
     workspaceRoot: string;
     finalAnswer: string;
-  }): void;
+  }): void | Promise<void>;
   failExternalWorkbenchRun?(input: { sessionId: string; runId: string; error: string }): void;
   cancelExternalWorkbenchRun?(input: { sessionId: string; runId: string }): void;
   respondBuiltinPermission?(requestId: string, approved: boolean): void;
@@ -1622,7 +1622,7 @@ export class CodingRoomService extends EventEmitter {
         const answer = this.eventsToAnswer(lane.id);
         const assignment = this.repository.getLatestAssignmentForLane(lane.id);
         if (assignment?.workbenchRunId) {
-          this.runtime.completeExternalWorkbenchRun({
+          await this.runtime.completeExternalWorkbenchRun({
             sessionId: lane.localSessionId,
             runId: assignment.workbenchRunId,
             workspaceRoot: executionRoot,

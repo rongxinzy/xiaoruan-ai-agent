@@ -16,6 +16,13 @@ export type LanguageType = 'zh' | 'en';
 
 const translations: Record<LanguageType, Record<string, string>> = {
   zh: {
+    workbenchTaskOutputToolLabel: '输出要求',
+    workbenchDeliveryHashFailed: '最终交付物内容校验失败。',
+    workbenchOutputContractMissing: '尚未确认任务输出要求，结果暂不能验收。',
+    workbenchDeliveryMissing: '缺少符合任务输出要求的最终交付物；临时文件和普通回复片段不能替代交付。',
+    workbenchDeliveryNotReady: '结果尚未达到交付条件，不能人工验收。',
+    workbenchDeliverablesRequireAcceptance: '有 {count} 个最终交付物需要人工验收。',
+    workbenchArtifactCollectionFailed: '交付物采集失败，结果暂不能验收。',
     aisphereMissingModel: '所选模型不在当前 AISphere 平台列表中，请刷新后重新选择。',
     aisphereUnavailable: '无法连接 AISphere 平台，请检查平台地址和网络后重试。',
     aisphereBusy: '请先停止正在运行的任务，再切换 AISphere地址。',
@@ -131,6 +138,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     imErrorTransient: 'AI 助手暂时不可用 ({error})，正在自动恢复中，请稍后重试。',
     imErrorContentFiltered: '消息内容未通过安全审核，请修改后重试。',
     imErrorInputTooLong: '消息内容过长，请精简后重试。',
+    imErrorStreamInterrupted: '与模型的连接中断，本次任务已停止。请重试。',
+    imErrorFileWriteTruncated: '文件内容被截断，未能完整写入。请减少单次写入内容后重试。',
     imErrorExecutionLimit: '任务执行超时或达到上限，请简化需求后重试。',
     imErrorUnknown: '处理消息时遇到错误: {error}。请稍后重试。',
 
@@ -314,6 +323,15 @@ const translations: Record<LanguageType, Record<string, string>> = {
     'enterprise.updateBlocked': '版本更新由企业统一管理',
   },
   en: {
+    workbenchTaskOutputToolLabel: 'Output Requirements',
+    workbenchDeliveryHashFailed: 'Final deliverable content verification failed.',
+    workbenchOutputContractMissing: 'The task output requirements have not been committed; the result cannot be accepted yet.',
+    workbenchDeliveryMissing:
+      'No final deliverable satisfies the task output requirements. Temporary files and ordinary response fragments cannot replace delivery.',
+    workbenchDeliveryNotReady: 'The result is not ready for delivery and cannot be accepted.',
+    workbenchDeliverablesRequireAcceptance: '{count} final deliverable(s) require user acceptance.',
+    workbenchArtifactCollectionFailed:
+      'Artifact collection failed; the result cannot be accepted yet.',
     aisphereMissingModel: 'The selected model is not available on AISphere. Refresh and select a platform model.',
     aisphereUnavailable: 'Cannot connect to AISphere. Check the platform address and network, then retry.',
     aisphereBusy: 'Stop running tasks before switching the AISphere address.',
@@ -457,6 +475,10 @@ const translations: Record<LanguageType, Record<string, string>> = {
     imErrorContentFiltered:
       'Message content did not pass safety review. Please revise and try again.',
     imErrorInputTooLong: 'Message content too long. Please shorten and try again.',
+    imErrorStreamInterrupted:
+      'The connection to the model was interrupted. The task stopped, please retry.',
+    imErrorFileWriteTruncated:
+      'The file payload was truncated and was not written completely. Send less content per write.',
     imErrorExecutionLimit: 'Task timed out or reached limit. Please simplify and try again.',
     imErrorUnknown: 'Error processing message: {error}. Please try again.',
 

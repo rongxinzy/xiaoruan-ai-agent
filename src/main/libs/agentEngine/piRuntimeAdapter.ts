@@ -21,7 +21,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import path from 'path';
 
-import { classifyCoworkError, type CoworkError } from '../../../common/coworkError';
+import {
+  classifyCoworkError,
+  CoworkErrorKind,
+  makeCoworkError,
+  type CoworkError,
+} from '../../../common/coworkError';
 import {
   CoworkSessionExpertSource,
   normalizeSingleExpertIds,
@@ -142,13 +147,24 @@ import { buildPiDocumentReaderTool } from './piDocumentReaderTool';
 import { buildPiScheduledTaskTool } from './piScheduledTaskTool';
 import type { ScheduledTaskService } from '../../../scheduledTask/scheduledTaskService';
 import { buildDeclareArtifactTool } from '../../declareArtifact/tool';
+import { buildPiTaskOutputTool } from './piTaskOutputTool';
+import { setWorkbenchOutputRequirements } from '../../workbenchTask/outputContract';
 import { PiThinkingLifecycle } from './piThinkingLifecycle';
 import { PiStreamAccumulator } from './piStreamAccumulator';
+import { invalidatesPiFinalResponse, isPiFinalResponse } from './piFinalResponse';
+import { prependWorkbenchTaskBoundary } from './piWorkbenchTaskBoundary';
+import { settlePiWorkbenchCompletion } from './piWorkbenchCompletion';
 import { PiAssistantEventType } from './piStreamConstants';
 import { PiPendingMessageQueue } from './piPendingMessageQueue';
 import { shouldExposeAskUserQuestionTool } from './piUnattendedPolicy';
 import { createPiWorkLoop } from './piWorkLoop';
 import { PiWriteTokenLimitRecovery } from './piWriteTokenLimit';
+import { createPiTurnStallHandlers } from './piTurnStallHandlers';
+import { PiTurnStallWatchdog } from './piTurnStallWatchdog';
+import {
+  createPiBoundedReadTool,
+  type PiFileMutationToolDefinition,
+} from './piBoundedFileMutationTools';
 import { collectPiSystemPromptContributions } from './piSystemPromptContributions';
 import {
   getPiPreparingToolActivity,
@@ -273,6 +289,7 @@ interface ActivePiSession {
   /** Latest completed answer message, promoted to final only when the agent run ends. */
   lastCompletedAnswerMessageId: string | null;
   lastCompletedAnswerText: string;
+  completionPending?: Promise<void>;
   requestStartedAt: number | null;
   firstVisibleTextAt: number | null;
   confirmationMode: 'modal' | 'text';
@@ -298,13 +315,21 @@ interface ActivePiSession {
   /** Whether this Work session was explicitly started in Goal mode. */
   goalMode: boolean;
   writeTokenLimitRecovery: PiWriteTokenLimitRecovery;
+  /** Stops a turn the model stopped making progress on. Null until the session
+   * is registered, because the watchdog needs the session it observes. */
+  stallWatchdog: PiTurnStallWatchdog | null;
   /**
    * Error from the latest failed attempt (message_end with stopReason=error).
    * Deferred — not persisted/emitted — because Pi may auto-retry the turn;
    * flushPendingError surfaces it once the run settles (auto_retry_end /
    * agent_settled). Cleared when a retry succeeds or the turn is reset.
+   *
+   * `sticky` marks an error the runtime itself recorded (a stalled turn, an
+   * unrecoverable truncated file payload). Pi reports those turns with a plain
+   * stop reason, so a later successful-looking assistant message must not erase
+   * them the way it erases a recovered retry.
    */
-  pendingError: { message: string; classified: CoworkError } | null;
+  pendingError: { message: string; classified: CoworkError; sticky: boolean } | null;
   workbenchRunId: string | null;
   workbenchContract: WorkbenchTaskContract;
   workspaceRoot: string;
@@ -343,6 +368,7 @@ interface PiModules {
     context: ReturnType<typeof buildPiBackgroundCompletionContext>,
     options?: { apiKey?: string },
   ) => Promise<PiBackgroundCompletionResult>;
+  createReadTool: (cwd: string) => PiFileMutationToolDefinition;
 }
 
 interface PiResourceLoader {
@@ -481,6 +507,7 @@ async function getPiModules(): Promise<PiModules> {
         // getModel is the current API (deprecated but functional); will migrate to createModels() later
         getModel: compat.getModel as unknown as PiModules['getModel'],
         completeSimple: compat.completeSimple as unknown as PiModules['completeSimple'],
+        createReadTool: codingAgent.createReadTool as PiModules['createReadTool'],
       };
     } catch (err) {
       throw new Error(
@@ -841,6 +868,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           : undefined;
       const resourceLoader = await this.createPiResourceLoader(pi, workspaceRoot, resourceState, {
         sessionId,
+        taskOutputEnabled: Boolean(this.workbenchTaskService) && options.sessionMode !== 'chat',
         getRunId: () => this.activeSessions.get(sessionId)?.workbenchRunId ?? workbenchRunId,
         settingsManager,
         getApprovalMode: () =>
@@ -859,6 +887,21 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       // Each call creates a distinct tool instance for this Pi session, so its
       // sequential execution mode cannot block another session.
       const customTools: Record<string, unknown>[] = [];
+      if (this.workbenchTaskService && options.sessionMode !== 'chat') {
+        customTools.push(
+          buildPiTaskOutputTool(requirements => {
+            const runId = this.activeSessions.get(sessionId)?.workbenchRunId ?? workbenchRunId;
+            if (!runId || !this.workbenchTaskService)
+              throw new Error('No active workbench run is available.');
+            setWorkbenchOutputRequirements(
+              this.workbenchTaskService.repository,
+              sessionId,
+              runId,
+              requirements,
+            );
+          }),
+        );
+      }
 
       if (shouldExposeAskUserQuestionTool(resourceState.unattended)) {
         customTools.push(
@@ -901,18 +944,20 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         );
       }
       if (resourceState.fileToolsEnabled) {
+        customTools.push(createPiBoundedReadTool(pi.createReadTool(workspaceRoot)));
         customTools.push(buildPiDocumentReaderTool({ workspaceRoot }));
         customTools.push(
           buildDeclareArtifactTool({
             onDeclare: this.workbenchTaskService
-              ? artifact => {
+              ? async artifact => {
                   const runId =
                     this.activeSessions.get(sessionId)?.workbenchRunId ?? workbenchRunId;
                   if (!runId) throw new Error('No active workbench run is available.');
-                  this.workbenchTaskService?.registerArtifact({
+                  await this.workbenchTaskService?.registerArtifact({
                     sessionId,
                     runId,
                     workspaceRoot,
+                    signal: abortController.signal,
                     candidate: {
                       path: artifact.filePath,
                       source: WorkbenchArtifactCandidateSource.Declaration,
@@ -1164,7 +1209,10 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         productionLoop,
         productionControlsAvailable,
         goalMode: options.goalMode === true,
-        writeTokenLimitRecovery: new PiWriteTokenLimitRecovery(resolvedModel.maxOutputTokens),
+        writeTokenLimitRecovery: new PiWriteTokenLimitRecovery(resolvedModel.maxOutputTokens, {
+          onBudgetExhausted: () => this.reportTruncatedFileMutation(sessionId, active),
+        }),
+        stallWatchdog: null,
         pendingError: null,
         workbenchRunId,
         workbenchContract,
@@ -1178,6 +1226,30 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         mcpToolManifestGeneration: this.mcpToolManifestGeneration,
       };
       activeSession = active;
+
+      // Only model-waiting time counts: tool execution, a pending approval, or a
+      // question waiting on the user all suspend the watchdog.
+      const stallHandlers = createPiTurnStallHandlers({
+        isReportable: () => !active.aborted && !active.turnFailed && !active.pendingError,
+        hasPendingError: () => active.pendingError !== null,
+        reportTimeout: classified => {
+          active.pendingError = { message: classified.message, classified, sticky: true };
+          active.turnFailed = true;
+        },
+        abortTurn: () => {
+          active.piSession.abortBash();
+          void active.piSession.abort().catch((error: unknown) => {
+            console.warn('[PiRuntime] failed to abort a stalled turn:', error);
+          });
+        },
+        surfaceUnsettled: () => this.flushPendingError(sessionId, active),
+      });
+      active.stallWatchdog = new PiTurnStallWatchdog({
+        isRunning: () => this.activeSessions.get(sessionId) === active && active.isRunning,
+        isSuspended: () => active.toolStartedAtByCallId.size > 0,
+        onStall: stallHandlers.onStall,
+        onUnsettled: stallHandlers.onUnsettled,
+      });
 
       // Subscribe to Pi events before sending the prompt
       active.unsubscribe = session.subscribe(event => {
@@ -1219,6 +1291,11 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       );
       if (this.activeSessions.get(sessionId) !== active || abortController.signal.aborted) return;
       if (projectMemoryContext) initialPrompt = `${projectMemoryContext}\n\n${initialPrompt}`;
+      initialPrompt = prependWorkbenchTaskBoundary(
+        initialPrompt,
+        this.workbenchTaskService,
+        sessionId,
+      );
 
       // The user may stop the session while the execution-mode question is
       // open. Do not revive an aborted Pi turn when that question resolves.
@@ -1232,6 +1309,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         active.capabilities,
         undefined,
       );
+      await active.completionPending;
     } catch (error) {
       // A stopped turn can immediately restart from the first queued follow-up.
       // Its eventual abort rejection must not delete that replacement session.
@@ -1261,6 +1339,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     const explicitExpertIds = normalizeSingleExpertIds(options.expertIds);
     const nextUnattended = options.unattended === true;
     const active = this.activeSessions.get(sessionId);
+    if (active?.completionPending) await active.completionPending;
     if (!active || active.aborted) {
       if (active?.aborted) {
         this.activeSessions.delete(sessionId);
@@ -1561,6 +1640,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         prompt,
       );
       if (projectMemoryContext) nextPrompt = `${projectMemoryContext}\n\n${nextPrompt}`;
+      nextPrompt = prependWorkbenchTaskBoundary(nextPrompt, this.workbenchTaskService, sessionId);
       await sendPiPrompt(
         active.piSession,
         nextPrompt,
@@ -1568,6 +1648,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         active.capabilities,
         options._streamingBehavior,
       );
+      await active.completionPending;
     } catch (error) {
       active.isRunning = false;
       if (active.abortController.signal.aborted) {
@@ -1617,7 +1698,12 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         workflowKind: active.workbenchContract.kind,
         harnessVersion: HarnessVersion,
       };
-      active.writeTokenLimitRecovery = new PiWriteTokenLimitRecovery(resolvedModel.maxOutputTokens);
+      active.writeTokenLimitRecovery = new PiWriteTokenLimitRecovery(
+        resolvedModel.maxOutputTokens,
+        {
+          onBudgetExhausted: () => this.reportTruncatedFileMutation(sessionId, active),
+        },
+      );
       if (active.resourceState.maxOutputTokens !== resolvedModel.maxOutputTokens) {
         active.resourceState.maxOutputTokens = resolvedModel.maxOutputTokens;
         await active.piSession.reload();
@@ -1819,7 +1905,10 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
   }
 
   hasRunningSessions(): boolean {
-    return this.initializingSessions.size > 0 || [...this.activeSessions.values()].some(session => session.isRunning && !session.aborted);
+    return (
+      this.initializingSessions.size > 0 ||
+      [...this.activeSessions.values()].some(session => session.isRunning && !session.aborted)
+    );
   }
 
   isSessionRunning(sessionId: string): boolean {
@@ -2095,6 +2184,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     resourceState: PiResourceState,
     approvalContext?: {
       sessionId: string;
+      taskOutputEnabled?: boolean;
       getRunId: () => string | null;
       settingsManager?: PiSettingsManager | null;
       getApprovalMode: () => WorkbenchApprovalMode;
@@ -2144,6 +2234,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           maxOutputTokens: resourceState.maxOutputTokens,
           platform: process.platform,
           unattended: resourceState.unattended,
+          taskOutputEnabled: approvalContext?.taskOutputEnabled,
           mcpToolManifest: this.mcpServerManager?.toolManifest ?? [],
           mcpServerStatuses: this.mcpServerManager?.serverStatuses ?? [],
         }),
@@ -2343,13 +2434,18 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         event.message?.stopReason ? `stopReason=${event.message.stopReason}` : '',
       );
     }
+    // Any event is progress; the watchdog only fires on genuine silence.
+    active.stallWatchdog?.noteActivity();
     switch (event.type) {
       case 'agent_start':
         active.isRunning = true;
+        active.stallWatchdog?.arm();
         break;
 
       case 'turn_start':
         active.isRunning = true;
+        // Each turn is one model request; the duration limit restarts here.
+        active.stallWatchdog?.arm();
         active.toolStartedAtByCallId.clear();
         active.preparingToolCallIdByContentIndex.clear();
         {
@@ -2444,19 +2540,32 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             // Persisting/emitting here would produce one error bubble per failed
             // attempt — flushPendingError surfaces the error exactly once when
             // the run settles (auto_retry_end / agent_settled).
-            active.pendingError = { message: errMsg, classified: classifyCoworkError(errMsg) };
+            active.pendingError = {
+              message: errMsg,
+              classified: classifyCoworkError(errMsg),
+              sticky: false,
+            };
             active.turnFailed = true;
             return;
           }
 
           // A successful assistant message after failed attempts means the retry
-          // recovered — drop the deferred error so it is never surfaced.
-          active.pendingError = null;
-          active.turnFailed = false;
+          // recovered — drop the deferred error so it is never surfaced. Errors
+          // the runtime recorded itself are sticky: Pi reports those turns as a
+          // plain aborted or truncated turn, which must not erase them.
+          if (!active.pendingError?.sticky) {
+            active.pendingError = null;
+            active.turnFailed = false;
+          }
 
           const { text, thinking } = active.streamAccumulator.reconcile(event.message);
           const finalThinking = thinking || active.thinkingText;
           const finalAnswer = text || active.answerText;
+
+          if (invalidatesPiFinalResponse(event.message)) {
+            active.lastCompletedAnswerMessageId = null;
+            active.lastCompletedAnswerText = '';
+          }
 
           // Finalize thinking bubble (if any) on its own id.
           if (finalThinking.trim()) {
@@ -2470,8 +2579,10 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           if (finalAnswer.trim()) {
             active.answerText = finalAnswer;
             this.finalizeMessage(sessionId, active, 'answer', finalAnswer);
-            active.lastCompletedAnswerMessageId = active.assistantMessageId;
-            active.lastCompletedAnswerText = finalAnswer;
+            if (isPiFinalResponse(event.message)) {
+              active.lastCompletedAnswerMessageId = active.assistantMessageId;
+              active.lastCompletedAnswerText = finalAnswer;
+            }
             this.scheduleContextUsageSync(
               sessionId,
               active.assistantMessageId,
@@ -2496,6 +2607,8 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         break;
 
       case 'tool_execution_start': {
+        active.lastCompletedAnswerMessageId = null;
+        active.lastCompletedAnswerText = '';
         // Agent invoked a tool → emit a tool_use message so the UI renders the tool card.
         // Preserve the shared tool_use message shape.
         if (!event.toolCallId || !event.toolName) break;
@@ -2616,6 +2729,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         break;
 
       case 'agent_end': {
+        if (active.completionPending) break;
         this.finalizeActiveThinking(sessionId, active);
         active.toolStartedAtByCallId.clear();
         const clearActivity = active.toolActivityTracker.clear();
@@ -2682,17 +2796,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           void this.flushFollowUpQueue(sessionId, active);
           break;
         }
-        if (this.store) {
-          this.store.updateSession(sessionId, { status: 'idle' });
-          try {
-            this.store.refreshSessionArtifacts(sessionId);
-          } catch (error) {
-            console.error(
-              `[PiRuntimeAdapter] Failed to refresh artifacts for session ${sessionId}:`,
-              error,
-            );
-          }
-        }
+        let verification: Promise<unknown> | undefined;
         if (active.workbenchRunId && this.workbenchTaskService) {
           const domainWorkflowSnapshot = active.researchRun
             ? active.researchRun.getSnapshot()
@@ -2719,9 +2823,10 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
               ? WorkbenchArtifactVerificationStatus.Pending
               : WorkbenchArtifactVerificationStatus.Verified,
           }));
-          this.workbenchTaskService.completeRun({
+          verification = this.workbenchTaskService.completeRun({
             sessionId,
             runId: active.workbenchRunId,
+            signal: active.abortController.signal,
             workspaceRoot: active.workspaceRoot,
             finalAnswer: active.lastCompletedAnswerText,
             finalMessageId: active.lastCompletedAnswerMessageId,
@@ -2732,12 +2837,36 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             artifactCandidates: deliveryArtifacts,
           });
         }
-        void this.runPostTurnMemoryMaintenance(
-          sessionId,
-          active.workspaceRoot,
-          this.createSessionMemoryCompletion(active),
+        void settlePiWorkbenchCompletion(
+          active,
+          verification,
+          () => this.activeSessions.get(sessionId) === active && !active.aborted,
+          () => {
+            if (this.store) {
+              this.store.updateSession(sessionId, { status: 'idle' });
+              try {
+                this.store.refreshSessionArtifacts(sessionId);
+              } catch (error) {
+                console.error(
+                  `[PiRuntimeAdapter] artifact refresh failed for session ${sessionId}:`,
+                  error,
+                );
+              }
+            }
+            void this.runPostTurnMemoryMaintenance(
+              sessionId,
+              active.workspaceRoot,
+              this.createSessionMemoryCompletion(active),
+            );
+            this.emit('complete', sessionId, null);
+            void this.flushFollowUpQueue(sessionId, active);
+          },
+          error => {
+            console.error(`[PiRuntimeAdapter] completion failed for session ${sessionId}:`, error);
+            this.workbenchTaskService?.failRun?.(sessionId, { message: String(error) });
+            this.emit('error', sessionId, classifyCoworkError(String(error)));
+          },
         );
-        this.emit('complete', sessionId, null);
         break;
       }
 
@@ -2756,12 +2885,14 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           active.pendingError = {
             message: event.finalError,
             classified: classifyCoworkError(event.finalError),
+            sticky: false,
           };
         }
         this.flushPendingError(sessionId, active);
         break;
 
       case 'agent_settled':
+        if (active.completionPending) break;
         // Run settled (covers non-retryable errors with no auto-retry) —
         // surface the deferred error, if any. Idempotent after auto_retry_end.
         active.isRunning = false;
@@ -2816,6 +2947,32 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     }
     this.emit('message', sessionId, errorMessage);
     this.emit('error', sessionId, pending.classified);
+  }
+
+  /**
+   * Report a file mutation payload that was truncated after the chunked-write
+   * guidance budget was spent, so nothing will steer the model back to a payload
+   * the tool can execute.
+   *
+   * The turn is not aborted, because Pi has already stopped retrying the full
+   * payload: the run ends on its own, and the deferred error makes that end a
+   * visible failure instead of a silent no-op. flushPendingError surfaces it
+   * once the run settles.
+   */
+  private reportTruncatedFileMutation(sessionId: string, active: ActivePiSession): void {
+    if (active.aborted || active.turnFailed || active.pendingError) return;
+
+    const message =
+      'A built-in file mutation payload was truncated and the chunked-write guidance budget is exhausted.';
+    console.warn(
+      `[PiRuntime] session ${sessionId} file mutation payload was truncated and the chunked-write guidance budget is exhausted.`,
+    );
+    active.pendingError = {
+      message,
+      classified: makeCoworkError(CoworkErrorKind.FileWriteTruncated, message),
+      sticky: true,
+    };
+    active.turnFailed = true;
   }
 
   // ── Private: assistant message lifecycle ──
@@ -3481,6 +3638,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             : WorkbenchContractKind.GenericWork;
     return {
       kind,
+      ...(sessionMode !== 'chat' ? { outputRequirements: [] } : {}),
       // Generic Work keeps production controls available. Verification uses
       // the controller snapshot to distinguish a dormant direct answer from
       // an activated production run; only the latter owns the acceptance gate.
@@ -3716,8 +3874,7 @@ async function resolvePiModel(
     existingModelRuntime,
   );
   const modelRuntime = customRuntime.modelRuntime;
-  const customModel =
-    customRuntime.customModel ?? buildPiCustomModel(resolution);
+  const customModel = customRuntime.customModel ?? buildPiCustomModel(resolution);
   const registeredModel = modelRuntime?.getModel(
     resolution.providerMetadata.providerName,
     resolution.config.model,

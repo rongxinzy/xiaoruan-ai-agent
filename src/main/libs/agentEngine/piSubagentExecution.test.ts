@@ -161,7 +161,14 @@ test('returns a subagent error without waiting for agent_end', async () => {
       role: PiMessageRole.Assistant,
       stopReason: PiAssistantStopReason.Error,
       errorMessage: 'provider failed',
-      content: [],
+      content: [
+        {
+          type: PiContentBlockType.ToolCall,
+          id: 'write-1',
+          name: PiBuiltinFileToolName.Write,
+          arguments: { path: 'large.md', content: 'partial' },
+        },
+      ],
     },
   });
 
@@ -169,6 +176,7 @@ test('returns a subagent error without waiting for agent_end', async () => {
     output: 'Error: provider failed',
     terminationReason: 'error',
   });
+  expect(session.steer).not.toHaveBeenCalled();
 });
 
 test('cleans up when subscribing throws synchronously', async () => {

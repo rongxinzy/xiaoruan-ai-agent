@@ -30,6 +30,7 @@ import {
   ManagedProviderIpc,
   McpIpc,
   NetworkIpc,
+  DevNetworkIpc,
   OpenAICodexOAuthIpc,
   PermissionsIpc,
   ProjectIpc,
@@ -979,6 +980,12 @@ contextBridge.exposeInMainWorld('electron', {
 
   networkStatus: {
     send: (status: 'online' | 'offline') => ipcRenderer.send(NetworkIpc.StatusChange, status),
+  },
+
+  // 2026/09/17 lixiang  开发态主进程网络日志 → 渲染进程 Network beacon
+  devNetwork: {
+    onEntry: (callback: (entry: import('../shared/devNetworkLog').DevNetworkLogEntry) => void) =>
+      onPush(DevNetworkIpc.Entry, callback),
   },
 
   feishu: {

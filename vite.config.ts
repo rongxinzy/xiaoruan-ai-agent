@@ -128,6 +128,19 @@ export default defineConfig(async ({ command }) => {
               },
               {
                 // 主进程入口文件
+                entry: 'src/main/workbenchTask/artifactWorker.ts',
+                vite: {
+                  build: {
+                    watch: command === 'serve' ? {} : null,
+                    sourcemap: electronSourceMap,
+                    outDir: 'dist-electron',
+                    minify: false,
+                  },
+                },
+                onstart() {},
+              },
+              {
+                // 主进程入口文件
                 entry: 'src/main/main.ts',
                 vite: {
                   plugins: [copyPhotonWasmPlugin()],

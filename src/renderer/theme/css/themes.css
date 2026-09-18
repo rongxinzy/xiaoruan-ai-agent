@@ -1733,7 +1733,8 @@
   line-height: var(--zy-component-text-sm--line-height);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -1962,7 +1963,8 @@
   line-height: var(--zy-component-text-sm--line-height);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -4271,7 +4273,8 @@
   animation-name: zy-component-legacy-modal-backdrop-1rmx7o8;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -4318,6 +4321,7 @@
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -4338,20 +4342,20 @@
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 22px 1px color-mix(in srgb, var(--zy-primary) 10%, transparent), 0 0 52px 8px color-mix(in srgb, var(--zy-primary) 5%, transparent);
+  box-shadow: 0 0 22px 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 6%, transparent), 0 0 52px 8px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.55 0 0)) 3%, transparent);
 }
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -6575,11 +6579,9 @@ to {
 @keyframes zy-component-composer-far-1rmx7o8 {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -9325,7 +9327,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="xiaoruan-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -9554,7 +9557,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="xiaoruan-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -11865,7 +11869,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-yqm47u;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="xiaoruan-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -11912,6 +11917,7 @@ to {
 }
 [data-theme="xiaoruan-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="xiaoruan-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -11932,20 +11938,20 @@ to {
 [data-theme="xiaoruan-dark"] :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 [data-theme="xiaoruan-dark"] :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 26px 2px color-mix(in srgb, var(--zy-primary) 14%, transparent), 0 0 60px 10px color-mix(in srgb, var(--zy-primary) 8%, transparent);
+  box-shadow: 0 0 26px 2px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.62 0 0)) 8%, transparent), 0 0 60px 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.62 0 0)) 4%, transparent);
 }
 [data-theme="xiaoruan-dark"] :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -14182,11 +14188,9 @@ to {
 @keyframes zy-component-composer-far-yqm47u {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -16932,7 +16936,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="classic-light"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -17161,7 +17166,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="classic-light"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -19470,7 +19476,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-h41hlf;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="classic-light"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -19517,6 +19524,7 @@ to {
 }
 [data-theme="classic-light"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="classic-light"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -19537,20 +19545,20 @@ to {
 [data-theme="classic-light"] :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 [data-theme="classic-light"] :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 22px 1px color-mix(in srgb, var(--zy-primary) 10%, transparent), 0 0 52px 8px color-mix(in srgb, var(--zy-primary) 5%, transparent);
+  box-shadow: 0 0 22px 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 6%, transparent), 0 0 52px 8px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.55 0 0)) 3%, transparent);
 }
 [data-theme="classic-light"] :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -21774,11 +21782,9 @@ to {
 @keyframes zy-component-composer-far-h41hlf {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -24524,7 +24530,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="classic-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -24753,7 +24760,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="classic-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -27064,7 +27072,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-1a8g2ez;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="classic-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -27111,6 +27120,7 @@ to {
 }
 [data-theme="classic-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="classic-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -27131,20 +27141,20 @@ to {
 [data-theme="classic-dark"] :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 [data-theme="classic-dark"] :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 26px 2px color-mix(in srgb, var(--zy-primary) 14%, transparent), 0 0 60px 10px color-mix(in srgb, var(--zy-primary) 8%, transparent);
+  box-shadow: 0 0 26px 2px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.62 0 0)) 8%, transparent), 0 0 60px 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.62 0 0)) 4%, transparent);
 }
 [data-theme="classic-dark"] :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -29381,11 +29391,9 @@ to {
 @keyframes zy-component-composer-far-1a8g2ez {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -32131,7 +32139,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="daming-light"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -32360,7 +32369,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="daming-light"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -34669,7 +34679,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-1ndhedz;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="daming-light"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -34716,6 +34727,7 @@ to {
 }
 [data-theme="daming-light"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="daming-light"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -34736,20 +34748,20 @@ to {
 [data-theme="daming-light"] :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 [data-theme="daming-light"] :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 22px 1px color-mix(in srgb, var(--zy-primary) 10%, transparent), 0 0 52px 8px color-mix(in srgb, var(--zy-primary) 5%, transparent);
+  box-shadow: 0 0 22px 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 6%, transparent), 0 0 52px 8px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.55 0 0)) 3%, transparent);
 }
 [data-theme="daming-light"] :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -36973,11 +36985,9 @@ to {
 @keyframes zy-component-composer-far-1ndhedz {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -39723,7 +39733,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="daming-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -39952,7 +39963,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="daming-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -42263,7 +42275,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-1jte1h3;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="daming-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -42310,6 +42323,7 @@ to {
 }
 [data-theme="daming-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="daming-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -42330,20 +42344,20 @@ to {
 [data-theme="daming-dark"] :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 [data-theme="daming-dark"] :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 26px 2px color-mix(in srgb, var(--zy-primary) 14%, transparent), 0 0 60px 10px color-mix(in srgb, var(--zy-primary) 8%, transparent);
+  box-shadow: 0 0 26px 2px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.62 0 0)) 8%, transparent), 0 0 60px 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.62 0 0)) 4%, transparent);
 }
 [data-theme="daming-dark"] :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -44580,11 +44594,9 @@ to {
 @keyframes zy-component-composer-far-1jte1h3 {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -47332,7 +47344,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="changan-light"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -47561,7 +47574,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="changan-light"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -49870,7 +49884,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-1j4hgn9;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="changan-light"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -49917,6 +49932,7 @@ to {
 }
 [data-theme="changan-light"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="changan-light"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -49937,20 +49953,20 @@ to {
 [data-theme="changan-light"] :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 [data-theme="changan-light"] :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 22px 1px color-mix(in srgb, var(--zy-primary) 10%, transparent), 0 0 52px 8px color-mix(in srgb, var(--zy-primary) 5%, transparent);
+  box-shadow: 0 0 22px 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 6%, transparent), 0 0 52px 8px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.55 0 0)) 3%, transparent);
 }
 [data-theme="changan-light"] :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -52177,11 +52193,9 @@ to {
 @keyframes zy-component-composer-far-1j4hgn9 {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -54929,7 +54943,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="changan-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -55158,7 +55173,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="changan-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -57469,7 +57485,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-lvvvv1;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="changan-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -57516,6 +57533,7 @@ to {
 }
 [data-theme="changan-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="changan-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -57536,20 +57554,20 @@ to {
 [data-theme="changan-dark"] :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 [data-theme="changan-dark"] :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 26px 2px color-mix(in srgb, var(--zy-primary) 14%, transparent), 0 0 60px 10px color-mix(in srgb, var(--zy-primary) 8%, transparent);
+  box-shadow: 0 0 26px 2px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.62 0 0)) 8%, transparent), 0 0 60px 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.62 0 0)) 4%, transparent);
 }
 [data-theme="changan-dark"] :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -59789,11 +59807,9 @@ to {
 @keyframes zy-component-composer-far-lvvvv1 {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -62541,7 +62557,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="weiyang-light"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -62770,7 +62787,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="weiyang-light"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -65079,7 +65097,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-6l9g7h;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="weiyang-light"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -65126,6 +65145,7 @@ to {
 }
 [data-theme="weiyang-light"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="weiyang-light"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -65146,20 +65166,20 @@ to {
 [data-theme="weiyang-light"] :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 [data-theme="weiyang-light"] :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 22px 1px color-mix(in srgb, var(--zy-primary) 10%, transparent), 0 0 52px 8px color-mix(in srgb, var(--zy-primary) 5%, transparent);
+  box-shadow: 0 0 22px 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 6%, transparent), 0 0 52px 8px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.55 0 0)) 3%, transparent);
 }
 [data-theme="weiyang-light"] :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -67386,11 +67406,9 @@ to {
 @keyframes zy-component-composer-far-6l9g7h {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -70138,7 +70156,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="weiyang-dark"] :where(.theme-dialog-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 100ms;
@@ -70367,7 +70386,8 @@ to {
   line-height: var(--zy-component-text-sm--line-height);
 }
 [data-theme="weiyang-dark"] :where(.theme-sheet-overlay) {
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
   opacity: 1;
   transition-property: opacity;
   transition-duration: 150ms;
@@ -72678,7 +72698,8 @@ to {
   animation-name: zy-component-legacy-modal-backdrop-114pwxx;
   animation-duration: 200ms;
   animation-timing-function: ease-out;
-  background-color: color-mix(in oklab, var(--zy-component-palette-black) 10%, transparent);
+  background-color: color-mix(in oklab, var(--zy-component-palette-black) 20%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="weiyang-dark"] :where(.modal-content) {
   background-color: var(--zy-surface);
@@ -72725,6 +72746,7 @@ to {
 }
 [data-theme="weiyang-dark"] :where(.theme-skill-modal-backdrop) {
   background-color: color-mix(in oklab, var(--zy-component-palette-black) 60%, transparent);
+  backdrop-filter: blur(2px);
 }
 [data-theme="weiyang-dark"] :where(.theme-skill-security-modal) {
   background-color: var(--zy-surface);
@@ -72745,20 +72767,20 @@ to {
 [data-theme="weiyang-dark"] :where(.input-aura)::before {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-primary) 38%, transparent), 0 0 10px color-mix(in srgb, var(--zy-primary) 15%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--zy-primary) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 12%, oklch(0.55 0 0)) 16%, transparent), 0 0 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent), 0 4px 14px -6px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.55 0 0)) 10%, transparent);
 }
 [data-theme="weiyang-dark"] :where(.input-aura)::after {
   border-radius: inherit;
   opacity: 0;
-  scale: 0.985;
-  transition-property: opacity, scale;
+  scale: 1;
+  transition-property: opacity;
   transition-duration: 520ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 26px 2px color-mix(in srgb, var(--zy-primary) 14%, transparent), 0 0 60px 10px color-mix(in srgb, var(--zy-primary) 8%, transparent);
+  box-shadow: 0 0 26px 2px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 10%, oklch(0.62 0 0)) 8%, transparent), 0 0 60px 10px color-mix(in oklch, color-mix(in oklch, var(--zy-primary) 8%, oklch(0.62 0 0)) 4%, transparent);
 }
 [data-theme="weiyang-dark"] :where(.theme-tooltip-content [data-slot="kbd"]) {
   border-radius: var(--zy-style-radius-sm);
@@ -74998,11 +75020,9 @@ to {
 @keyframes zy-component-composer-far-114pwxx {
 from {
   opacity: 0.6;
-  scale: 0.995;
 }
 to {
   opacity: 1;
-  scale: 1.005;
 }
 }
 @media (prefers-reduced-motion: reduce) {
