@@ -26,6 +26,11 @@ function createTask(store: SqliteScheduledTaskStore) {
   });
 }
 
+/** Asia/Shanghai is a fixed +08:00 offset, so the local hour is the UTC hour plus 8. */
+function shanghaiHour(ms: number): number {
+  return (new Date(ms).getUTCHours() + 8) % 24;
+}
+
 test('SQLite is the canonical task source and changes schedule version on projection changes', () => {
   const store = new SqliteScheduledTaskStore(new Database(':memory:'));
   const task = createTask(store);
@@ -111,4 +116,75 @@ test('recovers interrupted running Runs as visible errors', () => {
     error: 'Scheduler interrupted before Pi completion',
   });
   expect(store.get(task.id)?.state.runningAtMs).toBeNull();
+});
+
+test('keeps the displayed next trigger current when a task is created or toggled', () => {
+  const store = new SqliteScheduledTaskStore(new Database(':memory:'));
+  const task = createTask(store);
+  expect(shanghaiHour(task.state.nextRunAtMs!)).toBe(9);
+  expect(store.update(task.id, { enabled: false }).state.nextRunAtMs).toBeNull();
+  expect(shanghaiHour(store.update(task.id, { enabled: true }).state.nextRunAtMs!)).toBe(9);
+});
+
+test('re-anchors the estimated next interval run after each completion', () => {
+  const store = new SqliteScheduledTaskStore(new Database(':memory:'));
+  const task = store.create({
+    name: 'interval',
+    description: '',
+    enabled: true,
+    schedule: { kind: ScheduleKind.Every, everyMs: 60_000 },
+    sessionTarget: SessionTarget.Isolated,
+    wakeMode: WakeMode.NextHeartbeat,
+    payload: { kind: PayloadKind.AgentTurn, message: 'run' },
+    delivery: { mode: DeliveryMode.None },
+  });
+  expect(task.state.nextRunAtMs! - Date.parse(task.createdAt)).toBe(60_000);
+  const run = store.claimTrigger({
+    taskId: task.id,
+    scheduleVersion: task.scheduleVersion!,
+    scheduledAt: '2026-08-11T06:00:00.000Z',
+  })!;
+  const finished = store.finishRun(run.id, { status: TaskStatus.Success });
+  expect(store.get(task.id)!.state.nextRunAtMs! - Date.parse(finished.finishedAt!)).toBe(60_000);
+});
+
+test('records one summarized skipped Run for an offline gap', () => {
+  const store = new SqliteScheduledTaskStore(new Database(':memory:'));
+  const task = createTask(store);
+  const firstMissedAtMs = Date.parse('2026-09-17T09:45:00.000Z');
+  const skipped = store.recordSkippedRun({
+    taskId: task.id,
+    firstMissedAtMs,
+    missedCount: 68,
+    missedCountTruncated: false,
+  });
+  expect(skipped).toMatchObject({ status: 'skipped', durationMs: 0, sessionId: null });
+  expect(skipped?.error).toContain('68');
+  expect(store.get(task.id)?.state).toMatchObject({
+    lastStatus: 'skipped',
+    lastRunAtMs: null,
+  });
+  // A second startup inside the same gap must not duplicate the summary.
+  expect(
+    store.recordSkippedRun({
+      taskId: task.id,
+      firstMissedAtMs,
+      missedCount: 68,
+      missedCountTruncated: false,
+    }),
+  ).toBeNull();
+  expect(store.listRuns(task.id)).toHaveLength(1);
+});
+
+test('persists a refreshed next trigger for every task at startup', () => {
+  const db = new Database(':memory:');
+  const store = new SqliteScheduledTaskStore(db);
+  const task = createTask(store);
+  db.prepare('UPDATE zhiyuan_scheduled_tasks SET state_json = ? WHERE id = ?').run(
+    JSON.stringify({ ...task.state, nextRunAtMs: null }),
+    task.id,
+  );
+  const [refreshed] = store.refreshAllNextRunAtMs();
+  expect(refreshed.state.nextRunAtMs).not.toBeNull();
+  expect(store.get(task.id)?.state.nextRunAtMs).toBe(refreshed.state.nextRunAtMs);
 });

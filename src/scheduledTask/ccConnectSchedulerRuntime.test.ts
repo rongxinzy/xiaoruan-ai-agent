@@ -12,6 +12,7 @@ import {
 import { CcConnectSchedulerRuntime } from './ccConnectSchedulerRuntime';
 import { SchedulerClockAccount } from './ccConnectCronClient';
 import { SqliteScheduledTaskStore } from './sqliteScheduledTaskStore';
+import type { ScheduledTaskRun, ScheduledTaskRunEvent } from './types';
 
 function setup() {
   const store = new SqliteScheduledTaskStore(new Database(':memory:'));
@@ -209,6 +210,72 @@ test('finishes a claimed Run as error when Pi terminates unexpectedly', async ()
     lastError: 'Pi session stopped before completion',
   });
   expect(store.listRuns(task.id)[0]).toMatchObject({
+    status: TaskStatus.Error,
+    error: 'Pi session stopped before completion',
+  });
+});
+
+test('pushes a claimed Run and its completion so the automation page can follow a trigger', async () => {
+  const { store, task, client } = setup();
+  const events: string[] = [];
+  const pushedRuns: ScheduledTaskRun[] = [];
+  const runtime = new CcConnectSchedulerRuntime(
+    store,
+    client,
+    async () => ({ sessionId: 'pi-run' }),
+    undefined,
+    undefined,
+    {
+      runUpdated: (event: ScheduledTaskRunEvent) => {
+        events.push('run');
+        pushedRuns.push(event.run);
+      },
+      statusUpdated: event => {
+        events.push('status');
+        expect(event.taskId).toBe(task.id);
+      },
+    },
+  );
+
+  await runtime.handleTrigger({
+    accountId: SchedulerClockAccount,
+    taskId: task.id,
+    scheduleVersion: task.scheduleVersion!,
+    scheduledAt: '2026-08-11T06:00:00.000Z',
+  });
+
+  expect(events).toEqual(['run', 'status', 'run', 'status']);
+  expect(pushedRuns[0]).toMatchObject({
+    status: TaskStatus.Running,
+    taskName: 'task',
+    finishedAt: null,
+  });
+  expect(pushedRuns[1]).toMatchObject({
+    status: TaskStatus.Success,
+    sessionId: 'pi-run',
+    taskName: 'task',
+  });
+});
+
+test('pushes the failed Run when Pi terminates unexpectedly', async () => {
+  const { store, task, client } = setup();
+  const pushedRuns: ScheduledTaskRun[] = [];
+  const runtime = new CcConnectSchedulerRuntime(
+    store,
+    client,
+    async () => {
+      throw new Error('Pi session stopped before completion');
+    },
+    undefined,
+    undefined,
+    {
+      runUpdated: event => pushedRuns.push(event.run),
+      statusUpdated: () => undefined,
+    },
+  );
+
+  await expect(runtime.runNow(task.id)).rejects.toThrow('Pi session stopped before completion');
+  expect(pushedRuns.at(-1)).toMatchObject({
     status: TaskStatus.Error,
     error: 'Pi session stopped before completion',
   });

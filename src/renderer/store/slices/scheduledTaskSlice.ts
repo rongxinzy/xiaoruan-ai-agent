@@ -114,16 +114,24 @@ const scheduledTaskSlice = createSlice({
       }
       state.runsHasMore[taskId] = hasMore;
     },
-    addOrUpdateRun(state, action: PayloadAction<ScheduledTaskRun>) {
-      const { taskId } = action.payload;
-      if (!state.runs[taskId]) {
-        state.runs[taskId] = [];
+    addOrUpdateRun(state, action: PayloadAction<ScheduledTaskRunWithName>) {
+      const run = action.payload;
+      if (!state.runs[run.taskId]) {
+        state.runs[run.taskId] = [];
       }
-      const existingIndex = state.runs[taskId].findIndex(r => r.id === action.payload.id);
+      const existingIndex = state.runs[run.taskId].findIndex(r => r.id === run.id);
       if (existingIndex !== -1) {
-        state.runs[taskId][existingIndex] = action.payload;
+        state.runs[run.taskId][existingIndex] = run;
       } else {
-        state.runs[taskId].unshift(action.payload);
+        state.runs[run.taskId].unshift(run);
+      }
+      // The all-task history tab renders its own list, so a pushed run has to
+      // land there too. Never materialize that list before it has been loaded.
+      const allRunsIndex = state.allRuns.findIndex(r => r.id === run.id);
+      if (allRunsIndex !== -1) {
+        state.allRuns[allRunsIndex] = run;
+      } else if (state.allRuns.length > 0) {
+        state.allRuns.unshift(run);
       }
     },
     setAllRuns(
