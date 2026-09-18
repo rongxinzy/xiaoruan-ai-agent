@@ -36,8 +36,14 @@ export const CoworkErrorKind = {
   NetworkError: 'network_error',
   /** Upstream server error (5xx) */
   ServerError: 'server_error',
+  /** The stream ended mid-turn without a model-driven stop: an abort or a dropped connection */
+  StreamInterrupted: 'stream_interrupted',
   /** Tool execution timeout */
   ToolTimeout: 'tool_timeout',
+  /** The model stopped producing output mid-turn and the runtime aborted it */
+  TurnTimeout: 'turn_timeout',
+  /** A file mutation payload was truncated and the chunked-write guidance is spent */
+  FileWriteTruncated: 'file_write_truncated',
   /** Tool execution permission denied */
   ToolPermissionDenied: 'tool_permission_denied',
   /** Max iterations exceeded in agent loop */
@@ -176,6 +182,15 @@ const RULES: ErrorRule[] = [
     pattern: /could not process pdf/i,
   },
 
+  // ── Stream interrupted ──────────────────────────────────────────────────
+  {
+    kind: CoworkErrorKind.StreamInterrupted,
+    // An abort or a dropped stream. Deliberately narrow: matching a bare
+    // "terminated" would swallow unrelated upstream wording.
+    pattern:
+      /\baborted\b|operation was aborted|socket hang up|premature close|stream (?:was )?(?:closed|interrupted)|ECONNRESET/i,
+  },
+
   // ── Tool timeout ────────────────────────────────────────────────────────
   {
     kind: CoworkErrorKind.ToolTimeout,
@@ -307,7 +322,12 @@ export function isTransient(kind: CoworkErrorKind): boolean {
     case CoworkErrorKind.GatewayDraining:
     case CoworkErrorKind.ServiceRestart:
     case CoworkErrorKind.ToolTimeout:
+    case CoworkErrorKind.StreamInterrupted:
       return true;
+    // TurnTimeout and FileWriteTruncated are deliberately not transient: the
+    // runtime reports them only after the model already burned its output
+    // budget or stopped responding, so an automatic retry would repeat the same
+    // conditions instead of recovering from a transient fault.
 
     default:
       return false;
@@ -341,6 +361,12 @@ export function getUserErrorI18nKey(kind: CoworkErrorKind): string {
       return 'coworkErrorNetworkError';
     case CoworkErrorKind.ServerError:
       return 'coworkErrorServerError';
+    case CoworkErrorKind.StreamInterrupted:
+      return 'coworkErrorStreamInterrupted';
+    case CoworkErrorKind.TurnTimeout:
+      return 'coworkErrorTurnTimeout';
+    case CoworkErrorKind.FileWriteTruncated:
+      return 'coworkErrorFileWriteTruncated';
     case CoworkErrorKind.ToolTimeout:
       return 'coworkErrorToolTimeout';
     case CoworkErrorKind.ToolPermissionDenied:

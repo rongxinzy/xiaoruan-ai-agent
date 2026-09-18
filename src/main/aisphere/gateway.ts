@@ -6,6 +6,16 @@ import { platformFetch, type PlatformFetch } from './transport';
 import { AISphereRequestPool } from './requestPool';
 import { t } from '../i18n';
 
+/**
+ * Hard cap on one gateway request, whatever the model is doing.
+ *
+ * The Pi runtime detects a silent or runaway turn long before this
+ * ({@link PI_TURN_STALL_LIMITS}), so this cap only exists for the case the
+ * runtime cannot see: a turn the runtime considers healthy because a tool owns
+ * it while the upstream stream is already dead.
+ */
+export const AISPHERE_GATEWAY_REQUEST_TIMEOUT_MS = 20 * 60 * 1000;
+
 export async function startAISphereGateway(
   service: AISphereService = aisphereService,
   fetcher: PlatformFetch = platformFetch,
@@ -14,7 +24,11 @@ export async function startAISphereGateway(
   const server: Server = createServer(async (request, response) => {
     const controller = new AbortController();
     response.on('close', () => controller.abort());
-    const timeout = setTimeout(() => controller.abort(), 10 * 60 * 1000);
+    // Last-resort cap only. The Pi runtime watches a silent turn far more
+    // precisely and reports a visible timeout, so this must stay comfortably
+    // above the runtime's own limit or a stalled turn would be cut here first
+    // and look like a normal completion.
+    const timeout = setTimeout(() => controller.abort(), AISPHERE_GATEWAY_REQUEST_TIMEOUT_MS);
     let release: (() => void) | undefined;
     try {
       if (
