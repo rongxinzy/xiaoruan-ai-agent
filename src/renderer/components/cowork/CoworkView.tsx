@@ -71,7 +71,7 @@ import { isScratchWorkspacePath } from '../../utils/path';
 import { PromptPanel, QuickActionBar } from '../quick-actions';
 import type { SettingsOpenOptions } from '../Settings';
 import PageHeader from '../PageHeader';
-import { useAgentSelectedModel } from './agentModelSelection';
+import { useCoworkSelectedModel } from './useCoworkModelSelection';
 import CoworkPromptInput, { type CoworkPromptInputRef } from './CoworkPromptInput';
 import CoworkSessionViewport from './CoworkSessionViewport';
 import { mergeDirectChatSnapshotMessages } from './directChatSnapshot';
@@ -222,8 +222,6 @@ const CoworkView: React.FC<CoworkViewProps> = ({
   const taskResume = useTaskResumeContext(currentSession?.id);
   const displayedSessionId = useSelector(selectDisplayedSessionId);
   const workMode = useSelector(selectWorkMode);
-  const directChatModel = useSelector((state: RootState) => state.model.defaultSelectedModel);
-  const directChatModelId = directChatModel.id;
 
   // Clear session when workMode changes and current session mode doesn't match.
   // Sessions without an explicit mode field (legacy) are treated as work mode.
@@ -279,11 +277,6 @@ const CoworkView: React.FC<CoworkViewProps> = ({
           ? i18nService.t('defaultConversation')
           : undefined;
 
-  const currentAgentSelectedModel = useAgentSelectedModel(
-    currentAgentId,
-    currentAgent?.model ?? '',
-  );
-
   // Agent-backed chat sessions (skills attached, or persisted on the session)
   // execute via the agent runtime, so the prompt input must use work-style
   // agent model/control semantics instead of direct-chat ones — otherwise the
@@ -292,6 +285,16 @@ const CoworkView: React.FC<CoworkViewProps> = ({
   const isAgentBackedChat =
     workMode === WorkMode.Chat &&
     resolveChatExecution({ activeSkillIds, session: currentSession }) === ChatExecution.Agent;
+
+  const { selectedModel: currentAgentSelectedModel, validateModelSelection } =
+    useCoworkSelectedModel({
+      sessionId: currentSession?.id,
+      agentId: currentAgentId,
+      agentModelRef: currentAgent?.model ?? '',
+      isDirectChat: workMode === WorkMode.Chat && !isAgentBackedChat,
+    });
+  const directChatModel = currentAgentSelectedModel;
+  const directChatModelId = directChatModel?.id ?? '';
 
   const buildApiConfigNotice = (
     error?: string,
@@ -369,6 +372,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
     goalMode = false,
     productionLoopMode: ProductionLoopModeValue = ProductionLoopMode.Off,
   ): Promise<boolean | void> => {
+    if (!validateModelSelection() || !directChatModel) return false;
     console.log('[CoworkView] handleStartSession: imageAttachments diagnosis', {
       hasImageAttachments: !!imageAttachments,
       count: imageAttachments?.length ?? 0,
@@ -943,6 +947,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
     productionLoopMode: ProductionLoopModeValue = ProductionLoopMode.Off,
   ) => {
     if (!currentSession) return;
+    if (!validateModelSelection() || !directChatModel) return false;
     if (taskResume.interruption) {
       return taskResume.resume({
         amendment: prompt,
