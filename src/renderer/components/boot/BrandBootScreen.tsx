@@ -13,8 +13,15 @@ type Phase = (typeof Phase)[keyof typeof Phase];
 
 const MAX_PARTICLES = 4200;
 const ALPHA_THRESHOLD = 140;
-// Hold only long enough for particles to land; init is usually done well before this.
+// Floor for how long assemble may run when init finishes early.
 const MIN_TOTAL_MS = 1100;
+// After enough particles land, hold the formed mark briefly before disperse.
+const BLOOM_HOLD_MS = 220;
+// Safety: never block disperse forever if a few edge particles refuse to settle.
+const MAX_ASSEMBLE_MS = 3200;
+const SETTLE_RATIO = 0.99;
+const PHYSICS_FRAME_MS = 1000 / 60;
+const MAX_PHYSICS_STEPS = 4;
 const DISPERSE_DURATION_MS = 480;
 const FADE_IN_MS = 420;
 const LOGO_WIDTH_RATIO = 0.42;
@@ -160,10 +167,45 @@ export function BrandBootScreen({ exiting, onExitComplete }: BrandBootScreenProp
     let sampled: SampledLogo | null = null;
     let phase: Phase = Phase.Assemble;
     let mountTime = 0;
+    let lastFrameTime = 0;
+    let assembleReadyAt = 0;
     let disperseStart = 0;
     let exitNotified = false;
     let cssWidth = 0;
     let cssHeight = 0;
+
+    const stepAssemblePhysics = (elapsed: number) => {
+      for (const particle of particles) {
+        if (particle.settled) continue;
+        if (elapsed < particle.delay) {
+          particle.x += particle.vx;
+          particle.y += particle.vy;
+          continue;
+        }
+        particle.vx += (particle.tx - particle.x) * particle.stiffness;
+        particle.vy += (particle.ty - particle.y) * particle.stiffness;
+        particle.vx *= particle.damping;
+        particle.vy *= particle.damping;
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        const distance = Math.hypot(particle.tx - particle.x, particle.ty - particle.y);
+        const speed = Math.hypot(particle.vx, particle.vy);
+        if (distance < 1.2 && speed < 0.6) {
+          particle.settled = true;
+          particle.x = particle.tx;
+          particle.y = particle.ty;
+        }
+      }
+    };
+
+    const countSettledRatio = (): number => {
+      if (particles.length === 0) return 0;
+      let settled = 0;
+      for (const particle of particles) {
+        if (particle.settled) settled += 1;
+      }
+      return settled / particles.length;
+    };
 
     const layoutTargets = () => {
       if (!sampled || cssWidth === 0 || cssHeight === 0) return;
@@ -237,11 +279,33 @@ export function BrandBootScreen({ exiting, onExitComplete }: BrandBootScreenProp
     const tick = (now: number) => {
       if (disposed) return;
       if (!mountTime) mountTime = now;
+      if (!lastFrameTime) lastFrameTime = now;
       const elapsed = now - mountTime;
 
-      if (phase === Phase.Assemble && exitingRef.current && elapsed >= MIN_TOTAL_MS) {
-        beginDisperse(now);
+      if (phase === Phase.Assemble) {
+        // Spring steps are frame-based; catch up on slow frames so wall-clock
+        // settle time stays close to 60fps instead of stretching with jank.
+        const frameBudget = Math.min(now - lastFrameTime, PHYSICS_FRAME_MS * MAX_PHYSICS_STEPS);
+        lastFrameTime = now;
+        const steps = Math.max(1, Math.round(frameBudget / PHYSICS_FRAME_MS));
+        for (let step = 0; step < steps; step += 1) {
+          stepAssemblePhysics(elapsed);
+        }
+
+        if (!assembleReadyAt && countSettledRatio() >= SETTLE_RATIO) {
+          assembleReadyAt = now;
+        }
+
+        const bloomReady =
+          assembleReadyAt > 0 && now - assembleReadyAt >= BLOOM_HOLD_MS;
+        const assembleTimedOut = elapsed >= MAX_ASSEMBLE_MS;
+        // Wait for the mark to finish forming (then a short bloom) before disperse,
+        // even if the main process already signaled exiting.
+        if (exitingRef.current && elapsed >= MIN_TOTAL_MS && (bloomReady || assembleTimedOut)) {
+          beginDisperse(now);
+        }
       }
+
       if (phase === Phase.Disperse && now - disperseStart >= DISPERSE_DURATION_MS) {
         if (!exitNotified) {
           exitNotified = true;
@@ -262,23 +326,6 @@ export function BrandBootScreen({ exiting, onExitComplete }: BrandBootScreenProp
             alpha *= shimmer;
             particle.x = particle.tx + Math.sin(now * 0.0011 + particle.jitterPhase) * 0.7;
             particle.y = particle.ty + Math.cos(now * 0.0009 + particle.jitterPhase) * 0.7;
-          } else if (elapsed >= particle.delay) {
-            particle.vx += (particle.tx - particle.x) * particle.stiffness;
-            particle.vy += (particle.ty - particle.y) * particle.stiffness;
-            particle.vx *= particle.damping;
-            particle.vy *= particle.damping;
-            particle.x += particle.vx;
-            particle.y += particle.vy;
-            const distance = Math.hypot(particle.tx - particle.x, particle.ty - particle.y);
-            const speed = Math.hypot(particle.vx, particle.vy);
-            if (distance < 1.2 && speed < 0.6) {
-              particle.settled = true;
-              particle.x = particle.tx;
-              particle.y = particle.ty;
-            }
-          } else {
-            particle.x += particle.vx;
-            particle.y += particle.vy;
           }
         } else {
           const disperseElapsed = now - disperseStart - particle.delay;
