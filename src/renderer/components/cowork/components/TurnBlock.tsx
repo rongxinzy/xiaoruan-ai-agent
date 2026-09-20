@@ -105,6 +105,8 @@ const TurnBlockComponent: React.FC<{
   onRespondToPermission?: (result: CoworkPermissionResult) => void;
   /** Expand long tool results fully (image export capture). */
   expandToolResults?: boolean;
+  /** 2026/09/20 lixiang  验收卡插在文件卡片与复制按钮之间（issue #805） */
+  beforeCopySlot?: React.ReactNode;
 }> = ({
   turn,
   artifacts,
@@ -121,6 +123,7 @@ const TurnBlockComponent: React.FC<{
   pendingPermission = null,
   onRespondToPermission,
   expandToolResults = false,
+  beforeCopySlot = null,
 }) => {
   const visibleAssistantItems = getVisibleAssistantItems(turn.assistantItems);
   const primaryExpert = getTurnPrimaryExpert(turn);
@@ -498,7 +501,8 @@ const TurnBlockComponent: React.FC<{
 
   return (
     <div className="py-2">
-      <div className="mx-auto w-full max-w-5xl min-w-[320px] pl-4">
+      {/* 2026/09/20 lixiang  对话列加宽，缓解代码块/表格过窄（issue #805） */}
+      <div className="mx-auto w-full max-w-6xl min-w-[320px] pl-4">
         <div className="flex items-start gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-3 py-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -544,7 +548,8 @@ const TurnBlockComponent: React.FC<{
             )}
             {showTypingIndicator && <WorkingIndicator />}
             {/* 2026/09/17 lixiang  文件卡片与复制按钮上下间距收紧 */}
-            {(hasDeliverableArtifacts || copyContent) && (
+            {/* 2026/09/20 lixiang  验收卡在复制按钮之上（issue #805） */}
+            {(hasDeliverableArtifacts || copyContent || beforeCopySlot) && (
               <div className="-mt-1 flex flex-col gap-1">
                 {hasDeliverableArtifacts && artifacts && (
                   <div className="flex flex-wrap gap-2">
@@ -557,6 +562,7 @@ const TurnBlockComponent: React.FC<{
                       ))}
                   </div>
                 )}
+                {beforeCopySlot}
                 {copyContent && (
                   <div className="flex items-center gap-1">
                     <CopyButton content={copyContent} visible />
