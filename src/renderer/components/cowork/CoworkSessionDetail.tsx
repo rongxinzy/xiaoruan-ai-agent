@@ -1101,6 +1101,12 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
                 pendingPermission={isLastTurn ? inlinePermission : null}
                 onRespondToPermission={isLastTurn ? onRespondToInlinePermission : undefined}
                 expandToolResults={isExportingImage}
+                // 2026/09/20 lixiang  验收卡放在末轮复制按钮上方（issue #805）
+                beforeCopySlot={
+                  isLastTurn && sessionId ? (
+                    <WorkbenchTaskAcceptanceCard sessionId={sessionId} />
+                  ) : null
+                }
               />
             </div>
           )}
@@ -1247,18 +1253,13 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
                       onRespondToInlinePermission &&
                       !hasInlineToolPermissionCard && (
                       <div className="px-3 pt-3">
-                        <div className="mx-auto w-full max-w-5xl min-w-[320px] pl-4">
+                        <div className="mx-auto w-full max-w-6xl min-w-[320px] pl-4">
                           <CoworkPermissionModal
                             permission={inlinePermission}
                             onRespond={onRespondToInlinePermission}
                             inline
                           />
                         </div>
-                      </div>
-                    )}
-                    {sessionId && (
-                      <div className="px-3 pt-3">
-                        <WorkbenchTaskAcceptanceCard sessionId={sessionId} />
                       </div>
                     )}
                   </div>
@@ -1522,7 +1523,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
             ref={composerOverlayRef}
             className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4"
           >
-            <div className="mx-auto w-full max-w-5xl min-w-[320px] pl-4">
+            <div className="mx-auto w-full max-w-6xl min-w-[320px] pl-4">
               <div className="pointer-events-auto relative min-w-0 rounded-t-3xl bg-background pb-4">
                 <CoworkPromptInput
                   ref={promptInputRef}

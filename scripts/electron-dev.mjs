@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 import concurrently from 'concurrently';
 
@@ -27,10 +28,26 @@ function withLocalBinPath(env) {
   };
 }
 
+function patchWindowsElectronIcon() {
+  if (process.platform !== 'win32') return;
+  const patchScript = path.join(scriptDirectory, 'patch-windows-electron-icon.mjs');
+  const result = spawnSync(process.execPath, [patchScript], {
+    cwd: projectRoot,
+    stdio: 'inherit',
+  });
+  if (result.status !== 0) {
+    console.warn('[electron:dev] Windows electron icon patch did not complete cleanly.');
+  }
+}
+
 async function main() {
   if (!fs.existsSync(localBinDirectory)) {
     throw new Error(`Missing ${localBinDirectory}; run npm/bun install first.`);
   }
+
+  // Windows: embed the app icon into development electron.exe so the taskbar
+  // does not keep showing the default Electron atom logo.
+  patchWindowsElectronIcon();
 
   const port = await resolveDevPort();
   const startUrl = `http://localhost:${port}`;
