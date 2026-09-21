@@ -146,6 +146,13 @@ interface CoworkSessionDetailProps {
   resumeDisabled?: boolean;
   onResumeTask?: (interruption: CoworkSessionInterruption) => void;
   onCancelTaskResume?: () => void;
+  /** 会话页底部工作区路径展示（与首页 FolderSelector 对齐） */
+  workingDirectory?: string;
+  workingDirectoryName?: string;
+  onWorkingDirectoryChange?: (dir: string) => void;
+  onUseNoFolder?: (dir: string) => void | Promise<void>;
+  showFolderSelector?: boolean;
+  showNoFolderAction?: boolean;
 }
 
 const NAV_SCROLL_LOCK_DURATION = 800;
@@ -214,6 +221,12 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
   resumeDisabled = false,
   onResumeTask,
   onCancelTaskResume,
+  workingDirectory = '',
+  workingDirectoryName,
+  onWorkingDirectoryChange,
+  onUseNoFolder,
+  showFolderSelector = false,
+  showNoFolderAction = true,
 }) => {
   const dispatch = useDispatch();
   const currentSession = useSelector(selectCurrentSession);
@@ -1574,6 +1587,12 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
                   resumeTaskActive={Boolean(resumeTaskId)}
                   onCancelTaskResume={onCancelTaskResume}
                   sessionId={displayedSessionId ?? currentSession?.id}
+                  workingDirectory={workingDirectory}
+                  workingDirectoryName={workingDirectoryName}
+                  onWorkingDirectoryChange={onWorkingDirectoryChange}
+                  onUseNoFolder={onUseNoFolder}
+                  showFolderSelector={showFolderSelector}
+                  showNoFolderAction={showNoFolderAction}
                 />
                 <p className="text-center text-xs text-muted opacity-85 mt-2 mb-[-8px] select-none">
                   {i18nService.t('aiGeneratedDisclaimer')}

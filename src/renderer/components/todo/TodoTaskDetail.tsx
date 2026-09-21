@@ -1,4 +1,4 @@
-import { Button } from '@shared/components/ui/button';
+﻿import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
 import {
   Select,
@@ -19,9 +19,13 @@ import {
   fromDateInputValue,
   fromDateTimeInputValue,
   formatTodoDateTime,
+  toDateInputMinValue,
   toDateInputValue,
+  toDateTimeInputMaxValue,
+  toDateTimeInputMinValue,
   toDateTimeInputValue,
   todayDateKey,
+  validateTodoSchedule,
 } from './todoUtils';
 
 interface TodoTaskDetailProps {
@@ -30,9 +34,19 @@ interface TodoTaskDetailProps {
   language: 'zh' | 'en';
   onUpdated: () => Promise<void>;
   onDelete: () => void;
+  onSaved: () => void;
 }
 
 const NO_LIST_VALUE = 'none';
+
+const openInputPicker = (input: HTMLInputElement): void => {
+  if (typeof input.showPicker !== 'function') return;
+  try {
+    input.showPicker();
+  } catch {
+    // 日历已经打开时再点会抛错，忽略即可
+  }
+};
 
 const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
   todo,
@@ -40,6 +54,7 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
   language,
   onUpdated,
   onDelete,
+  onSaved,
 }) => {
   const [title, setTitle] = useState(todo.title);
   const [note, setNote] = useState(todo.note);
@@ -48,6 +63,8 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
   const [listId, setListId] = useState(todo.listId ?? NO_LIST_VALUE);
   const [stepDraft, setStepDraft] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [dueError, setDueError] = useState('');
+  const [remindError, setRemindError] = useState('');
 
   useEffect(() => {
     setTitle(todo.title);
@@ -55,29 +72,92 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
     setDueDate(toDateInputValue(todo.dueAt));
     setRemindAt(toDateTimeInputValue(todo.remindAt));
     setListId(todo.listId ?? NO_LIST_VALUE);
+    setDueError('');
+    setRemindError('');
   }, [todo]);
 
-  const saveDetails = async (): Promise<void> => {
+  const titleEmpty = !title.trim();
+  const stepEmpty = !stepDraft.trim();
+  const dueMin = toDateInputMinValue();
+  const remindMin = toDateTimeInputMinValue();
+  const remindMax = toDateTimeInputMaxValue(fromDateInputValue(dueDate));
+
+  const showError = (message?: string): void => {
+    window.dispatchEvent(
+      new CustomEvent('app:showToast', {
+        detail: message ?? i18nService.t('todoSaveError'),
+      }),
+    );
+  };
+
+  const saveDetails = async (closeOnSuccess = false): Promise<void> => {
     const trimmedTitle = title.trim();
-    if (!trimmedTitle) return;
+    if (!trimmedTitle) {
+      showError(i18nService.t('todoTitleRequired'));
+      return;
+    }
+    const nextDueAt = fromDateInputValue(dueDate);
+    const nextRemindAt = fromDateTimeInputValue(remindAt);
+    const scheduleKey = validateTodoSchedule(nextDueAt, nextRemindAt);
+    if (scheduleKey) {
+      const message = i18nService.t(scheduleKey);
+      if (scheduleKey === 'todoDueDateMustBeFuture') {
+        setDueError(message);
+        setRemindError('');
+      } else {
+        setDueError('');
+        setRemindError(message);
+      }
+      return;
+    }
+    setDueError('');
+    setRemindError('');
     setIsSaving(true);
     try {
       const result = await todoService.update(todo.id, {
         title: trimmedTitle,
         note,
-        dueAt: fromDateInputValue(dueDate),
-        remindAt: fromDateTimeInputValue(remindAt),
+        dueAt: nextDueAt,
+        remindAt: nextRemindAt,
         listId: listId === NO_LIST_VALUE ? null : listId,
       });
-      if (result.success) await onUpdated();
+      if (result.success) {
+        await onUpdated();
+        if (closeOnSuccess) onSaved();
+      } else showError();
     } finally {
       setIsSaving(false);
     }
   };
 
+  const persistScheduleField = async (
+    patch: { dueAt?: number | null; remindAt?: number | null },
+    nextDue: number | null,
+    nextRemind: number | null,
+  ): Promise<void> => {
+    const scheduleKey = validateTodoSchedule(nextDue, nextRemind);
+    if (scheduleKey) {
+      const message = i18nService.t(scheduleKey);
+      if (scheduleKey === 'todoDueDateMustBeFuture') {
+        setDueError(message);
+        setRemindError('');
+      } else {
+        setDueError('');
+        setRemindError(message);
+      }
+      return;
+    }
+    setDueError('');
+    setRemindError('');
+    const result = await todoService.update(todo.id, patch);
+    if (result.success) await onUpdated();
+    else showError();
+  };
+
   const updateStatus = async (status: TodoStatus): Promise<void> => {
     const result = await todoService.update(todo.id, { status });
     if (result.success) await onUpdated();
+    else showError();
   };
 
   const toggleMyDay = async (): Promise<void> => {
@@ -85,11 +165,13 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
       myDayDate: todo.myDayDate === todayDateKey() ? null : todayDateKey(),
     });
     if (result.success) await onUpdated();
+    else showError();
   };
 
   const toggleImportant = async (): Promise<void> => {
     const result = await todoService.update(todo.id, { important: !todo.important });
     if (result.success) await onUpdated();
+    else showError();
   };
 
   const addStep = async (): Promise<void> => {
@@ -99,19 +181,27 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
     if (result.success) {
       setStepDraft('');
       await onUpdated();
-    }
+    } else showError();
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6">
-      <div className="space-y-4">
-        <Input
-          value={title}
-          onChange={event => setTitle(event.target.value)}
-          onBlur={() => void saveDetails()}
-          aria-label={i18nService.t('todoTitleLabel')}
-          className="theme-page-todo-task-detail-input-1"
-        />
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <div className="space-y-1.5">
+          <Input
+            value={title}
+            onChange={event => setTitle(event.target.value)}
+            onBlur={() => {
+              if (!titleEmpty) void saveDetails();
+            }}
+            aria-label={i18nService.t('todoTitleLabel')}
+            aria-invalid={titleEmpty || undefined}
+            className="theme-page-todo-task-detail-input-1"
+          />
+          {titleEmpty ? (
+            <p className="text-xs text-muted-foreground">{i18nService.t('todoTitleRequired')}</p>
+          ) : null}
+        </div>
 
         <div className="flex flex-wrap gap-2 border-b border-border-subtle pb-4">
           <Button
@@ -136,36 +226,66 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
           </Button>
         </div>
 
-        <div className="grid gap-3 border-b border-border-subtle pb-4 sm:grid-cols-2">
-          <label className="space-y-1.5 text-sm text-foreground">
-            <span className="flex items-center gap-1.5 text-muted-foreground">
+        <div className="grid items-start gap-3 border-b border-border-subtle pb-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5 text-sm text-foreground">
+            <label
+              htmlFor="todo-due-date"
+              className="flex h-5 cursor-pointer items-center gap-1.5 text-muted-foreground"
+            >
               <CalendarDays className="size-4" />
               {i18nService.t('todoDueDate')}
-            </span>
+            </label>
             <Input
+              id="todo-due-date"
               type="date"
+              name="todoDueDate"
               value={dueDate}
+              min={dueMin}
+              className="w-full cursor-pointer"
+              onClick={event => openInputPicker(event.currentTarget)}
               onChange={event => {
-                setDueDate(event.target.value);
-                void todoService
-                  .update(todo.id, { dueAt: fromDateInputValue(event.target.value) })
-                  .then(result => (result.success ? onUpdated() : undefined));
+                // 提醒弹层有时会误触发截止日期的 change，只接受当前焦点在本输入框上的修改
+                if (document.activeElement !== event.currentTarget) return;
+                const value = event.target.value;
+                setDueDate(value);
+                void persistScheduleField(
+                  { dueAt: fromDateInputValue(value) },
+                  fromDateInputValue(value),
+                  fromDateTimeInputValue(remindAt),
+                );
               }}
             />
-          </label>
-          <label className="space-y-1.5 text-sm text-foreground">
-            <span className="text-muted-foreground">{i18nService.t('todoReminder')}</span>
+            {dueError ? <p className="text-xs text-destructive">{dueError}</p> : null}
+          </div>
+          <div className="flex flex-col gap-1.5 text-sm text-foreground">
+            <label
+              htmlFor="todo-remind-at"
+              className="flex h-5 cursor-pointer items-center text-muted-foreground"
+            >
+              {i18nService.t('todoReminder')}
+            </label>
             <Input
+              id="todo-remind-at"
               type="datetime-local"
+              name="todoRemindAt"
               value={remindAt}
+              min={remindMin}
+              max={remindMax}
+              className="w-full cursor-pointer"
+              onClick={event => openInputPicker(event.currentTarget)}
               onChange={event => {
-                setRemindAt(event.target.value);
-                void todoService
-                  .update(todo.id, { remindAt: fromDateTimeInputValue(event.target.value) })
-                  .then(result => (result.success ? onUpdated() : undefined));
+                if (document.activeElement !== event.currentTarget) return;
+                const value = event.target.value;
+                setRemindAt(value);
+                void persistScheduleField(
+                  { remindAt: fromDateTimeInputValue(value) },
+                  fromDateInputValue(dueDate),
+                  fromDateTimeInputValue(value),
+                );
               }}
             />
-          </label>
+            {remindError ? <p className="text-xs text-destructive">{remindError}</p> : null}
+          </div>
         </div>
 
         <label className="block space-y-1.5 border-b border-border-subtle pb-4 text-sm text-foreground">
@@ -177,7 +297,10 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
               setListId(nextListId);
               void todoService
                 .update(todo.id, { listId: nextListId === NO_LIST_VALUE ? null : nextListId })
-                .then(result => (result.success ? onUpdated() : undefined));
+                .then(result => {
+                  if (result.success) return onUpdated();
+                  showError();
+                });
             }}
           >
             <SelectTrigger className="w-full">
@@ -198,18 +321,22 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
           </Select>
         </label>
 
-        <label className="block space-y-1.5 text-sm text-foreground">
+        <label htmlFor="todo-note" className="block space-y-1.5 text-sm text-foreground">
           <span className="text-muted-foreground">{i18nService.t('todoNote')}</span>
           <Textarea
+            id="todo-note"
             value={note}
             onChange={event => setNote(event.target.value)}
-            onBlur={() => void saveDetails()}
+            onBlur={() => {
+              if (!titleEmpty) void saveDetails();
+            }}
             placeholder={i18nService.t('todoNotePlaceholder')}
             rows={5}
+            className="field-sizing-fixed max-h-40 min-h-[7.5rem] overflow-y-auto"
           />
         </label>
 
-        <section className="space-y-2 border-b border-border-subtle pb-4">
+        <section className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <ListChecks className="size-4" />
             {i18nService.t('todoSteps')}
@@ -231,7 +358,10 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
                 onClick={() =>
                   void todoService
                     .updateStep({ id: step.id, completed: !step.completed })
-                    .then(result => (result.success ? onUpdated() : undefined))
+                    .then(result => {
+                      if (result.success) return onUpdated();
+                      showError();
+                    })
                 }
               >
                 {step.completed ? <Check /> : null}
@@ -251,9 +381,10 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
                 aria-label={i18nService.t('todoDeleteStep')}
                 title={i18nService.t('todoDeleteStep')}
                 onClick={() =>
-                  void todoService
-                    .deleteStep(step.id)
-                    .then(result => (result.success ? onUpdated() : undefined))
+                  void todoService.deleteStep(step.id).then(result => {
+                    if (result.success) return onUpdated();
+                    showError();
+                  })
                 }
               >
                 <Trash2 className="text-muted-foreground" />
@@ -272,15 +403,19 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
               }}
               placeholder={i18nService.t('todoStepPlaceholder')}
             />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              onClick={() => void addStep()}
-              aria-label={i18nService.t('todoAddStep')}
-            >
-              <Plus />
-            </Button>
+            <span className={cn(stepEmpty && 'cursor-not-allowed')}>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                disabled={stepEmpty}
+                onClick={() => void addStep()}
+                aria-label={i18nService.t('todoAddStep')}
+                title={stepEmpty ? i18nService.t('todoStepPlaceholder') : i18nService.t('todoAddStep')}
+              >
+                <Plus />
+              </Button>
+            </span>
           </div>
         </section>
 
@@ -313,7 +448,12 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
               {i18nService.t('todoMarkActive')}
             </Button>
           )}
-          <Button type="button" onClick={() => void saveDetails()} disabled={isSaving}>
+          <Button
+            type="button"
+            onClick={() => void saveDetails(true)}
+            disabled={isSaving || titleEmpty}
+            title={titleEmpty ? i18nService.t('todoTitleRequired') : undefined}
+          >
             {isSaving ? i18nService.t('saving') : i18nService.t('save')}
           </Button>
         </div>

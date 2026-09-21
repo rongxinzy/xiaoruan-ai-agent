@@ -1596,6 +1596,26 @@ const CoworkView: React.FC<CoworkViewProps> = ({
           resumeDisabled={taskResume.isResuming} // 2026/09/17 lixiang  恢复中禁用继续执行，避免重复点击
           onResumeTask={taskResume.select}
           onCancelTaskResume={taskResume.cancel}
+          // 2026/09/21 lixiang  会话页也展示底部工作区，避免进任务后路径“消失”
+          workingDirectory={currentWorkspacePath}
+          workingDirectoryName={currentWorkspaceDisplayName}
+          onWorkingDirectoryChange={async (dir: string) => {
+            clearUnmanagedWorkingDirectory();
+            const workspace = await workspaceService.ensureWorkspace(dir);
+            if (workspace) await workspaceService.selectWorkspace(workspace.id);
+          }}
+          onUseNoFolder={async dir => {
+            const selected = await selectUnmanagedWorkingDirectory(dir);
+            if (!selected) {
+              window.dispatchEvent(
+                new CustomEvent('app:showToast', {
+                  detail: i18nService.t('projectCreateFailed'),
+                }),
+              );
+            }
+          }}
+          showFolderSelector={workMode !== WorkMode.Chat && !currentWorkspace?.isHidden}
+          showNoFolderAction={!currentWorkspaceId}
         />
       </div>
     );
