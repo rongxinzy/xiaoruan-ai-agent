@@ -28,7 +28,11 @@ interface WorkspaceTreeNodeProps {
   workspace: WorkspaceSidebarNode;
   isBatchMode: boolean;
   selectedIds: Set<string>;
+  /** 当前选中的工作区（右侧应对齐到该项目） */
+  isActiveWorkspace?: boolean;
   onToggleExpanded: (workspaceId: string) => void;
+  /** 点击项目名称：切换当前工作区并定位右侧 */
+  onSelectWorkspace?: (workspace: WorkspaceSidebarNode) => void;
   onCreateTask: (workspace: WorkspaceSidebarNode) => void;
   onRenameWorkspace?: (workspace: WorkspaceSidebarNode) => void;
   onRemoveWorkspace?: (workspace: WorkspaceSidebarNode) => void;
@@ -52,7 +56,9 @@ const WorkspaceTreeNode: React.FC<WorkspaceTreeNodeProps> = ({
   workspace,
   isBatchMode,
   selectedIds,
+  isActiveWorkspace = false,
   onToggleExpanded,
+  onSelectWorkspace,
   onCreateTask,
   onRenameWorkspace,
   onRemoveWorkspace,
@@ -108,12 +114,22 @@ const WorkspaceTreeNode: React.FC<WorkspaceTreeNodeProps> = ({
     <div className="space-y-0.5">
       <div
         data-slot="workspace-tree-row"
-        className="sidebar-interactive-surface group sticky top-0 z-20 ml-[-6px] flex h-7 w-[calc(100%+12px)] items-center rounded-md transition-colors hover:shadow-subtle"
+        className={cn(
+          'sidebar-interactive-surface group sticky top-0 z-20 ml-[-6px] flex h-7 w-[calc(100%+12px)] items-center rounded-md transition-colors hover:shadow-subtle',
+          isActiveWorkspace && 'bg-surface-raised',
+        )}
       >
         <Button
           variant="ghost"
           className="theme-page-workspace-tree-node-button-1 h-full min-w-0 flex-1 justify-start text-left"
-          onClick={() => onToggleExpanded(workspace.id)}
+          onClick={() => {
+            // 2026/09/21 lixiang  有定位回调时切换右侧项目；当前项目再点则折叠/展开
+            if (onSelectWorkspace) {
+              onSelectWorkspace(workspace);
+              return;
+            }
+            onToggleExpanded(workspace.id);
+          }}
           onMouseEnter={() => {
             if (!prefersReducedMotion) folderIconRef.current?.startAnimation();
           }}
@@ -121,11 +137,18 @@ const WorkspaceTreeNode: React.FC<WorkspaceTreeNodeProps> = ({
           role="treeitem"
           aria-level={1}
           aria-expanded={workspace.isExpanded}
+          aria-current={isActiveWorkspace ? 'true' : undefined}
         >
           <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
             <AnimatedFolderOpenIcon ref={folderIconRef} />
           </span>
-          <span className="min-w-0 flex-1 truncate text-muted-foreground" title={workspace.path}>
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate text-muted-foreground',
+              isActiveWorkspace && 'font-medium text-foreground',
+            )}
+            title={workspace.path}
+          >
             {workspace.name}
           </span>
         </Button>
