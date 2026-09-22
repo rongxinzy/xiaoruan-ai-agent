@@ -195,16 +195,20 @@ export class AISphereService {
       this.recoveryDelay = 5000;
       this.checkedAt = Date.now();
       // A new binding must not retain an old platform's default selection.
+      // 2026/09/22 lixiang  同地址重连仅在目录仍含当前默认时保留，否则回落到首个模型
       const current = this.store?.get<Config>(AISphere.AppConfigKey) ?? {};
+      const currentDefault = current.model?.defaultModel?.trim() ?? '';
+      const retainedDefault =
+        !switching && currentDefault && models.some(model => model.id === currentDefault)
+          ? currentDefault
+          : undefined;
       this.store?.set(
         AISphere.AppConfigKey,
         this.project({
           ...current,
           model: {
             ...current.model,
-            defaultModel: switching
-              ? (models[0]?.id ?? '')
-              : (current.model?.defaultModel ?? models[0]?.id ?? ''),
+            defaultModel: retainedDefault ?? models[0]?.id ?? '',
             defaultModelProvider: AISphere.Provider,
           },
         }),

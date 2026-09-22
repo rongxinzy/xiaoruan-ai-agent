@@ -56,9 +56,25 @@ interface BrandBootScreenProps {
   onExitComplete: () => void;
 }
 
-const resolveIsDark = (): boolean =>
-  document.documentElement.classList.contains('dark') ||
-  document.documentElement.dataset.theme === 'classic-dark';
+// 2026/09/22 lixiang  启动屏早于 themeService.initialize，按 DOM/缓存/系统配色选明暗 logo
+const THEME_STORAGE_KEY = 'xiaoruan-theme-id';
+
+const resolveIsDark = (): boolean => {
+  const root = document.documentElement;
+  if (root.classList.contains('dark')) return true;
+  if (root.classList.contains('light')) return false;
+  const themeId = root.dataset.theme;
+  if (themeId?.endsWith('-dark')) return true;
+  if (themeId?.endsWith('-light')) return false;
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved?.endsWith('-dark')) return true;
+    if (saved?.endsWith('-light')) return false;
+  } catch {
+    /* private mode / storage blocked */
+  }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+};
 
 const logoSourceForTheme = (isDark: boolean): string =>
   isDark ? 'xiaoruan-logo-dark-1600.png' : 'xiaoruan-logo-light-1600.png';
@@ -132,7 +148,7 @@ export function BrandBootScreen({ exiting, onExitComplete }: BrandBootScreenProp
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const exitingRef = useRef(exiting);
   const onExitCompleteRef = useRef(onExitComplete);
-  const [isDark] = useState(resolveIsDark);
+  const [isDark, setIsDark] = useState(resolveIsDark);
   const [reducedMotion] = useState(
     () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
   );
@@ -144,6 +160,21 @@ export function BrandBootScreen({ exiting, onExitComplete }: BrandBootScreenProp
   useEffect(() => {
     onExitCompleteRef.current = onExitComplete;
   }, [onExitComplete]);
+
+  // 2026/09/22 lixiang  主题 class 异步落地后重选 logo，避免暗色误用浅色字标
+  useEffect(() => {
+    const sync = () => {
+      const next = resolveIsDark();
+      setIsDark(prev => (prev === next ? prev : next));
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'data-theme'],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   const staticMode = reducedMotion || imageFailed;
 
