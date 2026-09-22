@@ -146,8 +146,12 @@ const modelSlice = createSlice({
         // Retain a removed selection so the request fails explicitly instead of silently changing models.
         state.defaultSelectedModel =
           matchedModel ?? state.defaultSelectedModel ?? state.availableModels[0];
+        syncSelectedModelByAgent(state.selectedModelByAgent, state.availableModels);
+      } else {
+        // 2026/09/22 lixiang  平台不可用导致目录为空时，清空对话模型选择器
+        state.defaultSelectedModel = { id: '', name: '' };
+        state.selectedModelByAgent = {};
       }
-      syncSelectedModelByAgent(state.selectedModelByAgent, state.availableModels);
     },
   },
 });

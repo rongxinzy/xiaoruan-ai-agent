@@ -75,7 +75,8 @@ export class AISphereService {
         : this.ready
           ? AISphereStatus.Ready
           : AISphereStatus.Unavailable,
-      models: this.models.map(publicModel),
+      // 2026/09/22 lixiang  不可用时不暴露目录，设置页默认模型随连接失败清空
+      models: this.ready ? this.models.map(publicModel) : [],
     };
   }
 
@@ -215,9 +216,41 @@ export class AISphereService {
       );
       this.notify();
       return this.snapshot();
+    } catch (error) {
+      // 2026/09/22 lixiang  连接失败标记不可用并清空目录；换址失败不恢复旧地址，避免模型列表回弹
+      if (
+        this.address &&
+        !(error instanceof Error && error.message === AISphereError.Busy)
+      ) {
+        this.ready = false;
+        this.models = [];
+        this.clearDefaultModel();
+        this.notify();
+        if (switching) {
+          this.stopRecovery();
+        } else {
+          this.scheduleRecovery();
+        }
+      }
+      throw error;
     } finally {
       this.changing = false;
     }
+  }
+
+  private clearDefaultModel(): void {
+    const current = this.store?.get<Config>(AISphere.AppConfigKey) ?? {};
+    this.store?.set(
+      AISphere.AppConfigKey,
+      this.project({
+        ...current,
+        model: {
+          ...current.model,
+          defaultModel: '',
+          defaultModelProvider: AISphere.Provider,
+        },
+      }),
+    );
   }
 
   async refresh(): Promise<void> {
@@ -233,6 +266,9 @@ export class AISphereService {
         this.checkedAt = Date.now();
       } catch (error) {
         this.ready = false;
+        this.models = [];
+        // 2026/09/22 lixiang  刷新失败重置默认模型，避免设置页仍显示旧选择
+        this.clearDefaultModel();
         throw error;
       } finally {
         this.notify();

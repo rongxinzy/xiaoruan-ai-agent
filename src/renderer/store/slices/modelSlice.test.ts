@@ -86,6 +86,17 @@ describe('setAvailableModels', () => {
 
     expect(state.defaultSelectedModel.supportsImage).toBe(true);
   });
+
+  // 2026/09/22 lixiang  目录为空时清空默认与按 agent 选择，对话选择器同步为空
+  test('clears selections when the available model list becomes empty', () => {
+    let state = modelReducer(undefined, setSelectedModel({ agentId: 'agent-1', model: modelA }));
+    state = modelReducer(state, setDefaultSelectedModel(modelA));
+    state = modelReducer(state, setAvailableModels([]));
+
+    expect(state.availableModels).toEqual([]);
+    expect(state.defaultSelectedModel).toEqual({ id: '', name: '' });
+    expect(state.selectedModelByAgent).toEqual({});
+  });
 });
 
 describe('selectAgentSelectedModel', () => {
