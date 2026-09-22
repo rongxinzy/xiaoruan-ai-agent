@@ -235,7 +235,8 @@ test('parallel requests share a stale-directory refresh and cannot use removed m
   expect(fetcher).toHaveBeenCalledTimes(4);
 });
 
-test('refresh cannot race a replacement connection and same-address reconnect retains selection', async () => {
+// 2026/09/22 lixiang  覆盖同地址重连保留有效默认、以及空/已移除默认回落首个模型
+test('same-address reconnect keeps a valid selection and replaces empty or removed defaults', async () => {
   const { service, store, fetcher, values } = setup();
   await service.initialize(store, 'http://127.0.0.1:1234');
   await service.connect('http://platform.test');
@@ -251,13 +252,29 @@ test('refresh cannot race a replacement connection and same-address reconnect re
   await expect(service.refresh()).rejects.toThrow(AISphereError.Busy);
   complete(Response.json({ data: 'ok' }));
   await pending;
+  expect((values.get(AISphere.AppConfigKey) as { model: { defaultModel: string } }).model.defaultModel).toBe(
+    model.name,
+  );
+
   const current = values.get(AISphere.AppConfigKey) as { model: { defaultModel: string } };
   values.set(AISphere.AppConfigKey, {
     ...current,
     model: { ...current.model, defaultModel: 'removed-selection' },
   });
   await service.connect('http://other.test');
-  expect((values.get(AISphere.AppConfigKey) as typeof current).model.defaultModel).toBe(
-    'removed-selection',
-  );
+  expect((values.get(AISphere.AppConfigKey) as typeof current).model.defaultModel).toBe(model.name);
+
+  values.set(AISphere.AppConfigKey, {
+    ...current,
+    model: { ...current.model, defaultModel: '' },
+  });
+  await service.connect('http://other.test');
+  expect((values.get(AISphere.AppConfigKey) as typeof current).model.defaultModel).toBe(model.name);
+
+  values.set(AISphere.AppConfigKey, {
+    ...current,
+    model: { ...current.model, defaultModel: model.name },
+  });
+  await service.connect('http://other.test');
+  expect((values.get(AISphere.AppConfigKey) as typeof current).model.defaultModel).toBe(model.name);
 });

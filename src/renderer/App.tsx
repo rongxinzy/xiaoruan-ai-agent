@@ -317,8 +317,17 @@ const App: React.FC = () => {
       }
       const allModels = await collectAvailableModels(config);
       dispatch(setAvailableModels(allModels));
-      const preferred = allModels.find(model => model.id === config.model.defaultModel && model.providerKey === config.model.defaultModelProvider);
-      if (preferred) dispatch(setDefaultSelectedModel(preferred));
+      // 2026/09/22 lixiang  配置更新后优先匹配默认模型，否则回落到可用列表首项，避免无选中模型
+      if (allModels.length > 0) {
+        const preferred =
+          allModels.find(
+            model =>
+              model.id === config.model.defaultModel &&
+              (!config.model.defaultModelProvider ||
+                model.providerKey === config.model.defaultModelProvider),
+          ) ?? allModels[0];
+        dispatch(setDefaultSelectedModel(preferred));
+      }
     };
 
     const handleConfigUpdated = () => {

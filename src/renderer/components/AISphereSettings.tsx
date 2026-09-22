@@ -25,6 +25,28 @@ export function AISphereSettings() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(configService.getConfig().model.defaultModel ?? '');
   const t = (key: string) => i18nService.t(key);
+
+  // 2026/09/22 lixiang  choose 上移供过期默认自动回落与手动选择共用
+  const choose = async (value: string | null) => {
+    if (!value) return;
+    setBusy(true);
+    setError('');
+    try {
+      await configService.updateConfig({
+        model: {
+          ...configService.getConfig().model,
+          defaultModel: value,
+          defaultModelProvider: AISphere.Provider,
+        },
+      });
+      setSelected(value);
+    } catch {
+      setError(AISphereError.Unavailable);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   useEffect(() => {
     let disposed = false;
     const unsubscribe = window.electron.managedProviders.onChanged(() => {
@@ -58,6 +80,13 @@ export function AISphereSettings() {
     };
   }, []);
 
+  // 2026/09/22 lixiang  存储的默认模型缺失或不在目录时，自动持久化为目录首个模型
+  useEffect(() => {
+    if (busy || snapshot?.status !== AISphereStatus.Ready || !snapshot.models.length) return;
+    if (snapshot.models.some(model => model.id === selected)) return;
+    void choose(snapshot.models[0].id);
+  }, [busy, snapshot, selected]);
+
   const connect = async (refresh: boolean) => {
     setBusy(true);
     setError('');
@@ -68,8 +97,23 @@ export function AISphereSettings() {
       setSnapshot(value);
       setAddress(value.address);
       const config = await configService.reload();
-      setSelected(config.model.defaultModel ?? '');
-      window.dispatchEvent(new CustomEvent('config-updated'));
+      // 2026/09/22 lixiang  连接/刷新后校验默认模型仍在目录，否则写回首个模型并同步配置
+      const nextSelected =
+        value.models.some(model => model.id === config.model.defaultModel)
+          ? (config.model.defaultModel ?? '')
+          : (value.models[0]?.id ?? '');
+      if (nextSelected && nextSelected !== config.model.defaultModel) {
+        await configService.updateConfig({
+          model: {
+            ...config.model,
+            defaultModel: nextSelected,
+            defaultModelProvider: AISphere.Provider,
+          },
+        });
+      } else {
+        window.dispatchEvent(new CustomEvent('config-updated'));
+      }
+      setSelected(nextSelected);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : '';
       setError(
@@ -82,25 +126,6 @@ export function AISphereSettings() {
     }
   };
 
-  const choose = async (value: string | null) => {
-    if (!value) return;
-    setBusy(true);
-    setError('');
-    try {
-      await configService.updateConfig({
-        model: {
-          ...configService.getConfig().model,
-          defaultModel: value,
-          defaultModelProvider: AISphere.Provider,
-        },
-      });
-      setSelected(value);
-    } catch {
-      setError(AISphereError.Unavailable);
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
     <div className="max-w-xl space-y-6 p-4">
       <div className="space-y-2">
