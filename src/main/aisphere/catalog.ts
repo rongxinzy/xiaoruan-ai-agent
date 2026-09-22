@@ -1,4 +1,8 @@
-import { AISphereError, type AISphereModel } from '../../shared/aisphere';
+import {
+  AISphereError,
+  AISphereModelRuntimeStatus,
+  type AISphereModel,
+} from '../../shared/aisphere';
 import { ModelCapabilityStatus } from '../../shared/providers';
 
 export interface PlatformModel extends AISphereModel {
@@ -59,9 +63,12 @@ export function parsePlatformModels(input: unknown): PlatformModel[] {
     throw new Error(AISphereError.InvalidModels);
   }
   const ids = new Set<string>();
-  return input.model_list.map((raw: unknown) => {
+  // 2026/09/22 lixiang  只收录 status=running 的模型，设置页与 Chat 目录一致
+  const models: PlatformModel[] = [];
+  for (const raw of input.model_list) {
     if (!raw || typeof raw !== 'object') throw new Error(AISphereError.InvalidModels);
     const item = raw as Record<string, unknown>;
+    if (item.status !== AISphereModelRuntimeStatus.Running) continue;
     const id = text(item.name, 256);
     if (ids.has(id)) throw new Error(AISphereError.InvalidModels);
     ids.add(id);
@@ -75,7 +82,7 @@ export function parsePlatformModels(input: unknown): PlatformModel[] {
         : value === false
           ? ModelCapabilityStatus.Unsupported
           : ModelCapabilityStatus.Unknown;
-    return {
+    models.push({
       id,
       name: id,
       url: url.href,
@@ -90,8 +97,9 @@ export function parsePlatformModels(input: unknown): PlatformModel[] {
       contextWindow: limit(item.context_length),
       maxInput: limit(item.max_input),
       maxTokens: limit(item.max_output),
-    };
-  });
+    });
+  }
+  return models;
 }
 
 export function publicModel({ apiKey: _key, url: _url, ...model }: PlatformModel): AISphereModel {

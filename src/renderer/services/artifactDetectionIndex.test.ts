@@ -34,7 +34,8 @@ describe('ArtifactDetectionIndex', () => {
   test('recomputes only the linked tool artifact when a result arrives late', () => {
     const index = new ArtifactDetectionIndex();
     index.replace([writeMessage()], 'session-1');
-    expect(index.getArtifacts()).toHaveLength(1);
+    // 未完成 / 从未执行的 write 不应先出现文件卡片
+    expect(index.getArtifacts()).toHaveLength(0);
 
     index.applyPatch(
       [resultMessage()],
@@ -80,6 +81,7 @@ describe('ArtifactDetectionIndex', () => {
       timestamp: 4,
       metadata: {
         toolName: 'declare_artifact',
+        toolUseId: 'declare-call',
         toolInput: {
           filePath: 'C:/workspace/report.md',
           title: 'Final report',
@@ -87,7 +89,14 @@ describe('ArtifactDetectionIndex', () => {
         },
       },
     };
-    index.replace([finalAnswer, declaration], 'session-3');
+    const declarationResult: CoworkMessage = {
+      id: 'declaration-result',
+      type: 'tool_result',
+      content: 'OK',
+      timestamp: 5,
+      metadata: { toolUseId: 'declare-call' },
+    };
+    index.replace([finalAnswer, declaration, declarationResult], 'session-3');
 
     const artifacts = index.getArtifacts();
     expect(artifacts).toHaveLength(1);

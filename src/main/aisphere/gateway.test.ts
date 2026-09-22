@@ -37,6 +37,7 @@ test('gateway uses each model exact endpoint and credential, clamps output, and 
               name,
               url: `http://upstream.test/${name}/complete`,
               api_key: `key-${name}`,
+              status: 'running',
               max_output: 50,
             })),
           },

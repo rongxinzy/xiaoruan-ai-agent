@@ -91,15 +91,29 @@ describe('ArtifactDetectionService', () => {
       timestamp: 2,
       metadata: {
         toolName: 'declare_artifact',
+        toolUseId: 'declare-call',
         toolInput: {
           filePath: 'C:/workspace/presentation.pptx',
           role: 'deliverable',
         },
       },
     };
-    await service.processMessages([finalAssistant, declareToolMessage], sessionId);
+    const declareResultMessage: CoworkMessage = {
+      id: `${toolMessageId}-result`,
+      type: 'tool_result',
+      content: 'OK',
+      timestamp: 3,
+      metadata: { toolUseId: 'declare-call' },
+    };
+    await service.processMessages(
+      [finalAssistant, declareToolMessage, declareResultMessage],
+      sessionId,
+    );
     // Third pass: same messages, should be skipped (no changes)
-    await service.processMessages([finalAssistant, declareToolMessage], sessionId);
+    await service.processMessages(
+      [finalAssistant, declareToolMessage, declareResultMessage],
+      sessionId,
+    );
 
     expect(FakeArtifactDetectionWorker.requests).toHaveLength(2);
     expect(FakeArtifactDetectionWorker.requests[0]?.kind).toBe(
@@ -108,7 +122,11 @@ describe('ArtifactDetectionService', () => {
     const patchRequest = FakeArtifactDetectionWorker.requests[1];
     expect(patchRequest?.kind).toBe(ArtifactDetectionRequestKind.Patch);
     if (patchRequest?.kind === ArtifactDetectionRequestKind.Patch) {
-      expect(patchRequest.upserts.map(message => message.id)).toEqual([messageId, toolMessageId]);
+      expect(patchRequest.upserts.map(message => message.id)).toEqual([
+        messageId,
+        toolMessageId,
+        `${toolMessageId}-result`,
+      ]);
       expect(patchRequest).not.toHaveProperty('messages');
     }
     // Only the declare_artifact tool call produces an artifact
@@ -216,8 +234,16 @@ describe('ArtifactDetectionService', () => {
           timestamp: 1,
           metadata: {
             toolName: 'write',
+            toolUseId: 'csv-1',
             toolInput: { path: 'C:/workspace/scores.csv' },
           },
+        },
+        {
+          id: 'write-csv-result',
+          type: 'tool_result',
+          content: 'written',
+          timestamp: 2,
+          metadata: { toolUseId: 'csv-1' },
         },
       ],
       'session-csv',
@@ -240,8 +266,16 @@ describe('ArtifactDetectionService', () => {
           timestamp: 1,
           metadata: {
             toolName: 'write',
+            toolUseId: 'model-1',
             toolInput: { path: 'C:/workspace/model.stl' },
           },
+        },
+        {
+          id: 'write-model-result',
+          type: 'tool_result',
+          content: 'written',
+          timestamp: 2,
+          metadata: { toolUseId: 'model-1' },
         },
       ],
       'session-model',
@@ -264,8 +298,16 @@ describe('ArtifactDetectionService', () => {
           timestamp: 1,
           metadata: {
             toolName: 'write',
+            toolUseId: 'xls-1',
             toolInput: { path: 'C:/workspace/scores.xls' },
           },
+        },
+        {
+          id: 'write-xls-result',
+          type: 'tool_result',
+          content: 'written',
+          timestamp: 2,
+          metadata: { toolUseId: 'xls-1' },
         },
       ],
       'session-xls',
@@ -273,6 +315,33 @@ describe('ArtifactDetectionService', () => {
 
     expect(detectedArtifacts).toHaveLength(1);
     expect(detectedArtifacts[0].artifact).toMatchObject({ type: 'document', content: '' });
+  });
+
+  test('does not surface a write file card when the tool never completed', async () => {
+    const detectedArtifacts: ReturnType<typeof detectArtifactsFromMessages> = [];
+    const service = new ArtifactDetectionService(detected => detectedArtifacts.push(...detected));
+
+    await service.processMessages(
+      [
+        {
+          id: 'write-truncated',
+          type: 'tool_use',
+          content: '',
+          timestamp: 1,
+          metadata: {
+            toolName: 'write',
+            toolUseId: 'truncated-1',
+            toolInput: {
+              path: 'C:/workspace/report.html',
+              content: '<html><!-- truncated by output token limit',
+            },
+          },
+        },
+      ],
+      'session-truncated',
+    );
+
+    expect(detectedArtifacts).toHaveLength(0);
   });
 
   test('keeps declared artifact metadata available before preview', async () => {
@@ -288,11 +357,19 @@ describe('ArtifactDetectionService', () => {
           timestamp: 1,
           metadata: {
             toolName: 'declare_artifact',
+            toolUseId: 'declare-model-call',
             toolInput: {
               filePath: 'C:/workspace/model.stl',
               role: 'deliverable',
             },
           },
+        },
+        {
+          id: 'declare-model-result',
+          type: 'tool_result',
+          content: 'OK',
+          timestamp: 2,
+          metadata: { toolUseId: 'declare-model-call' },
         },
       ],
       'session-model',

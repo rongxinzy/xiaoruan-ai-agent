@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
 import { Label } from '@shared/components/ui/label';
@@ -15,10 +16,23 @@ import {
   AISphereStatus,
   type AISphereSnapshot,
 } from '../../shared/aisphere';
+import { ModelCapabilityStatus } from '../../shared/providers/constants';
+import { agentService } from '../services/agent';
 import { configService } from '../services/config';
+import { coworkService } from '../services/cowork';
 import { i18nService } from '../services/i18n';
+import { store, type RootState } from '../store';
+import { updateCurrentSessionModelOverride } from '../store/slices/coworkSlice';
+import {
+  setDefaultSelectedModel,
+  setSelectedModel,
+  type Model,
+} from '../store/slices/modelSlice';
+import { toAgentModelRef } from '../utils/agentModelRef';
 
 export function AISphereSettings() {
+  const dispatch = useDispatch();
+  const availableModels = useSelector((state: RootState) => state.model.availableModels);
   const [snapshot, setSnapshot] = useState<AISphereSnapshot>();
   const [address, setAddress] = useState('');
   const [busy, setBusy] = useState(false);
@@ -26,12 +40,62 @@ export function AISphereSettings() {
   const [selected, setSelected] = useState(configService.getConfig().model.defaultModel ?? '');
   const t = (key: string) => i18nService.t(key);
 
+  const resolveModel = (modelId: string): Model => {
+    const fromAvailable = availableModels.find(
+      model => model.id === modelId && model.providerKey === AISphere.Provider,
+    );
+    if (fromAvailable) return fromAvailable;
+    const fromSnapshot = snapshot?.models.find(model => model.id === modelId);
+    if (fromSnapshot) {
+      return {
+        id: fromSnapshot.id,
+        name: fromSnapshot.name,
+        providerKey: AISphere.Provider,
+        supportsImage: fromSnapshot.capabilities.imageInput === ModelCapabilityStatus.Supported,
+      };
+    }
+    return { id: modelId, name: modelId, providerKey: AISphere.Provider };
+  };
+
+  /**
+   * 2026/09/22 lixiang
+   * 设置页改默认后必须立刻推到 Chat：
+   * 1) 同步写 Redux 默认模型（不能只等 App 的异步 config-updated）
+   * 2) 同步当前会话 modelOverride（挂了 Skill 的 Chat 仍读会话选择）
+   */
+  const applyDefaultModelToChat = async (modelId: string) => {
+    const model = resolveModel(modelId);
+    const modelRef = toAgentModelRef(model);
+    dispatch(setDefaultSelectedModel(model));
+    dispatch(setSelectedModel({ agentId: 'main', model }));
+    void agentService.updateAgent('main', { model: modelRef }).catch(error => {
+      console.error('[AISphereSettings] failed to sync the agent model:', error);
+    });
+
+    const session = store.getState().cowork.currentSession;
+    if (!session?.id) return;
+
+    dispatch(
+      updateCurrentSessionModelOverride({
+        sessionId: session.id,
+        modelOverride: modelRef,
+      }),
+    );
+    try {
+      await coworkService.updateSessionModel(session.id, modelRef);
+    } catch (error) {
+      console.error('[AISphereSettings] failed to sync the session model:', error);
+    }
+  };
+
   // 2026/09/22 lixiang  choose 上移供过期默认自动回落与手动选择共用
   const choose = async (value: string | null) => {
     if (!value) return;
     setBusy(true);
     setError('');
     try {
+      // 先推 Chat，再落盘；避免只改 config、Chat 仍显示旧模型
+      await applyDefaultModelToChat(value);
       await configService.updateConfig({
         model: {
           ...configService.getConfig().model,
@@ -98,6 +162,15 @@ export function AISphereSettings() {
     };
   }, []);
 
+  // 2026/09/22 lixiang  Chat 改模型后回写 config，设置页本地 selected 跟随
+  useEffect(() => {
+    const syncSelectedFromConfig = () => {
+      setSelected(configService.getConfig().model.defaultModel ?? '');
+    };
+    window.addEventListener('config-updated', syncSelectedFromConfig);
+    return () => window.removeEventListener('config-updated', syncSelectedFromConfig);
+  }, []);
+
   // 2026/09/22 lixiang  存储的默认模型缺失或不在目录时，自动持久化为目录首个模型
   useEffect(() => {
     if (busy || snapshot?.status !== AISphereStatus.Ready || !snapshot.models.length) return;
@@ -121,7 +194,9 @@ export function AISphereSettings() {
         value.models.some(model => model.id === config.model.defaultModel)
           ? (config.model.defaultModel ?? '')
           : (value.models[0]?.id ?? '');
+      // 仅当默认模型需要纠正时才推到 Chat；刷新成功但默认未变时不要覆盖会话手选模型
       if (nextSelected && nextSelected !== config.model.defaultModel) {
+        await applyDefaultModelToChat(nextSelected);
         await configService.updateConfig({
           model: {
             ...config.model,

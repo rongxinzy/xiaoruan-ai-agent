@@ -36,6 +36,7 @@ export function useCoworkSelectedModel({
 }: ModelSelectionOptions) {
   const modelState = useSelector((state: RootState) => state.model);
   const currentSession = useSelector((state: RootState) => state.cowork.currentSession);
+  // 2026/09/22 lixiang  会话有 modelOverride 时优先用；设置页改默认会同步写 override，Chat 才能立刻跟上
   const selectedModel = resolveAISphereTurnModel({
     sessionModel: currentSession?.id === sessionId ? currentSession?.modelOverride : undefined,
     candidateModel: isDirectChat

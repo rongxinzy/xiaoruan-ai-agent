@@ -43,24 +43,38 @@ describe('parseDeclareArtifactFromMessages', () => {
   const sessId = 'sess-declare';
   const defaultRole = () => ArtifactRole.Deliverable;
 
-  test('extracts artifact from declare_artifact tool_use message', () => {
-    const messages = [
-      {
-        id: 'tool-1',
-        type: 'tool_use' as const,
-        content: '',
-        timestamp: Date.now(),
-        metadata: {
-          toolName: 'declare_artifact',
-          toolInput: {
-            filePath: 'D:/workspace/report.pptx',
-            title: 'Final Report',
-            kind: 'document',
-            role: 'deliverable',
-          },
-        },
+  const declareWithResult = (
+    toolId: string,
+    toolInput: Record<string, unknown>,
+    resultMeta: Record<string, unknown> = {},
+  ) => [
+    {
+      id: toolId,
+      type: 'tool_use' as const,
+      content: '',
+      timestamp: Date.now(),
+      metadata: {
+        toolName: 'declare_artifact',
+        toolUseId: `${toolId}-call`,
+        toolInput,
       },
-    ];
+    },
+    {
+      id: `${toolId}-result`,
+      type: 'tool_result' as const,
+      content: 'OK',
+      timestamp: Date.now(),
+      metadata: { toolUseId: `${toolId}-call`, ...resultMeta },
+    },
+  ];
+
+  test('extracts artifact from declare_artifact tool_use message', () => {
+    const messages = declareWithResult('tool-1', {
+      filePath: 'D:/workspace/report.pptx',
+      title: 'Final Report',
+      kind: 'document',
+      role: 'deliverable',
+    });
     const artifacts = parseDeclareArtifactFromMessages(messages, sessId, defaultRole);
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0].filePath).toBe('D:/workspace/report.pptx');
@@ -70,18 +84,7 @@ describe('parseDeclareArtifactFromMessages', () => {
   });
 
   test('defaults title to fileName when no title provided', () => {
-    const messages = [
-      {
-        id: 'tool-1',
-        type: 'tool_use' as const,
-        content: '',
-        timestamp: Date.now(),
-        metadata: {
-          toolName: 'declare_artifact',
-          toolInput: { filePath: '/home/user/code.ts' },
-        },
-      },
-    ];
+    const messages = declareWithResult('tool-1', { filePath: '/home/user/code.ts' });
     const artifacts = parseDeclareArtifactFromMessages(messages, sessId, defaultRole);
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0].title).toBe('code.ts');
@@ -89,36 +92,16 @@ describe('parseDeclareArtifactFromMessages', () => {
   });
 
   test('infers type from file extension when kind not specified', () => {
-    const messages = [
-      {
-        id: 'tool-1',
-        type: 'tool_use' as const,
-        content: '',
-        timestamp: Date.now(),
-        metadata: {
-          toolName: 'declare_artifact',
-          toolInput: { filePath: 'D:/workspace/output.html' },
-        },
-      },
-    ];
+    const messages = declareWithResult('tool-1', { filePath: 'D:/workspace/output.html' });
     const artifacts = parseDeclareArtifactFromMessages(messages, sessId, defaultRole);
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0].type).toBe('html');
   });
 
   test('marks unknown declared file types as unsupported', () => {
-    const messages = [
-      {
-        id: 'tool-unknown',
-        type: 'tool_use' as const,
-        content: '',
-        timestamp: Date.now(),
-        metadata: {
-          toolName: 'declare_artifact',
-          toolInput: { filePath: 'D:/workspace/archive.custombinary' },
-        },
-      },
-    ];
+    const messages = declareWithResult('tool-unknown', {
+      filePath: 'D:/workspace/archive.custombinary',
+    });
 
     const artifacts = parseDeclareArtifactFromMessages(messages, sessId, defaultRole);
 
@@ -127,18 +110,10 @@ describe('parseDeclareArtifactFromMessages', () => {
   });
 
   test('respects intermediate role', () => {
-    const messages = [
-      {
-        id: 'tool-1',
-        type: 'tool_use' as const,
-        content: '',
-        timestamp: Date.now(),
-        metadata: {
-          toolName: 'declare_artifact',
-          toolInput: { filePath: 'D:/workspace/draft.ts', role: 'intermediate' },
-        },
-      },
-    ];
+    const messages = declareWithResult('tool-1', {
+      filePath: 'D:/workspace/draft.ts',
+      role: 'intermediate',
+    });
     const artifacts = parseDeclareArtifactFromMessages(messages, sessId, defaultRole);
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0].role).toBe(ArtifactRole.Intermediate);
@@ -162,6 +137,12 @@ describe('parseDeclareArtifactFromMessages', () => {
   });
 
   test('skips messages without filePath', () => {
+    const messages = declareWithResult('tool-1', { title: 'Missing path' });
+    const artifacts = parseDeclareArtifactFromMessages(messages, sessId, defaultRole);
+    expect(artifacts).toHaveLength(0);
+  });
+
+  test('does not create a card when declare has no tool result', () => {
     const messages = [
       {
         id: 'tool-1',
@@ -170,12 +151,21 @@ describe('parseDeclareArtifactFromMessages', () => {
         timestamp: Date.now(),
         metadata: {
           toolName: 'declare_artifact',
-          toolInput: { title: 'Missing path' },
+          toolUseId: 'call-1',
+          toolInput: { filePath: 'D:/workspace/report.pptx' },
         },
       },
     ];
-    const artifacts = parseDeclareArtifactFromMessages(messages, sessId, defaultRole);
-    expect(artifacts).toHaveLength(0);
+    expect(parseDeclareArtifactFromMessages(messages, sessId, defaultRole)).toHaveLength(0);
+  });
+
+  test('does not create a card when declare tool result is an error', () => {
+    const messages = declareWithResult(
+      'tool-1',
+      { filePath: 'D:/workspace/report.pptx' },
+      { isError: true, error: 'file does not exist' },
+    );
+    expect(parseDeclareArtifactFromMessages(messages, sessId, defaultRole)).toHaveLength(0);
   });
 });
 
@@ -190,18 +180,19 @@ describe('parseCodeBlockArtifacts', () => {
 });
 
 describe('parseToolArtifact', () => {
+  const toolUseMsg = {
+    id: 'tool1',
+    type: 'tool_use' as const,
+    content: '',
+    timestamp: Date.now(),
+    metadata: {
+      toolName: 'Write',
+      toolUseId: 'tu1',
+      toolInput: { file_path: 'D:\\workspace\\hello.html', content: '<html></html>' },
+    },
+  };
+
   test('extracts file path from Write tool input', () => {
-    const toolUseMsg = {
-      id: 'tool1',
-      type: 'tool_use' as const,
-      content: '',
-      timestamp: Date.now(),
-      metadata: {
-        toolName: 'Write',
-        toolUseId: 'tu1',
-        toolInput: { file_path: 'D:\\workspace\\hello.html', content: '<html></html>' },
-      },
-    };
     const toolResultMsg = {
       id: 'result1',
       type: 'tool_result' as const,
@@ -212,6 +203,22 @@ describe('parseToolArtifact', () => {
     const artifact = parseToolArtifact(toolUseMsg, toolResultMsg, 'sess1');
     expect(artifact).not.toBeNull();
     expect(artifact!.filePath).toBe('D:\\workspace\\hello.html');
+  });
+
+  test('does not create an artifact when write has no tool result', () => {
+    // 输出 token 超限 / 截断写：可能已有 tool_use，但工具从未执行
+    expect(parseToolArtifact(toolUseMsg, undefined, 'sess1')).toBeNull();
+  });
+
+  test('does not create an artifact when write tool result is an error', () => {
+    const toolResultMsg = {
+      id: 'result1',
+      type: 'tool_result' as const,
+      content: 'failed',
+      timestamp: Date.now(),
+      metadata: { toolUseId: 'tu1', isError: true },
+    };
+    expect(parseToolArtifact(toolUseMsg, toolResultMsg, 'sess1')).toBeNull();
   });
 });
 
@@ -261,11 +268,19 @@ describe('detectArtifactsFromMessages', () => {
           timestamp: Date.now(),
           metadata: {
             toolName: 'declare_artifact',
+            toolUseId: 'declare-1',
             toolInput: {
               filePath: 'D:/workspace/presentations/slides.pptx',
               role: 'deliverable',
             },
           },
+        },
+        {
+          id: 'tool-1-result',
+          type: 'tool_result' as const,
+          content: 'OK',
+          timestamp: Date.now(),
+          metadata: { toolUseId: 'declare-1' },
         },
       ],
       'sess1',
@@ -333,8 +348,16 @@ describe('detectArtifactsFromMessages', () => {
           timestamp: 1,
           metadata: {
             toolName: 'declare_artifact',
+            toolUseId: 'declare-call-1',
             toolInput: { filePath: 'file:///D:/output/report%20final.csv' },
           },
+        },
+        {
+          id: 'declare-1-result',
+          type: 'tool_result',
+          content: 'OK',
+          timestamp: 1,
+          metadata: { toolUseId: 'declare-call-1' },
         },
         {
           id: 'assistant-1',
@@ -428,22 +451,40 @@ describe('detectArtifactsFromMessages', () => {
           timestamp: Date.now(),
           metadata: {
             toolName: 'write',
+            toolUseId: 'verify-1',
             toolInput: { path: 'D:/workspace/_verify_tetris.js', content: 'runTests();' },
           },
         },
-        ...['tetris.html', 'tetris-preview.png', 'validation.md'].map((filePath, index) => ({
-          id: `declare-${index}`,
-          type: 'tool_use' as const,
-          content: '',
+        {
+          id: 'write-verification-result',
+          type: 'tool_result',
+          content: 'OK',
           timestamp: Date.now(),
-          metadata: {
-            toolName: 'declare_artifact',
-            toolInput: {
-              filePath: `D:/workspace/${filePath}`,
-              role: ArtifactRole.Deliverable,
+          metadata: { toolUseId: 'verify-1' },
+        },
+        ...['tetris.html', 'tetris-preview.png', 'validation.md'].flatMap((filePath, index) => [
+          {
+            id: `declare-${index}`,
+            type: 'tool_use' as const,
+            content: '',
+            timestamp: Date.now(),
+            metadata: {
+              toolName: 'declare_artifact',
+              toolUseId: `declare-call-${index}`,
+              toolInput: {
+                filePath: `D:/workspace/${filePath}`,
+                role: ArtifactRole.Deliverable,
+              },
             },
           },
-        })),
+          {
+            id: `declare-${index}-result`,
+            type: 'tool_result' as const,
+            content: 'OK',
+            timestamp: Date.now(),
+            metadata: { toolUseId: `declare-call-${index}` },
+          },
+        ]),
       ],
       'sess1',
     );
@@ -463,6 +504,30 @@ describe('detectArtifactsFromMessages', () => {
     });
   });
 
+  test('does not show a write-tool file card when the tool never completed', () => {
+    const artifacts = detectArtifactsFromMessages(
+      [
+        {
+          id: 'write-truncated',
+          type: 'tool_use',
+          content: 'Using tool: Write',
+          timestamp: Date.now(),
+          metadata: {
+            toolName: 'write',
+            toolUseId: 'call-truncated',
+            toolInput: {
+              path: 'D:/workspace/report.html',
+              content: '<html><!-- truncated by output token limit',
+            },
+          },
+        },
+      ],
+      'sess1',
+    );
+
+    expect(artifacts).toHaveLength(0);
+  });
+
   test('uses the declare_artifact default deliverable role when role is omitted', () => {
     const artifacts = detectArtifactsFromMessages(
       [
@@ -473,8 +538,16 @@ describe('detectArtifactsFromMessages', () => {
           timestamp: Date.now(),
           metadata: {
             toolName: 'declare_artifact',
+            toolUseId: 'declare-output-call',
             toolInput: { filePath: 'D:/workspace/output.html' },
           },
+        },
+        {
+          id: 'declare-output-result',
+          type: 'tool_result',
+          content: 'OK',
+          timestamp: Date.now(),
+          metadata: { toolUseId: 'declare-output-call' },
         },
       ],
       'sess1',
@@ -493,11 +566,19 @@ describe('detectArtifactsFromMessages', () => {
           timestamp: Date.now(),
           metadata: {
             toolName: 'declare_artifact',
+            toolUseId: 'intermediate-call',
             toolInput: {
               filePath: 'D:/workspace/slides/draft.js',
               role: 'intermediate',
             },
           },
+        },
+        {
+          id: 'tool-intermediate-result',
+          type: 'tool_result' as const,
+          content: 'OK',
+          timestamp: Date.now(),
+          metadata: { toolUseId: 'intermediate-call' },
         },
         {
           id: 'assistant-final',
@@ -513,11 +594,19 @@ describe('detectArtifactsFromMessages', () => {
           timestamp: Date.now(),
           metadata: {
             toolName: 'declare_artifact',
+            toolUseId: 'deliverable-call',
             toolInput: {
               filePath: 'D:/workspace/output/presentation.pptx',
               role: 'deliverable',
             },
           },
+        },
+        {
+          id: 'tool-deliverable-result',
+          type: 'tool_result' as const,
+          content: 'OK',
+          timestamp: Date.now(),
+          metadata: { toolUseId: 'deliverable-call' },
         },
       ],
       'sess1',
@@ -538,11 +627,19 @@ describe('detectArtifactsFromMessages', () => {
           timestamp: Date.now(),
           metadata: {
             toolName: 'declare_artifact',
+            toolUseId: 'intermediate-call',
             toolInput: {
               filePath: 'D:/workspace/output/build.js',
               role: 'intermediate',
             },
           },
+        },
+        {
+          id: 'tool-intermediate-result',
+          type: 'tool_result' as const,
+          content: 'OK',
+          timestamp: Date.now(),
+          metadata: { toolUseId: 'intermediate-call' },
         },
         {
           id: 'tool-deliverable',
@@ -551,11 +648,19 @@ describe('detectArtifactsFromMessages', () => {
           timestamp: Date.now(),
           metadata: {
             toolName: 'declare_artifact',
+            toolUseId: 'deliverable-call',
             toolInput: {
               filePath: 'D:/workspace/output/build.js',
               role: 'deliverable',
             },
           },
+        },
+        {
+          id: 'tool-deliverable-result',
+          type: 'tool_result' as const,
+          content: 'OK',
+          timestamp: Date.now(),
+          metadata: { toolUseId: 'deliverable-call' },
         },
       ],
       'sess1',
