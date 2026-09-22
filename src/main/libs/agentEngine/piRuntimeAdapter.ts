@@ -328,6 +328,7 @@ interface ActivePiSession {
   harnessModelProfile: HarnessModelProfileInput;
   /** System prompt requested by the current Cowork session snapshot. */
   requestedSystemPrompt: string;
+  requestedModelOverride?: string;
   requestedSkillIds: string[] | undefined;
   requestedExpertIds: string[];
   /** Experts selected for the current turn, retained when messages are persisted. */
@@ -1477,6 +1478,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         },
         harnessModelProfile,
         requestedSystemPrompt: basePrompt,
+        requestedModelOverride: options.modelOverride,
         requestedSkillIds: resourceState.skillIds,
         requestedExpertIds: expertIds,
         turnExperts: (this.store?.getSession(sessionId)?.experts ?? [])
@@ -1729,6 +1731,8 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       active.mcpToolManifestGeneration !== this.mcpToolManifestGeneration;
     const unattendedTopologyChanged = nextUnattended !== active.unattended;
     if (
+      (options.modelOverride !== undefined &&
+        options.modelOverride !== active.requestedModelOverride) ||
       !haveSameStringList(requestedExpertIds, active.requestedExpertIds) ||
       productionWorkflowTopologyChanged ||
       mcpToolTopologyChanged ||
@@ -2031,6 +2035,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       const model = resolvedModel.model;
       await active.piSession.setModel(model);
       active.model = model;
+      active.requestedModelOverride = patch.model;
       active.modelRuntime = resolvedModel.modelRuntime;
       active.modelRequestOptions = resolvedModel.requestOptions;
       active.capabilities = {
