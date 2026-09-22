@@ -75,7 +75,8 @@ export class AISphereService {
         : this.ready
           ? AISphereStatus.Ready
           : AISphereStatus.Unavailable,
-      models: this.models.map(publicModel),
+      // 2026/09/22 lixiang  不可用时不暴露目录，设置页默认模型随连接失败清空
+      models: this.ready ? this.models.map(publicModel) : [],
     };
   }
 
@@ -195,25 +196,61 @@ export class AISphereService {
       this.recoveryDelay = 5000;
       this.checkedAt = Date.now();
       // A new binding must not retain an old platform's default selection.
+      // 2026/09/22 lixiang  同地址重连仅在目录仍含当前默认时保留，否则回落到首个模型
       const current = this.store?.get<Config>(AISphere.AppConfigKey) ?? {};
+      const currentDefault = current.model?.defaultModel?.trim() ?? '';
+      const retainedDefault =
+        !switching && currentDefault && models.some(model => model.id === currentDefault)
+          ? currentDefault
+          : undefined;
       this.store?.set(
         AISphere.AppConfigKey,
         this.project({
           ...current,
           model: {
             ...current.model,
-            defaultModel: switching
-              ? (models[0]?.id ?? '')
-              : (current.model?.defaultModel ?? models[0]?.id ?? ''),
+            defaultModel: retainedDefault ?? models[0]?.id ?? '',
             defaultModelProvider: AISphere.Provider,
           },
         }),
       );
       this.notify();
       return this.snapshot();
+    } catch (error) {
+      // 2026/09/22 lixiang  连接失败标记不可用并清空目录；换址失败不恢复旧地址，避免模型列表回弹
+      if (
+        this.address &&
+        !(error instanceof Error && error.message === AISphereError.Busy)
+      ) {
+        this.ready = false;
+        this.models = [];
+        this.clearDefaultModel();
+        this.notify();
+        if (switching) {
+          this.stopRecovery();
+        } else {
+          this.scheduleRecovery();
+        }
+      }
+      throw error;
     } finally {
       this.changing = false;
     }
+  }
+
+  private clearDefaultModel(): void {
+    const current = this.store?.get<Config>(AISphere.AppConfigKey) ?? {};
+    this.store?.set(
+      AISphere.AppConfigKey,
+      this.project({
+        ...current,
+        model: {
+          ...current.model,
+          defaultModel: '',
+          defaultModelProvider: AISphere.Provider,
+        },
+      }),
+    );
   }
 
   async refresh(): Promise<void> {
@@ -229,6 +266,9 @@ export class AISphereService {
         this.checkedAt = Date.now();
       } catch (error) {
         this.ready = false;
+        this.models = [];
+        // 2026/09/22 lixiang  刷新失败重置默认模型，避免设置页仍显示旧选择
+        this.clearDefaultModel();
         throw error;
       } finally {
         this.notify();

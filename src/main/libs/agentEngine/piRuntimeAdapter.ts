@@ -2763,12 +2763,13 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         // Avoid duplicate result for the same call.
         if (active.toolResultMessageIdByCallId.has(event.toolCallId)) break;
         const resultText = extractToolResultText(event.result);
+        const resultIsError = Boolean(event.isError) || extractToolResultIsError(event.result);
         if (active.workbenchRunId) {
           this.workbenchTaskService?.recordToolResult(
             active.workbenchRunId,
             event.toolCallId,
             event.result,
-            Boolean(event.isError),
+            resultIsError,
           );
         }
         if (event.toolName) {
@@ -2776,7 +2777,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             event.toolCallId,
             event.toolName,
             resultText,
-            Boolean(event.isError),
+            resultIsError,
           );
         }
         if (event.toolName === PiSubagentToolName) {
@@ -2784,18 +2785,18 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           active.productionLoop?.recordSubagentResult(
             event.toolCallId,
             resultText,
-            Boolean(event.isError),
+            resultIsError,
             execution,
           );
           active.researchRun?.recordSubagentResult(
             event.toolCallId,
             resultText,
-            Boolean(event.isError),
+            resultIsError,
           );
           active.shortcutWorkflow?.recordSubagentResult(
             event.toolCallId,
             resultText,
-            Boolean(event.isError),
+            resultIsError,
           );
         }
         // Keep the result only on `content` — duplicating into metadata.toolResult
@@ -2807,7 +2808,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           timestamp: Date.now(),
           metadata: {
             toolUseId: event.toolCallId,
-            isError: Boolean(event.isError),
+            isError: resultIsError,
             isStreaming: false,
             isFinal: true,
             ...(active.toolStartedAtByCallId.has(event.toolCallId)
@@ -4054,4 +4055,12 @@ function extractToolResultText(result: unknown): string {
     }
   }
   return String(result);
+}
+
+/** 自定义工具返回 `{ details: { isError: true } }` 时视为失败。 */
+function extractToolResultIsError(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  const details = (result as { details?: unknown }).details;
+  if (!details || typeof details !== 'object') return false;
+  return Boolean((details as { isError?: unknown }).isError);
 }

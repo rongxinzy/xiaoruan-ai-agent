@@ -27,7 +27,7 @@ const source = readFileSync(
 test('mounts the inline skill editor inside the prompt body', () => {
   expect(source).toContain('<InlineSkillPromptEditor');
 
-  const bodyOpen = source.indexOf('<PromptInputBody>');
+  const bodyOpen = source.indexOf('<PromptInputBody');
   const editor = source.indexOf('<InlineSkillPromptEditor');
   const bodyClose = source.indexOf('</PromptInputBody>');
   expect(bodyOpen).toBeGreaterThanOrEqual(0);
@@ -87,6 +87,11 @@ test('places the active expert identity between permissions and MCP controls', (
   expect(source.slice(expertBadge, mcpBadge)).toContain(
     'onRemove={() => setSelectedExpertIds([])}',
   );
+});
+
+test('seeds the prompt expert chip when opening a new conversation from an expert agent', () => {
+  expect(source).toContain('resolveInitialSelectedExpertIds({');
+  expect(source).toContain('currentAgentSource: currentAgent?.source');
 });
 
 test('keeps streaming controls gated without obscuring the prompt', () => {

@@ -7,6 +7,7 @@ const model = {
   name: 'model-a',
   url: 'http://inference.test/full/chat/completions',
   api_key: 'secret-a',
+  status: 'running',
   tool_call: false,
   image: false,
   thinking: false,
@@ -68,7 +69,7 @@ test('recovers discovery after a startup outage without a request or manual refr
 
 test('recovery backs off, shares manual discovery, preserves removed models and stops on disposal', async () => {
   vi.useFakeTimers();
-  const { service, store, fetcher, setModels } = setup();
+  const { service, store, fetcher, setModels, values } = setup();
   await service.initialize(store, 'http://127.0.0.1:1234');
   await service.connect('http://platform.test');
   fetcher
@@ -77,6 +78,11 @@ test('recovery backs off, shares manual discovery, preserves removed models and 
   await expect(service.refresh()).rejects.toThrow(AISphereError.Unavailable);
   await vi.advanceTimersByTimeAsync(5000);
   expect(service.snapshot().status).toBe(AISphereStatus.Unavailable);
+  // 2026/09/22 lixiang  不可用快照不携带旧目录，默认模型已清空
+  expect(service.snapshot().models).toEqual([]);
+  expect(
+    (values.get(AISphere.AppConfigKey) as { model: { defaultModel: string } }).model.defaultModel,
+  ).toBe('');
   const calls = fetcher.mock.calls.length;
   await vi.advanceTimersByTimeAsync(9999);
   expect(fetcher).toHaveBeenCalledTimes(calls);
@@ -120,6 +126,19 @@ test('maps limits without treating zero as a zero allowance and rejects ambiguou
   expect(() => parsePlatformModels({ code: 1, model_list: [model] })).toThrow();
 });
 
+test('keeps only models whose status is running', () => {
+  const parsed = parsePlatformModels({
+    code: 0,
+    model_list: [
+      model,
+      { ...model, name: 'stopped-a', status: 'stopped' },
+      { ...model, name: 'missing-status', status: undefined },
+      { ...model, name: 'model-b', status: 'running' },
+    ],
+  });
+  expect(parsed.map(entry => entry.id)).toEqual(['model-a', 'model-b']);
+});
+
 test('starts closed and only exposes verified models, never their real key or endpoint', async () => {
   const { service, store, fetcher, values } = setup();
   await service.initialize(store, 'http://127.0.0.1:1234');
@@ -138,14 +157,26 @@ test('starts closed and only exposes verified models, never their real key or en
   });
 });
 
-test('invalid replacement preserves the previous binding and default model', async () => {
+test('invalid replacement keeps prior store address without auto-recovery', async () => {
+  vi.useFakeTimers();
   const { service, store, fetcher, values } = setup();
   await service.initialize(store, 'http://127.0.0.1:1234');
   await service.connect('http://platform.test');
   fetcher.mockResolvedValueOnce(Response.json({ data: 'other' }));
   await expect(service.connect('http://other.test')).rejects.toThrow(AISphereError.InvalidPlatform);
+  // 2026/09/22 lixiang  换址失败仍保留原地址绑定，但不可用且不暴露旧目录
   expect(values.get(AISphere.StoreKey)).toBe('http://platform.test');
-  expect(service.snapshot().models[0].id).toBe(model.name);
+  expect(service.snapshot().status).toBe(AISphereStatus.Unavailable);
+  expect(service.snapshot().models).toEqual([]);
+  expect(
+    (values.get(AISphere.AppConfigKey) as { model: { defaultModel: string } }).model.defaultModel,
+  ).toBe('');
+  // 2026/09/22 lixiang  换址失败不自动恢复旧平台，避免对话模型列表回弹
+  const calls = fetcher.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(120000);
+  expect(fetcher).toHaveBeenCalledTimes(calls);
+  expect(service.snapshot().status).toBe(AISphereStatus.Unavailable);
+  expect(service.snapshot().models).toEqual([]);
 });
 
 test('directory refresh removes models and network failure cannot use old credentials', async () => {
@@ -158,6 +189,7 @@ test('directory refresh removes models and network failure cannot use old creden
   fetcher.mockRejectedValue(new Error('offline'));
   await expect(service.refresh()).rejects.toThrow(AISphereError.Unavailable);
   expect(service.provider().models).toEqual([]);
+  expect(service.snapshot().models).toEqual([]);
   await expect(service.acquire(model.name)).rejects.toThrow();
 });
 
@@ -235,7 +267,8 @@ test('parallel requests share a stale-directory refresh and cannot use removed m
   expect(fetcher).toHaveBeenCalledTimes(4);
 });
 
-test('refresh cannot race a replacement connection and same-address reconnect retains selection', async () => {
+// 2026/09/22 lixiang  覆盖同地址重连保留有效默认、以及空/已移除默认回落首个模型
+test('same-address reconnect keeps a valid selection and replaces empty or removed defaults', async () => {
   const { service, store, fetcher, values } = setup();
   await service.initialize(store, 'http://127.0.0.1:1234');
   await service.connect('http://platform.test');
@@ -251,13 +284,29 @@ test('refresh cannot race a replacement connection and same-address reconnect re
   await expect(service.refresh()).rejects.toThrow(AISphereError.Busy);
   complete(Response.json({ data: 'ok' }));
   await pending;
+  expect((values.get(AISphere.AppConfigKey) as { model: { defaultModel: string } }).model.defaultModel).toBe(
+    model.name,
+  );
+
   const current = values.get(AISphere.AppConfigKey) as { model: { defaultModel: string } };
   values.set(AISphere.AppConfigKey, {
     ...current,
     model: { ...current.model, defaultModel: 'removed-selection' },
   });
   await service.connect('http://other.test');
-  expect((values.get(AISphere.AppConfigKey) as typeof current).model.defaultModel).toBe(
-    'removed-selection',
-  );
+  expect((values.get(AISphere.AppConfigKey) as typeof current).model.defaultModel).toBe(model.name);
+
+  values.set(AISphere.AppConfigKey, {
+    ...current,
+    model: { ...current.model, defaultModel: '' },
+  });
+  await service.connect('http://other.test');
+  expect((values.get(AISphere.AppConfigKey) as typeof current).model.defaultModel).toBe(model.name);
+
+  values.set(AISphere.AppConfigKey, {
+    ...current,
+    model: { ...current.model, defaultModel: model.name },
+  });
+  await service.connect('http://other.test');
+  expect((values.get(AISphere.AppConfigKey) as typeof current).model.defaultModel).toBe(model.name);
 });

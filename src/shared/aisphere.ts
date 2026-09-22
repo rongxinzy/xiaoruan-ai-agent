@@ -22,6 +22,13 @@ export const AISphereStatus = {
 } as const;
 export type AISphereStatus = (typeof AISphereStatus)[keyof typeof AISphereStatus];
 
+/** 平台 `/v1/agent/models` 的 item.status；仅 running 进入目录。 */
+export const AISphereModelRuntimeStatus = {
+  Running: 'running',
+} as const;
+export type AISphereModelRuntimeStatus =
+  (typeof AISphereModelRuntimeStatus)[keyof typeof AISphereModelRuntimeStatus];
+
 export interface AISphereModel {
   id: string;
   name: string;

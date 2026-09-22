@@ -91,6 +91,29 @@ export function parseCodeBlockArtifacts(
   return artifacts;
 }
 
+function findPairedToolResult(
+  messages: CoworkMessage[],
+  toolUseMsg: CoworkMessage,
+): CoworkMessage | undefined {
+  const toolUseId = toolUseMsg.metadata?.toolUseId;
+  if (typeof toolUseId === 'string' && toolUseId.length > 0) {
+    return messages.find(
+      message => message.type === 'tool_result' && message.metadata?.toolUseId === toolUseId,
+    );
+  }
+  const index = messages.findIndex(message => message.id === toolUseMsg.id);
+  const next = index >= 0 ? messages[index + 1] : undefined;
+  return next?.type === 'tool_result' ? next : undefined;
+}
+
+function isUnsuccessfulToolResult(toolResultMsg: CoworkMessage | undefined): boolean {
+  return (
+    !toolResultMsg ||
+    Boolean(toolResultMsg.metadata?.isError) ||
+    Boolean(toolResultMsg.metadata?.error)
+  );
+}
+
 export function parseDeclareArtifactFromMessages(
   messages: CoworkMessage[],
   sessionId: string,
@@ -102,6 +125,11 @@ export function parseDeclareArtifactFromMessages(
   for (const msg of messages) {
     if (msg.type !== 'tool_use') continue;
     if (msg.metadata?.toolName !== DECLARE_ARTIFACT_TOOL_NAME) continue;
+
+    // 2026/09/22 lixiang  仅在 declare 成功后展示文件卡片；无结果/失败（含声明了不存在的文件）不展示
+    if (isUnsuccessfulToolResult(findPairedToolResult(messages, msg))) {
+      continue;
+    }
 
     const input = msg.metadata?.toolInput as Record<string, unknown> | undefined;
     if (!input) continue;
@@ -269,7 +297,8 @@ export function parseToolArtifact(
     return null;
   }
 
-  if (toolResultMsg?.metadata?.isError) {
+  // 2026/09/22 lixiang  仅在 write 成功落盘后展示文件卡片；无结果或失败（含输出 token 超限未执行）不展示
+  if (isUnsuccessfulToolResult(toolResultMsg)) {
     return null;
   }
 

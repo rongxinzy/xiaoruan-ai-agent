@@ -31,6 +31,7 @@ const server = createServer((request, response) => {
                 name: 'test-model',
                 url: 'https://model.test/exact/endpoint',
                 api_key: 'real-secret',
+                status: 'running',
                 context_length: 262144,
               },
             ],
