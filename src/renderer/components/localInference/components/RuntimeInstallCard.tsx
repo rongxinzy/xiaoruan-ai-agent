@@ -61,6 +61,16 @@ function isInstalled(status: LlamaCppStatusSnapshot | null): boolean {
   return Boolean(status && ['installed', 'starting', 'running', 'stopped'].includes(status.status));
 }
 
+/** 已有可用运行环境时，不要再对「当前可用」状态催下载；仅在切换未安装版本时显示安装。 */
+export function shouldShowRuntimeInstallCta(input: {
+  ready: boolean;
+  selectedBackend: LlamaCppBackendInfo | undefined;
+  selectedInstalled: boolean;
+}): boolean {
+  if (!input.ready) return true;
+  return Boolean(input.selectedBackend) && !input.selectedInstalled;
+}
+
 function isActive(progress: LlamaCppInstallProgress | null): boolean {
   return Boolean(
     progress && !['done', 'failed', 'cancelled', 'needs-manual'].includes(progress.phase),
@@ -122,10 +132,14 @@ export function RuntimeInstallCard({
     setStatus(nextStatus);
     if (!list.success)
       throw new Error(list.error || i18nService.t('localInferenceBackendListFailed'));
-    const compatible = list.backends.filter(
-      backend =>
-        backend.platform === window.electron.platform && backend.arch === window.electron.arch,
-    );
+    const compatible = list.backends.filter(backend => {
+      // 与主进程 normalizePlatform 对齐，避免 macos/darwin 不一致导致目录被滤空
+      const platform =
+        backend.platform === 'macos' || backend.platform === 'mac' ? 'darwin' : backend.platform;
+      const arch =
+        backend.arch === 'aarch64' ? 'arm64' : backend.arch === 'amd64' ? 'x64' : backend.arch;
+      return platform === window.electron.platform && arch === window.electron.arch;
+    });
     setBackends(compatible);
     const preferred =
       compatible.find(backend => backend.versionBackend === list.selection?.versionBackend) ??
@@ -192,10 +206,15 @@ export function RuntimeInstallCard({
   useEffect(() => {
     if (!installRequestId || handledInstallerRequests.has(installRequestId)) return;
     handledInstallerRequests.add(installRequestId);
-    // Consume the one-time navigation request before any async work can remount this card.
+    // Consume the one-shot navigation request before any async work can remount this card.
     onInstallRequestHandled?.(installRequestId);
     void loadMetadata()
-      .then(backend => startInstall(backend))
+      .then(async backend => {
+        const nextStatus = await window.electron.llamacpp.status();
+        // 2026/09/22 lixiang  已打开/已就绪时不再自动拉起下载（closes #799）
+        if (isInstalled(nextStatus)) return;
+        await startInstall(backend);
+      })
       .catch(metadataError => {
         setError(metadataError instanceof Error ? metadataError.message : String(metadataError));
       });
@@ -204,6 +223,11 @@ export function RuntimeInstallCard({
   const ready = isInstalled(status);
   const selectedInstalled = Boolean(selectedBackend?.installed);
   const selectedCurrent = Boolean(selectedBackend?.current);
+  const showInstallCta = shouldShowRuntimeInstallCta({
+    ready,
+    selectedBackend,
+    selectedInstalled,
+  });
   const metadataLoading = metadataStatus === RuntimeMetadataStatus.Loading;
   const downloading = active && isRuntimeDownloadProgress(progress);
   const downloadName = progress?.modelName || selectedBackend?.versionBackend || '';
@@ -388,22 +412,23 @@ export function RuntimeInstallCard({
             </Button>
           ) : (
             <>
-              {/* Keep installation separate from selecting an already installed version. */}
-              <Button
-                type="button"
-                className="min-w-16"
-                disabled={selectedInstalled}
-                onClick={() => void startInstall()}
-              >
-                {error && !selectedInstalled ? (
-                  <RotateCcw data-icon="inline-start" />
-                ) : (
-                  <Download data-icon="inline-start" />
-                )}
-                {error && !selectedInstalled
-                  ? i18nService.t('localInferenceRuntimeRetry')
-                  : i18nService.t('localInferenceInstall')}
-              </Button>
+              {/* 2026/09/22 lixiang  已打开/已安装就绪时隐藏下载安装，避免 Mac 上「已下载仍催下载」 */}
+              {showInstallCta ? (
+                <Button
+                  type="button"
+                  className="min-w-16"
+                  onClick={() => void startInstall()}
+                >
+                  {error ? (
+                    <RotateCcw data-icon="inline-start" />
+                  ) : (
+                    <Download data-icon="inline-start" />
+                  )}
+                  {error
+                    ? i18nService.t('localInferenceRuntimeRetry')
+                    : i18nService.t('localInferenceInstall')}
+                </Button>
+              ) : null}
               {selectedInstalled && !selectedCurrent ? (
                 <Button
                   type="button"
