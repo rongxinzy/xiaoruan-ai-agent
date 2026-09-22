@@ -23,6 +23,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import type {
   CodingAgentConfigOption,
   CodingPromptAttachment,
+  CodingEventPage,
   CodingWorkspaceSummary,
 } from '../../../shared/codingAgent';
 import {
@@ -154,6 +155,7 @@ export const CodingWorkbenchView = ({
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const eventStreamRef = useRef<HTMLDivElement | null>(null);
+  const loadingOlderEventsRef = useRef(false);
   const workbenchRef = useRef<HTMLDivElement | null>(null);
   const transientSidePanelWidthRef = useRef<number | null>(null);
   const sessionSetupSelectionKeyRef = useRef<string | null>(null);
@@ -333,6 +335,57 @@ export const CodingWorkbenchView = ({
   // All lanes, not only the selected one: a turn that fails in the background must
   // still reach the user.
   useTurnFailureToast(snapshot?.events ?? []);
+  const loadOlderEvents = useCallback(async () => {
+    if (!activeLaneId || loadingOlderEventsRef.current) return;
+    const windowInfo = snapshot?.eventWindows?.find(window => window.laneId === activeLaneId);
+    if (!windowInfo?.hasMore || windowInfo.oldestSequence === null) return;
+    loadingOlderEventsRef.current = true;
+    const viewport = eventStreamRef.current?.querySelector<HTMLElement>(
+      '.coding-conversation-scroll',
+    );
+    const distanceFromBottom = viewport
+      ? viewport.scrollHeight - viewport.scrollTop
+      : null;
+    try {
+      const result = await window.electron.codingAgent.loadEventPage({
+        workspaceRoot,
+        laneId: activeLaneId,
+        beforeSequence: windowInfo.oldestSequence,
+      });
+      const page: CodingEventPage | undefined = result.success ? result.page : undefined;
+      if (!page) return;
+      setSnapshot(current => {
+        if (!current) return current;
+        const eventsById = new Map(current.events.map(event => [event.id, event]));
+        for (const event of page.events) eventsById.set(event.id, event);
+        const events = [...eventsById.values()].sort((left, right) =>
+          left.laneId === right.laneId
+            ? left.sequence - right.sequence
+            : left.laneId.localeCompare(right.laneId),
+        );
+        const eventWindows = (current.eventWindows ?? []).map(window =>
+          window.laneId === page.laneId
+            ? {
+                ...window,
+                oldestSequence: page.events[0]?.sequence ?? window.oldestSequence,
+                hasMore: page.hasMore,
+              }
+            : window,
+        );
+        return { ...current, events, eventWindows };
+      });
+      if (distanceFromBottom !== null) {
+        requestAnimationFrame(() => {
+          const nextViewport = eventStreamRef.current?.querySelector<HTMLElement>(
+            '.coding-conversation-scroll',
+          );
+          if (nextViewport) nextViewport.scrollTop = nextViewport.scrollHeight - distanceFromBottom;
+        });
+      }
+    } finally {
+      loadingOlderEventsRef.current = false;
+    }
+  }, [activeLaneId, snapshot?.eventWindows, workspaceRoot, setSnapshot]);
   const activeMissionLanes = useMemo(
     () =>
       activeLane
@@ -1055,6 +1108,7 @@ export const CodingWorkbenchView = ({
             onScrollPositionChange={scrollPosition => {
               if (activeLane) saveScrollPosition(activeLane.id, scrollPosition);
             }}
+            onLoadOlderEvents={loadOlderEvents}
           />
           {artifactSessionKey && isArtifactPanelOpen && (
             <ArtifactPanelErrorBoundary onClose={() => dispatch(closePanel())}>

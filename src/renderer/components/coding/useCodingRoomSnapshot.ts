@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction 
 
 import type { CodingRoomSnapshot } from '../../../shared/codingAgent';
 import { reportAppError } from '../../services/appErrorText';
+import { mergeCodingRoomEventDelta } from './codingEventDelta';
 
 export function useCodingRoomSnapshot(
   workspaceRoot: string,
@@ -67,9 +68,14 @@ export function useCodingRoomSnapshot(
     const unsubscribe = window.electron.codingAgent.onChanged(next => {
       if (!cancelled && next.room.workspaceRoot === workspaceRoot) setSnapshot(next);
     });
+    const unsubscribeDelta = window.electron.codingAgent.onEventDelta(delta => {
+      if (cancelled || delta.workspaceRoot !== workspaceRoot) return;
+      setSnapshot(current => (current ? mergeCodingRoomEventDelta(current, delta) : current));
+    });
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeDelta();
     };
   }, [bootstrapAttempt, scope, setSnapshot, workspaceRoot]);
 

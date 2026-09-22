@@ -17,6 +17,8 @@ import {
   type CodingPromptAttachment,
 } from '../../../shared/codingAgent';
 import { AcpConnectionSupervisor } from '../acp/connectionSupervisor';
+import { AcpEventQueue } from '../acp/acpEventQueue';
+import { agentResourceDiagnostics } from '../../agentResourceDiagnostics';
 import {
   ACP_CLIENT_CAPABILITIES,
   ACP_MINIMUM_PROTOCOL_VERSION,
@@ -48,13 +50,37 @@ type AcpInitializeResult = {
 };
 type AcpSessionResult = { sessionId?: string; configOptions?: unknown };
 type EventStream = {
-  events: DriverEvent[];
+  events: AcpEventQueue<DriverEvent>;
   waiters: Array<{
     resolve: (result: IteratorResult<DriverEvent>) => void;
     reject: (error: Error) => void;
   }>;
   done: boolean;
   error: Error | null;
+};
+
+const mergeAdjacentDriverEvents = (previous: DriverEvent, next: DriverEvent): DriverEvent | null => {
+  if (previous.kind === CodingEventKind.MessageDelta && next.kind === CodingEventKind.MessageDelta) {
+    const previousMessageId = previous.payload.messageId;
+    if (previousMessageId !== next.payload.messageId || typeof previousMessageId !== 'string') {
+      return null;
+    }
+    if (next.payload.streamUpdateMode === CodingStreamUpdateMode.Replace) return next;
+    return {
+      ...next,
+      payload: {
+        ...previous.payload,
+        ...next.payload,
+        content: `${typeof previous.payload.content === 'string' ? previous.payload.content : ''}${typeof next.payload.content === 'string' ? next.payload.content : ''}`,
+      },
+    };
+  }
+  if (previous.kind === CodingEventKind.ToolCall && next.kind === CodingEventKind.ToolCall) {
+    return previous.payload.toolCallId === next.payload.toolCallId
+      ? { ...next, payload: { ...previous.payload, ...next.payload } }
+      : null;
+  }
+  return null;
 };
 type PendingPermission = {
   streamSessionId: string;
@@ -436,8 +462,15 @@ export class AcpCodingDriver implements CodingAgentDriver {
     await this.ensureConnected(input.workspaceRoot);
     this.fallbackMessageIds.delete(this.messageFallbackKey(input.sessionId, 'assistant'));
     this.fallbackMessageIds.delete(this.messageFallbackKey(input.sessionId, 'user'));
-    const stream: EventStream = { events: [], waiters: [], done: false, error: null };
+    const stream: EventStream = {
+      events: new AcpEventQueue(mergeAdjacentDriverEvents),
+      waiters: [],
+      done: false,
+      error: null,
+    };
     this.streams.set(input.sessionId, stream);
+    agentResourceDiagnostics.startAcpTurn(input.sessionId, this.supervisor.processId);
+    console.debug(`[AcpCodingDriver] started session prompt for ${input.sessionId}`);
     const turn = { hasOutput: false };
     this.turns.set(input.sessionId, turn);
     this.armFirstOutputWatchdog(input.sessionId);
@@ -479,11 +512,12 @@ export class AcpCodingDriver implements CodingAgentDriver {
       });
     try {
       while (true) {
-        const next = await this.nextEvent(stream);
+        const next = await this.nextEvent(input.sessionId, stream);
         if (next.done) return;
         yield next.value;
       }
     } finally {
+      agentResourceDiagnostics.finishAcpTurn(input.sessionId, Boolean(stream.error));
       this.clearFirstOutputWatchdog(input.sessionId);
       this.turns.delete(input.sessionId);
       this.streams.delete(input.sessionId);
@@ -1018,16 +1052,6 @@ export class AcpCodingDriver implements CodingAgentDriver {
     return messageId;
   }
 
-  private pushEvent(sessionId: string, event: DriverEvent): boolean {
-    const stream = this.streams.get(sessionId);
-    if (!stream || stream.done) return false;
-    this.markTurnActivity(sessionId);
-    const waiter = stream.waiters.shift();
-    if (waiter) waiter.resolve({ done: false, value: event });
-    else stream.events.push(event);
-    return true;
-  }
-
   /**
    * Any traffic for the session — a transcript event or a metadata update —
    * proves the agent is working, so the first-output watchdog stands down. A
@@ -1074,10 +1098,20 @@ export class AcpCodingDriver implements CodingAgentDriver {
     if (!stream || stream.done) return;
     stream.done = true;
     stream.error = error instanceof Error ? error : error ? new Error(String(error)) : null;
+    console.debug(
+      `[AcpCodingDriver] finished session prompt for ${sessionId}${stream.error ? ' with an error' : ''}`,
+    );
     // A turn that ends mid tool call must not keep the watchdog paused for the
     // next turn: the agent can no longer report that tool call as finished.
     this.openToolCalls.delete(sessionId);
     this.syncTurnWatchdogs();
+    for (const [requestId, pending] of this.permissions) {
+      if (pending.streamSessionId !== sessionId) continue;
+      this.releasePermission(requestId);
+      pending.reject(
+        stream.error ?? new Error('ACP session prompt ended before permission response.'),
+      );
+    }
     for (const waiter of stream.waiters.splice(0)) {
       if (stream.error) waiter.reject(stream.error);
       else waiter.resolve({ done: true, value: undefined });
@@ -1114,8 +1148,36 @@ export class AcpCodingDriver implements CodingAgentDriver {
     return typeof onlySessionId === 'string' ? onlySessionId : null;
   }
 
-  private async nextEvent(stream: EventStream): Promise<IteratorResult<DriverEvent>> {
-    if (stream.events.length > 0) return { done: false, value: stream.events.shift()! };
+  private pushEvent(sessionId: string, event: DriverEvent): boolean {
+    const stream = this.streams.get(sessionId);
+    if (!stream || stream.done) return false;
+    this.markTurnActivity(sessionId);
+    const waiter = stream.waiters.shift();
+    if (waiter) waiter.resolve({ done: false, value: event });
+    else {
+      const queued = stream.events.enqueue(event);
+      if (!queued.accepted) {
+        this.finishStream(sessionId, new Error('ACP event queue exceeded its memory limits.'));
+        return false;
+      }
+      if (queued.replaced) {
+        agentResourceDiagnostics.recordAcpReplaced(sessionId, queued.replaced, queued.event);
+      } else {
+        agentResourceDiagnostics.recordAcpEnqueued(sessionId, queued.event);
+      }
+    }
+    return true;
+  }
+
+  private async nextEvent(
+    sessionId: string,
+    stream: EventStream,
+  ): Promise<IteratorResult<DriverEvent>> {
+    if (stream.events.length > 0) {
+      const event = stream.events.dequeue()!;
+      agentResourceDiagnostics.recordAcpDequeued(sessionId, event);
+      return { done: false, value: event };
+    }
     if (stream.done) {
       if (stream.error) throw stream.error;
       return { done: true, value: undefined };

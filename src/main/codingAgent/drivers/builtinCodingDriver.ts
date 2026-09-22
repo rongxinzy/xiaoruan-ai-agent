@@ -130,6 +130,10 @@ export class BuiltinCodingDriver implements CodingAgentDriver {
   getDefaultConfigOptions(): CodingAgentConfigOption[] {
     return this.buildOptions();
   }
+  /** Commands a new session would advertise, without binding them to a session. */
+  getDefaultAvailableCommands(): CodingAgentAvailableCommand[] {
+    return buildBuiltinCodingCommandList();
+  }
   async *prompt(input: {
     sessionId: string;
     workspaceRoot: string;

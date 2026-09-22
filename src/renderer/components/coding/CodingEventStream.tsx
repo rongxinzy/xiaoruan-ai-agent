@@ -36,6 +36,7 @@ interface CodingEventStreamProps {
   isStreaming: boolean;
   scrollAreaRef: RefObject<HTMLDivElement | null>;
   onScrollPositionChange: (scrollPosition: number) => void;
+  onLoadOlderEvents?: () => void;
   emptyDescription?: string;
   headerActions?: ReactNode;
   /**
@@ -73,6 +74,7 @@ export const CodingEventStream = ({
   isStreaming,
   scrollAreaRef,
   onScrollPositionChange,
+  onLoadOlderEvents,
   emptyDescription,
   headerActions,
   artifactSessionKey = null,
@@ -259,7 +261,16 @@ export const CodingEventStream = ({
       ref={scrollAreaRef}
       className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
       onScrollCapture={event => {
-        if (event.target instanceof HTMLElement) onScrollPositionChange(event.target.scrollTop);
+        // Persist only the conversation viewport's scroll position; inner
+        // scrollable previews (diffs, terminal output) must not overwrite it.
+        const target = event.target;
+        if (
+          target instanceof HTMLElement &&
+          target.classList.contains('coding-conversation-scroll')
+        ) {
+          onScrollPositionChange(target.scrollTop);
+          if (target.scrollTop <= 24) onLoadOlderEvents?.();
+        }
       }}
     >
       {headerActions ? (
