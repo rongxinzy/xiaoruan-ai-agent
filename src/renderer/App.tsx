@@ -317,7 +317,7 @@ const App: React.FC = () => {
       }
       const allModels = await collectAvailableModels(config);
       dispatch(setAvailableModels(allModels));
-      // 2026/09/22 lixiang  配置更新后优先匹配默认模型，否则回落到可用列表首项，避免无选中模型
+      // 2026/09/22 lixiang  有目录则对齐默认模型；空目录由 setAvailableModels 清空对话选择器
       if (allModels.length > 0) {
         const preferred =
           allModels.find(

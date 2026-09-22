@@ -47,17 +47,33 @@ export function AISphereSettings() {
     }
   };
 
+  // 2026/09/22 lixiang  连接不可用时清空默认模型展示与本地选择
+  const resetDefaultModelSelection = async () => {
+    setSelected('');
+    const config = configService.getConfig();
+    if (!config.model.defaultModel) return;
+    await configService.updateConfig({
+      model: {
+        ...config.model,
+        defaultModel: '',
+        defaultModelProvider: AISphere.Provider,
+      },
+    });
+  };
+
   useEffect(() => {
     let disposed = false;
     const unsubscribe = window.electron.managedProviders.onChanged(() => {
       void window.electron.managedProviders
         .aisphereSnapshot()
-        .then(value => {
-          if (!disposed) {
-            setSnapshot(value);
-            if (value.status === AISphereStatus.Ready)
-              setError(current => (current === AISphereError.Unavailable ? '' : current));
+        .then(async value => {
+          if (disposed) return;
+          setSnapshot(value);
+          if (value.status === AISphereStatus.Ready) {
+            setError(current => (current === AISphereError.Unavailable ? '' : current));
+            return;
           }
+          await resetDefaultModelSelection().catch(() => undefined);
         })
         .catch(() => {
           if (!disposed) setError(AISphereError.Unavailable);
@@ -65,10 +81,12 @@ export function AISphereSettings() {
     });
     void window.electron.managedProviders
       .aisphereSnapshot()
-      .then(value => {
-        if (!disposed) {
-          setSnapshot(value);
-          setAddress(value.address);
+      .then(async value => {
+        if (disposed) return;
+        setSnapshot(value);
+        setAddress(value.address);
+        if (value.status !== AISphereStatus.Ready) {
+          await resetDefaultModelSelection().catch(() => undefined);
         }
       })
       .catch(() => {
@@ -87,13 +105,14 @@ export function AISphereSettings() {
     void choose(snapshot.models[0].id);
   }, [busy, snapshot, selected]);
 
-  const connect = async (refresh: boolean) => {
+  // 2026/09/22 lixiang  连接与刷新都使用输入框地址，避免刷新回落到旧绑定
+  const connect = async () => {
+    const target = address.trim();
+    if (!target) return;
     setBusy(true);
     setError('');
     try {
-      const value = refresh
-        ? await window.electron.managedProviders.aisphereRefresh()
-        : await window.electron.managedProviders.aisphereConnect(address);
+      const value = await window.electron.managedProviders.aisphereConnect(target);
       setSnapshot(value);
       setAddress(value.address);
       const config = await configService.reload();
@@ -120,7 +139,26 @@ export function AISphereSettings() {
         Object.values(AISphereError).find(code => message.includes(code)) ??
           AISphereError.Unavailable,
       );
-      setSnapshot(await window.electron.managedProviders.aisphereSnapshot().catch(() => undefined));
+      const value = await window.electron.managedProviders.aisphereSnapshot().catch(() => undefined);
+      // 2026/09/22 lixiang  连接失败清空目录展示；保留输入框地址，不回写旧绑定
+      setSnapshot(
+        value
+          ? {
+              ...value,
+              address: target,
+              status: AISphereStatus.Unavailable,
+              models: [],
+            }
+          : {
+              address: target,
+              status: AISphereStatus.Unavailable,
+              models: [],
+            },
+      );
+      await resetDefaultModelSelection().catch(() => undefined);
+      // 2026/09/22 lixiang  强制重载配置并通知 App，清空对话页可用模型列表
+      await configService.reload().catch(() => undefined);
+      window.dispatchEvent(new CustomEvent('config-updated'));
     } finally {
       setBusy(false);
     }
@@ -137,7 +175,7 @@ export function AISphereSettings() {
           onKeyDown={event => {
             if (event.key === 'Enter') {
               event.preventDefault();
-              if (!busy && address.trim()) void connect(false);
+              if (!busy && address.trim()) void connect();
             }
           }}
           placeholder={t('aisphereAddressPlaceholder')}
@@ -148,7 +186,7 @@ export function AISphereSettings() {
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            onClick={() => void connect(false)}
+            onClick={() => void connect()}
             disabled={busy || !address.trim()}
           >
             {t(busy ? 'aisphereConnecting' : 'aisphereConnect')}
@@ -156,22 +194,27 @@ export function AISphereSettings() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => void connect(true)}
-            disabled={busy || !snapshot?.address}
+            onClick={() => void connect()}
+            disabled={busy || !address.trim()}
           >
             {t('aisphereRefresh')}
           </Button>
         </div>
       </div>
-      <p role="status" className="text-sm text-muted-foreground">
-        {t(
-          snapshot?.status === AISphereStatus.Ready
-            ? 'aisphereConnected'
-            : snapshot?.status === AISphereStatus.Unavailable
+      {/* 2026/09/22 lixiang  有明确 error 时只展示红色告警，避免与 Unavailable 状态文案重复 */}
+      {snapshot?.status === AISphereStatus.Ready ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {t('aisphereConnected')}
+        </p>
+      ) : !error ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {t(
+            snapshot?.status === AISphereStatus.Unavailable
               ? AISphereError.Unavailable
               : 'aisphereUnconfigured',
-        )}
-      </p>
+          )}
+        </p>
+      ) : null}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {t(error)}
