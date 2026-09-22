@@ -295,6 +295,7 @@ import { listPresetExperts } from './presetExpertCatalog';
 import { resolveBundledPresetExpertSnapshot } from './presetExpertSnapshot';
 import { getSkillServiceManager } from './skillServices';
 import { SqliteStore } from './sqliteStore';
+import { startSqliteDiagnostics } from './sqliteDiagnostics';
 import { StartupProfiler } from './startupProfiler';
 import { createTray, destroyTray, updateTrayMenu } from './trayManager';
 import {
@@ -7123,6 +7124,10 @@ if (!gotTheLock) {
     profiler.mark('initStore');
     console.log('[Main] initApp: starting initStore()');
     store = await initStore();
+    startSqliteDiagnostics({
+      db: store.getDatabase(),
+      dbPath: path.join(app.getPath('userData'), DB_FILENAME),
+    });
     zhiyuanManagedProviderBridge.attachStore(store);
     const aisphereGateway = await startAISphereGateway();
     await aisphereService.initialize(store, aisphereGateway.baseUrl);
