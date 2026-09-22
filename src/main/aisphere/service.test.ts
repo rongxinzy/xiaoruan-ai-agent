@@ -7,6 +7,7 @@ const model = {
   name: 'model-a',
   url: 'http://inference.test/full/chat/completions',
   api_key: 'secret-a',
+  status: 'running',
   tool_call: false,
   image: false,
   thinking: false,
@@ -123,6 +124,19 @@ test('maps limits without treating zero as a zero allowance and rejects ambiguou
     parsePlatformModels({ code: 0, model_list: [{ ...model, url: 'file:///tmp/model' }] }),
   ).toThrow();
   expect(() => parsePlatformModels({ code: 1, model_list: [model] })).toThrow();
+});
+
+test('keeps only models whose status is running', () => {
+  const parsed = parsePlatformModels({
+    code: 0,
+    model_list: [
+      model,
+      { ...model, name: 'stopped-a', status: 'stopped' },
+      { ...model, name: 'missing-status', status: undefined },
+      { ...model, name: 'model-b', status: 'running' },
+    ],
+  });
+  expect(parsed.map(entry => entry.id)).toEqual(['model-a', 'model-b']);
 });
 
 test('starts closed and only exposes verified models, never their real key or endpoint', async () => {

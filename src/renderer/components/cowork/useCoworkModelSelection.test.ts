@@ -75,6 +75,17 @@ test('keeps the session model when attaching or removing skills changes the rout
   expect(result.current.selectedModel).toBe(modelB);
 });
 
+test('settings-driven session override changes appear immediately in direct chat', () => {
+  // 设置页 applyDefaultModelToChat 会写会话 override；Chat 读 override，不靠单独改 defaultSelectedModel
+  state.cowork.currentSession!.modelOverride = toAgentModelRef(modelA);
+  const { result, rerender } = renderHook(() => useCoworkModelSelection(options));
+  expect(result.current.selectedModel).toBe(modelA);
+  state.model.defaultSelectedModel = modelB;
+  state.cowork.currentSession!.modelOverride = toAgentModelRef(modelB);
+  rerender();
+  expect(result.current.selectedModel).toBe(modelB);
+});
+
 test('persists a direct-chat selection to the session before committing global selections', async () => {
   vi.mocked(coworkService.updateSessionModel).mockResolvedValue({
     modelOverride: toAgentModelRef(modelB),
