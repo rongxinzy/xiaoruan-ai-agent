@@ -4,7 +4,6 @@ import { CoworkErrorKind, ENGINE_NOT_READY_CODE } from '../../common/coworkError
 import type { CoworkMessage, CoworkSession } from '../types/cowork';
 import {
   createCoworkTerminalErrorMessage,
-  createDirectChatTerminalErrorMessage,
   extractUserFacingErrorMessage,
   getTerminalErrorDisplayText,
   hasMatchingLatestTerminalError,
@@ -108,20 +107,11 @@ describe('cowork terminal errors', () => {
     expect(getTerminalErrorDisplayText(legacy)).toBe(providerMessage);
   });
 
-  test('creates direct-chat terminal errors from provider error.message', () => {
-    const providerMessage = 'provider unavailable';
-    const message = createDirectChatTerminalErrorMessage(
-      new Error(JSON.stringify({ error: { message: providerMessage } })),
-      7,
-    );
-    expect(message).toMatchObject({
-      id: 'error-7',
-      type: 'system',
-      content: '',
-      metadata: {
-        error: providerMessage,
-        errorKind: CoworkErrorKind.Unknown,
-      },
-    });
+  test('extracts message from status-prefixed API error payloads', () => {
+    expect(
+      extractUserFacingErrorMessage(
+        '503: {"message":"No running instances available","code":503,"type":"ServiceUnavailable"}',
+      ),
+    ).toBe('No running instances available');
   });
 });

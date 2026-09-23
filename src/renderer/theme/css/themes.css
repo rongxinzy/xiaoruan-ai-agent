@@ -5121,11 +5121,6 @@
 }
 }
 @media (hover: hover) {
-:where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
-}
-}
-@media (hover: hover) {
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-code-block-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--zy-surface-raised);
   color: var(--zy-foreground);
@@ -12725,11 +12720,6 @@ to {
 [data-theme="xiaoruan-dark"] :where(.theme-action-window):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   color: var(--foreground);
   background-color: var(--zy-surface-raised);
-}
-}
-@media (hover: hover) {
-[data-theme="xiaoruan-dark"] :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
 }
 }
 @media (hover: hover) {
@@ -20344,11 +20334,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="classic-light"] :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
-}
-}
-@media (hover: hover) {
 [data-theme="classic-light"] :where(.theme-page-code-block-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--zy-surface-raised);
   color: var(--zy-foreground);
@@ -27948,11 +27933,6 @@ to {
 [data-theme="classic-dark"] :where(.theme-action-window):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   color: var(--foreground);
   background-color: var(--zy-surface-raised);
-}
-}
-@media (hover: hover) {
-[data-theme="classic-dark"] :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
 }
 }
 @media (hover: hover) {
@@ -35567,11 +35547,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="daming-light"] :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
-}
-}
-@media (hover: hover) {
 [data-theme="daming-light"] :where(.theme-page-code-block-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--zy-surface-raised);
   color: var(--zy-foreground);
@@ -43171,11 +43146,6 @@ to {
 [data-theme="daming-dark"] :where(.theme-action-window):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   color: var(--foreground);
   background-color: var(--zy-surface-raised);
-}
-}
-@media (hover: hover) {
-[data-theme="daming-dark"] :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
 }
 }
 @media (hover: hover) {
@@ -50792,11 +50762,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="changan-light"] :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
-}
-}
-@media (hover: hover) {
 [data-theme="changan-light"] :where(.theme-page-code-block-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--zy-surface-raised);
   color: var(--zy-foreground);
@@ -58401,11 +58366,6 @@ to {
 [data-theme="changan-dark"] :where(.theme-action-window):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   color: var(--foreground);
   background-color: var(--zy-surface-raised);
-}
-}
-@media (hover: hover) {
-[data-theme="changan-dark"] :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
 }
 }
 @media (hover: hover) {
@@ -66025,11 +65985,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="weiyang-light"] :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
-}
-}
-@media (hover: hover) {
 [data-theme="weiyang-light"] :where(.theme-page-code-block-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--zy-surface-raised);
   color: var(--zy-foreground);
@@ -73634,11 +73589,6 @@ to {
 [data-theme="weiyang-dark"] :where(.theme-action-window):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   color: var(--foreground);
   background-color: var(--zy-surface-raised);
-}
-}
-@media (hover: hover) {
-[data-theme="weiyang-dark"] :where(.theme-local-compact-action):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--muted);
 }
 }
 @media (hover: hover) {

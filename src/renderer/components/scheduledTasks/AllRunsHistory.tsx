@@ -15,6 +15,7 @@ import { Clock, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 
+import { TaskStatus } from '../../../scheduledTask/constants';
 import type {
   RunFilter,
   ScheduledTask,
@@ -36,6 +37,9 @@ const statusLabelKeys: Record<string, string> = {
   skipped: 'scheduledTasksStatusSkipped',
   running: 'scheduledTasksStatusRunning',
 };
+
+/** 自动化「历史」总览进入时默认只查运行中；单任务详情历史仍不预选状态 */
+const DEFAULT_ALL_RUNS_FILTER: RunFilter = { status: TaskStatus.Running };
 
 function applyClientFilter(
   runs: ScheduledTaskRunWithName[],
@@ -71,7 +75,9 @@ const AllRunsHistory: React.FC<AllRunsHistoryProps> = ({ task, showRunning = tru
   );
   const [viewingRun, setViewingRun] = useState<ScheduledTaskRunWithName | null>(null);
   const [viewingError, setViewingError] = useState<ScheduledTaskRunWithName | null>(null);
-  const [filter, setFilter] = useState<RunFilter>(EMPTY_FILTER);
+  const [filter, setFilter] = useState<RunFilter>(() =>
+    task || !showRunning ? EMPTY_FILTER : DEFAULT_ALL_RUNS_FILTER,
+  );
   const taskId = task?.id;
   const taskPayload = task
     ? task.payload.kind === 'systemEvent'
@@ -111,12 +117,11 @@ const AllRunsHistory: React.FC<AllRunsHistoryProps> = ({ task, showRunning = tru
   );
 
   useEffect(() => {
-    setFilter(EMPTY_FILTER);
-    // Always revalidate: this panel remounts on tab switches and can therefore
-    // miss runs that completed while it was unmounted. Cached rows stay visible
-    // until the fetch resolves, so revalidating costs no layout shift.
-    void loadInitial(EMPTY_FILTER);
-  }, [loadInitial, taskId]);
+    // 历史总览默认 running；单任务详情不预选。Tab 切回会 remount，需带筛选重拉以免漏掉卸载期间结束的 run。
+    const initialFilter = taskId || !showRunning ? EMPTY_FILTER : DEFAULT_ALL_RUNS_FILTER;
+    setFilter(initialFilter);
+    void loadInitial(initialFilter);
+  }, [loadInitial, showRunning, taskId]);
 
   const handleFilterChange = (newFilter: RunFilter) => {
     setFilter(newFilter);

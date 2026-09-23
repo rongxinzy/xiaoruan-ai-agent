@@ -9,7 +9,8 @@
   },
   "license": "AGPL-3.0-only",
   "packageManager": "bun@1.4.0",
-  "version": "2026.7.16",
+  "version": "v1.0.0",
+  "zhiyuanUpdateVariant": "lite",
   "llamacpp": {
     "runtimeRepo": "https://github.com/ggml-org/llama.cpp.git",
     "runtimeReleaseTag": "b9244",

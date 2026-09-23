@@ -84,7 +84,12 @@ const copyPhotonWasmPlugin = () => ({
 export default defineConfig(async ({ command }) => {
   const electronSourceMap = command === 'serve' || process.env.VITE_ELECTRON_SOURCEMAP === '1';
   if (!electronSourceMap) {
-    for (const sourceMap of ['main.js.map', 'preload.js.map']) {
+    for (const sourceMap of [
+      'main.js.map',
+      'preload.js.map',
+      'artifactWorker.js.map',
+      'requestWorker.js.map',
+    ]) {
       fs.rmSync(path.resolve(projectRoot, 'dist-electron', sourceMap), { force: true });
     }
   }
@@ -108,7 +113,14 @@ export default defineConfig(async ({ command }) => {
             electron([
               {
                 entry: 'src/main/aisphere/requestWorker.ts',
-                vite: { build: { outDir: 'dist-electron', emptyOutDir: false, minify: false } },
+                vite: {
+                  build: {
+                    outDir: 'dist-electron',
+                    emptyOutDir: false,
+                    minify: false,
+                    sourcemap: electronSourceMap,
+                  },
+                },
                 onstart() {},
               },
               {
