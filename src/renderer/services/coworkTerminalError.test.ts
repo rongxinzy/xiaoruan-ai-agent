@@ -4,7 +4,6 @@ import { CoworkErrorKind, ENGINE_NOT_READY_CODE } from '../../common/coworkError
 import type { CoworkMessage, CoworkSession } from '../types/cowork';
 import {
   createCoworkTerminalErrorMessage,
-  createDirectChatTerminalErrorMessage,
   extractUserFacingErrorMessage,
   getTerminalErrorDisplayText,
   hasMatchingLatestTerminalError,
