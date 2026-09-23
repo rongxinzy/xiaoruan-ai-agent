@@ -1,7 +1,7 @@
 import { discoverWorkbenchMessageArtifactBlocks } from '../shared/workbenchTask';
-import type { CoworkArtifactType, CoworkPersistedArtifact } from '../shared/cowork/artifacts';
+import type { CoworkPersistedArtifact } from '../shared/cowork/artifacts';
 import { CoworkArtifactRole, CoworkArtifactSource } from '../shared/cowork/artifacts';
-import { getArtifactTypeByExtension } from '../shared/cowork/artifactPreview';
+import { resolveCoworkArtifactType } from '../shared/cowork/artifactPreview';
 import {
   ArtifactTypeByLanguage,
   getInlineArtifactRole,
@@ -44,19 +44,6 @@ function getFileName(filePath: string): string {
   return lastSlash === -1 ? filePath : filePath.slice(lastSlash + 1);
 }
 
-function getFileExtension(filePath: string): string {
-  const lastDot = filePath.lastIndexOf('.');
-  return lastDot === -1 ? '' : filePath.slice(lastDot).toLowerCase();
-}
-
-function resolveArtifactType(filePath: string, declaredKind?: string): CoworkArtifactType | null {
-  if (declaredKind) {
-    const declaredType = LANGUAGE_TYPES[declaredKind.toLowerCase()];
-    if (declaredType) return declaredType;
-  }
-  return getArtifactTypeByExtension(getFileExtension(filePath));
-}
-
 function extractWriteToolPath(input: Record<string, unknown>): string | null {
   for (const key of ['file_path', 'path', 'filePath', 'target_file', 'targetFile']) {
     const value = input[key];
@@ -82,7 +69,7 @@ function collectDeclarations(messages: CoworkArtifactMessage[]): CoworkArtifactC
       artifact: {
         id: `artifact-declare-${message.id}`,
         messageId: message.id,
-        type: resolveArtifactType(filePath, kind) ?? 'unsupported',
+        type: resolveCoworkArtifactType(filePath, kind) ?? 'unsupported',
         title:
           typeof input.title === 'string' && input.title.trim() ? input.title.trim() : fileName,
         content: '',
@@ -120,7 +107,7 @@ function collectWrites(messages: CoworkArtifactMessage[]): CoworkArtifactCandida
     const input = (message.metadata?.toolInput ?? {}) as Record<string, unknown>;
     const filePath = extractWriteToolPath(input);
     if (!filePath) continue;
-    const type = resolveArtifactType(filePath);
+    const type = resolveCoworkArtifactType(filePath);
     if (!type) continue;
     const fileName = getFileName(filePath);
     candidates.push({
