@@ -35,7 +35,9 @@ export function AISphereSettings() {
   const availableModels = useSelector((state: RootState) => state.model.availableModels);
   const [snapshot, setSnapshot] = useState<AISphereSnapshot>();
   const [address, setAddress] = useState('');
-  const [busy, setBusy] = useState(false);
+  // 2026/09/23 区分正在进行的操作，避免连接/刷新互相把对方按钮置灰闪一下
+  const [busyAction, setBusyAction] = useState<'connect' | 'refresh' | 'choose' | null>(null);
+  const busy = busyAction !== null;
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(configService.getConfig().model.defaultModel ?? '');
   const t = (key: string) => i18nService.t(key);
@@ -90,8 +92,8 @@ export function AISphereSettings() {
 
   // 2026/09/22 lixiang  choose 上移供过期默认自动回落与手动选择共用
   const choose = async (value: string | null) => {
-    if (!value) return;
-    setBusy(true);
+    if (!value || busyAction) return;
+    setBusyAction('choose');
     setError('');
     try {
       // 先推 Chat，再落盘；避免只改 config、Chat 仍显示旧模型
@@ -107,7 +109,7 @@ export function AISphereSettings() {
     } catch {
       setError(AISphereError.Unavailable);
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   };
 
@@ -179,10 +181,10 @@ export function AISphereSettings() {
   }, [busy, snapshot, selected]);
 
   // 2026/09/22 lixiang  连接与刷新都使用输入框地址，避免刷新回落到旧绑定
-  const connect = async () => {
+  const connect = async (action: 'connect' | 'refresh') => {
     const target = address.trim();
-    if (!target) return;
-    setBusy(true);
+    if (!target || busyAction) return;
+    setBusyAction(action);
     setError('');
     try {
       const value = await window.electron.managedProviders.aisphereConnect(target);
@@ -235,7 +237,7 @@ export function AISphereSettings() {
       await configService.reload().catch(() => undefined);
       window.dispatchEvent(new CustomEvent('config-updated'));
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   };
 
@@ -250,29 +252,46 @@ export function AISphereSettings() {
           onKeyDown={event => {
             if (event.key === 'Enter') {
               event.preventDefault();
-              if (!busy && address.trim()) void connect();
+              if (!busyAction && address.trim()) void connect('connect');
             }
           }}
           placeholder={t('aisphereAddressPlaceholder')}
-          disabled={busy}
+          // 2026/09/23 连接中不禁用输入框，避免灰态闪烁；重复提交仍由 busyAction 拦截
           autoComplete="off"
         />
         <p className="text-sm text-muted-foreground">{t('aisphereDescription')}</p>
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            onClick={() => void connect()}
-            disabled={busy || !address.trim()}
+            onClick={() => void connect('connect')}
+            // 2026/09/23 仅禁用当前操作按钮，另一侧保持常态不闪灰
+            disabled={busyAction === 'connect' || !address.trim()}
           >
-            {t(busy ? 'aisphereConnecting' : 'aisphereConnect')}
+            {/* 2026/09/23 用长文案占位，避免「正在连接」变短后刷新按钮左移 */}
+            <span className="inline-grid justify-items-center">
+              <span className="invisible col-start-1 row-start-1" aria-hidden>
+                {t('aisphereConnect')}
+              </span>
+              <span className="col-start-1 row-start-1">
+                {t(busyAction === 'connect' ? 'aisphereConnecting' : 'aisphereConnect')}
+              </span>
+            </span>
           </Button>
           <Button
             type="button"
             variant="outline"
-            onClick={() => void connect()}
-            disabled={busy || !address.trim()}
+            onClick={() => void connect('refresh')}
+            disabled={busyAction === 'refresh' || !address.trim()}
           >
-            {t('aisphereRefresh')}
+            {/* 2026/09/23 刷新中文案较短，用「刷新模型」占位保持宽度 */}
+            <span className="inline-grid justify-items-center">
+              <span className="invisible col-start-1 row-start-1" aria-hidden>
+                {t('aisphereRefresh')}
+              </span>
+              <span className="col-start-1 row-start-1">
+                {t(busyAction === 'refresh' ? 'aisphereRefreshing' : 'aisphereRefresh')}
+              </span>
+            </span>
           </Button>
         </div>
       </div>
@@ -300,7 +319,8 @@ export function AISphereSettings() {
         <Select
           value={snapshot?.models.some(model => model.id === selected) ? selected : null}
           onValueChange={value => void choose(value)}
-          disabled={busy || snapshot?.status !== AISphereStatus.Ready || !snapshot.models.length}
+          // 2026/09/23 连接中不因 busy 灰掉 Select，仅按连接态/目录是否可用禁用
+          disabled={snapshot?.status !== AISphereStatus.Ready || !snapshot.models.length}
         >
           <SelectTrigger className="w-full" aria-labelledby="aisphere-model-label">
             <SelectValue placeholder={t('aisphereSelectModel')} />

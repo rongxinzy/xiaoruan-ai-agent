@@ -133,7 +133,6 @@ import {
   resolveDiscoveredModelContext,
   resolveOllamaRunningModelContext,
 } from './settings/ollamaRuntimeMetadata';
-import { localInferenceCompactButtonClass } from './localInference/constants';
 import type { EmailSettingsHandle } from './settings/email/types';
 import type { EnterpriseRendererSettingsPage } from '../../shared/enterpriseRenderer';
 import { EnterpriseSettingsPage } from './enterprise/EnterpriseSettingsPage';
@@ -5076,7 +5075,7 @@ const Settings: React.FC<SettingsProps> = ({
         return (
           <div className="flex min-h-full flex-col items-center pt-6 pb-3">
             <ProductBrand />
-            <span className="text-xs text-muted-foreground mt-1">v{appVersion}</span>
+            <span className="text-xs text-muted-foreground mt-1">{appVersion}</span>
             <span className="text-sm text-muted-foreground mt-2">{i18nService.t('brandPurpose')}</span>
             <div className="w-full mt-8 rounded-xl border border-border overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3">
@@ -5205,23 +5204,26 @@ const Settings: React.FC<SettingsProps> = ({
               {activeTab !== 'email' && renderTabContent()}
             </div>
 
-            {/* Footer buttons */}
-            {!isEnterpriseTab(activeTab) && !(managedModelsOnly && activeTab === 'model') && (
+            {/* Footer buttons — 2026/09/23 模型页只保留保存；不用 local-compact 以免主色 hover 被盖成灰 */}
+            {!isEnterpriseTab(activeTab) && (
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-background p-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={localInferenceCompactButtonClass}
-                  onClick={onClose}
-                  disabled={isSaving}
-                >
-                  {i18nService.t('cancel')}
-                </Button>
-                {/* 2026/09/17 lixiang  设置保存按钮使用主题色 default 风格 */}
+                {activeTab !== 'model' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    className="min-w-24"
+                    onClick={onClose}
+                    disabled={isSaving}
+                  >
+                    {i18nService.t('cancel')}
+                  </Button>
+                )}
                 <Button
                   type="submit"
                   variant="default"
-                  className={localInferenceCompactButtonClass}
+                  size="lg"
+                  className="min-w-24"
                   disabled={isSaving}
                 >
                   {isSaving ? i18nService.t('saving') : i18nService.t('save')}

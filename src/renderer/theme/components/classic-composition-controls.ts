@@ -26,7 +26,7 @@ export function classicCompositionControls() {
         'transition-duration': '200ms',
         'transition-timing-function': 'ease-out',
       },
-      hover: { 'background-color': 'var(--muted)' },
+      // 2026/09/23 不再强制 muted hover，否则会盖住 default 主按钮的品牌色悬停
     }),
   };
 }
