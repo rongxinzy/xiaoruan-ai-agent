@@ -70,17 +70,6 @@ interface TaskFormProps {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
-const createInitialFormState = (
-  mode: TaskFormProps['mode'],
-  task: ScheduledTask | undefined,
-  prefill: TaskTemplateValues | undefined,
-): FormState => {
-  if (mode === 'create' && !prefill) {
-    return { ...createFormState(), planType: 'daily' };
-  }
-  return createFormState(task, prefill);
-};
-
 const getWorkspaceFolderName = (workspace: Workspace): string => {
   return getLastPathSegment(workspace.path) || workspace.name;
 };
@@ -93,11 +82,9 @@ const TaskForm: React.FC<TaskFormProps> = ({
   onSaved,
   onDirtyChange,
 }) => {
-  const [form, setForm] = useState<FormState>(() => createInitialFormState(mode, task, prefill));
+  const [form, setForm] = useState<FormState>(() => createFormState(task, prefill));
   // Snapshot of the pristine form for the dirty check (shallow compare, no stringify).
-  const [initialForm, setInitialForm] = useState<FormState>(() =>
-    createInitialFormState(mode, task, prefill),
-  );
+  const [initialForm, setInitialForm] = useState<FormState>(() => createFormState(task, prefill));
   const availableModels = useSelector((state: RootState) => state.model.availableModels);
   const defaultSelectedModel = useSelector((state: RootState) => state.model.defaultSelectedModel);
   const workspaces = useSelector((state: RootState) => state.workspace.workspaces);
@@ -136,10 +123,10 @@ const TaskForm: React.FC<TaskFormProps> = ({
   );
 
   useEffect(() => {
-    const nextForm = createInitialFormState(mode, task, prefill);
+    const nextForm = createFormState(task, prefill);
     setInitialForm(nextForm);
     setForm(nextForm);
-  }, [mode, task, prefill]);
+  }, [task, prefill]);
 
   useEffect(() => {
     if (form.workspaceId) return;
