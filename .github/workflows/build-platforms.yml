@@ -3,6 +3,10 @@ name: Build platform artifacts (manual)
 on:
   workflow_dispatch:
     inputs:
+      release_version:
+        description: 'Package SemVer without a v prefix (e.g. 1.0.1). Optional leading v is stripped.'
+        required: true
+        type: string
       build_macos:
         description: 'Build macOS'
         required: true
@@ -31,14 +35,31 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      version: ${{ steps.plan.outputs.version }}
     steps:
       - id: plan
         env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
           BUILD_MACOS: ${{ inputs.build_macos }}
           BUILD_WINDOWS: ${{ inputs.build_windows }}
           BUILD_LINUX: ${{ inputs.build_linux }}
         shell: bash
         run: |
+          set -euo pipefail
+          raw="${RELEASE_VERSION#v}"
+          raw="${raw#V}"
+          if [[ ! "$raw" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "release_version must be SemVer without a required v prefix (got: $RELEASE_VERSION)" >&2
+            exit 1
+          fi
+          echo "version=$raw" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Build identity'
+            echo
+            echo "- package version: \`$raw\`"
+            echo "- source commit: \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
           matrix='{"include":['
           separator=''
 
@@ -130,6 +151,7 @@ jobs:
         run: bun run dist:win:signed
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+          APP_BUILD_VERSION: ${{ needs.plan-platforms.outputs.version }}
           CERTUM_CERT_THUMBPRINT: ${{ steps.certum-signing.outputs.thumbprint }}
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
       - name: Verify Windows Authenticode signatures
@@ -175,15 +197,17 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       - name: Build unsigned macOS
         if: ${{ matrix.platform == 'macos' && env.XIAORUAN_MAC_AUTO_UPDATE_ENABLED != 'true' }}
-        run: bun run dist:mac
+        run: node scripts/ensure-build-version.js && bun run dist:mac
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+          APP_BUILD_VERSION: ${{ needs.plan-platforms.outputs.version }}
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
       - name: Build signed macOS
         if: ${{ matrix.platform == 'macos' && env.XIAORUAN_MAC_AUTO_UPDATE_ENABLED == 'true' }}
-        run: bun run dist:mac
+        run: node scripts/ensure-build-version.js && bun run dist:mac
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+          APP_BUILD_VERSION: ${{ needs.plan-platforms.outputs.version }}
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -205,7 +229,11 @@ jobs:
         run: bun run dist:linux
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+          APP_BUILD_VERSION: ${{ needs.plan-platforms.outputs.version }}
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
+      - name: Verify packaged app version
+        shell: bash
+        run: node scripts/ci/verify-packaged-app-version.mjs '${{ needs.plan-platforms.outputs.version }}'
       - name: Verify the packaged renderer in a virtual Ubuntu desktop
         if: ${{ matrix.platform == 'linux' }}
         run: >-
@@ -216,21 +244,21 @@ jobs:
       - uses: actions/upload-artifact@v6
         if: ${{ matrix.platform == 'macos' }}
         with:
-          name: ${{ matrix.artifact }}
+          name: ${{ matrix.artifact }}-${{ needs.plan-platforms.outputs.version }}
           path: release/*.dmg
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v6
         if: ${{ matrix.platform == 'windows' }}
         with:
-          name: ${{ matrix.artifact }}
+          name: ${{ matrix.artifact }}-${{ needs.plan-platforms.outputs.version }}
           path: release/*.exe
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v6
         if: ${{ always() && matrix.platform == 'linux' }}
         with:
-          name: ${{ matrix.artifact }}
+          name: ${{ matrix.artifact }}-${{ needs.plan-platforms.outputs.version }}
           path: |
             release/*.AppImage
             release/*.deb
