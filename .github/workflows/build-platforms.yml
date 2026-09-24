@@ -1,4 +1,4 @@
-name: Build Xiaoruan Windows package to R2 (manual)
+name: Build Xiaoruan Windows package (manual)
 
 on:
   workflow_dispatch:
@@ -19,8 +19,6 @@ jobs:
   build-platforms:
     if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
-    # Certum signing credentials live on the shared release environment.
-    environment: release
     timeout-minutes: 90
     steps:
       - name: Resolve package version
@@ -42,6 +40,11 @@ jobs:
             echo
             echo "- package version: \`$raw\`"
             echo "- source commit: \`$GITHUB_SHA\`"
+            echo "- run id: \`$GITHUB_RUN_ID\`"
+            echo "- artifact: \`windows-build\` (unsigned)"
+            echo
+            echo 'Hand this run id to the ZhiYuan central signing workflow after the build succeeds.'
+            echo "https://github.com/rongxinzy/xiaoruan-ai-agent/actions/runs/$GITHUB_RUN_ID"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@v6
@@ -75,19 +78,12 @@ jobs:
           bun run setup:uv-runtime
           bun run setup:python-runtime
           bun run engram:runtime:win-x64
-      - name: Connect Certum SimplySign
-        id: certum-signing
-        uses: ./.github/actions/setup-certum-signing
-        with:
-          user-id: ${{ secrets.CERTUM_USER_ID }}
-          otp-uri: ${{ secrets.CERTUM_OTP_URI }}
-          certificate-thumbprint: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
       - name: Build Windows
-        run: bun run dist:win:signed
+        run: bun run dist:win
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           APP_BUILD_VERSION: ${{ steps.resolve-version.outputs.version }}
-          CERTUM_CERT_THUMBPRINT: ${{ steps.certum-signing.outputs.thumbprint }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
       - name: Verify packaged app version
         shell: bash
@@ -104,3 +100,16 @@ jobs:
           path: release/*.exe
           if-no-files-found: error
           retention-days: 7
+      - name: Publish run id for ZhiYuan signing handoff
+        shell: bash
+        run: |
+          {
+            echo '### Handoff to ZhiYuan signing'
+            echo
+            echo "- run id: \`$GITHUB_RUN_ID\`"
+            echo "- artifact: \`windows-build\`"
+            echo "- version: \`${{ steps.resolve-version.outputs.version }}\`"
+            echo
+            echo 'Provide this run id to the ZhiYuan repository signing workflow.'
+            echo "https://github.com/rongxinzy/xiaoruan-ai-agent/actions/runs/$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
