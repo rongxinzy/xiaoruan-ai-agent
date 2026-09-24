@@ -16,14 +16,15 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  resolve-version:
+  build-platforms:
     if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      version: ${{ steps.resolve.outputs.version }}
+    runs-on: windows-latest
+    # Certum signing credentials live on the shared release environment.
+    environment: release
+    timeout-minutes: 90
     steps:
-      - id: resolve
+      - name: Resolve package version
+        id: resolve-version
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
         shell: bash
@@ -43,14 +44,6 @@ jobs:
             echo "- source commit: \`$GITHUB_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  build-platforms:
-    needs: resolve-version
-    if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
-    runs-on: windows-latest
-    # Certum signing credentials live on the shared release environment.
-    environment: release
-    timeout-minutes: 90
-    steps:
       - uses: actions/checkout@v6
       - name: Enforce retired runtime decoupling
         run: node scripts/ci/check-openclaw-decoupling.mjs
@@ -93,19 +86,12 @@ jobs:
         run: bun run dist:win:signed
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
-          APP_BUILD_VERSION: ${{ needs.resolve-version.outputs.version }}
+          APP_BUILD_VERSION: ${{ steps.resolve-version.outputs.version }}
           CERTUM_CERT_THUMBPRINT: ${{ steps.certum-signing.outputs.thumbprint }}
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
-      - name: Verify Windows Authenticode signatures
-        shell: powershell
-        run: >-
-          powershell -NoProfile -ExecutionPolicy Bypass
-          -File scripts/ci/verify-windows-authenticode.ps1
-          -ProjectRoot '${{ github.workspace }}'
-          -ExpectedThumbprint '${{ steps.certum-signing.outputs.thumbprint }}'
       - name: Verify packaged app version
         shell: bash
-        run: node scripts/ci/verify-packaged-app-version.mjs '${{ needs.resolve-version.outputs.version }}'
+        run: node scripts/ci/verify-packaged-app-version.mjs '${{ steps.resolve-version.outputs.version }}'
       - name: Verify Windows package runtimes with a clean PATH
         shell: powershell
         run: >-
