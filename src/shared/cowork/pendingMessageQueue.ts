@@ -4,6 +4,8 @@
  * session; it is not part of the persisted cowork session protocol.
  */
 
+import type { ProductionLoopMode } from '../productionLoop';
+
 export const CoworkQueueDelivery = {
   Steer: 'steer',
   FollowUp: 'followUp',
@@ -49,8 +51,6 @@ export interface CoworkPendingMessage {
   imageAttachments?: CoworkQueuedImageAttachment[];
   fileAttachments?: CoworkQueuedFileAttachment[];
   skillIds?: string[];
-  /** Immutable prompt snapshot used when a queued item is immediately steered. */
-  skillPrompt?: string;
-  productionLoopMode?: import('../productionLoop').ProductionLoopMode;
+  productionLoopMode?: ProductionLoopMode;
   error?: string;
 }

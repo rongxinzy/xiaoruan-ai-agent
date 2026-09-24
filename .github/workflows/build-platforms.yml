@@ -1,7 +1,12 @@
-name: Build Xiaoruan Windows package to R2 (manual)
+name: Build Xiaoruan Windows package (manual)
 
 on:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Package SemVer without a v prefix (e.g. 1.0.1). Optional leading v is stripped.'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,20 +19,33 @@ jobs:
   build-platforms:
     if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
-    environment: xiaoruan-release
     timeout-minutes: 90
     steps:
-      - name: Require dedicated R2 credentials before building
-        shell: bash
+      - name: Resolve package version
+        id: resolve-version
         env:
-          ACCOUNT_ID: ${{ vars.XIAORUAN_R2_ACCOUNT_ID }}
-          ACCESS_KEY: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
-          SECRET_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        shell: bash
         run: |
-          [[ -n "$ACCOUNT_ID" && -n "$ACCESS_KEY" && -n "$SECRET_KEY" ]] || {
-            echo 'Configure XIAORUAN_R2_ACCOUNT_ID and dedicated R2 secrets in xiaoruan-release' >&2
+          set -euo pipefail
+          raw="${RELEASE_VERSION#v}"
+          raw="${raw#V}"
+          if [[ ! "$raw" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "release_version must be SemVer (got: $RELEASE_VERSION)" >&2
             exit 1
-          }
+          fi
+          echo "version=$raw" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Build identity'
+            echo
+            echo "- package version: \`$raw\`"
+            echo "- source commit: \`$GITHUB_SHA\`"
+            echo "- run id: \`$GITHUB_RUN_ID\`"
+            echo "- artifact: \`windows-build\` (unsigned)"
+            echo
+            echo 'Hand this run id to the ZhiYuan central signing workflow after the build succeeds.'
+            echo "https://github.com/rongxinzy/xiaoruan-ai-agent/actions/runs/$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@v6
       - name: Enforce retired runtime decoupling
@@ -64,8 +82,12 @@ jobs:
         run: bun run dist:win
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+          APP_BUILD_VERSION: ${{ steps.resolve-version.outputs.version }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
+      - name: Verify packaged app version
+        shell: bash
+        run: node scripts/ci/verify-packaged-app-version.mjs '${{ steps.resolve-version.outputs.version }}'
       - name: Verify Windows package runtimes with a clean PATH
         shell: powershell
         run: >-
@@ -78,8 +100,16 @@ jobs:
           path: release/*.exe
           if-no-files-found: error
           retention-days: 7
-
-  upload-packages:
-    needs: [build-platforms]
-    uses: ./.github/workflows/upload-custom-packages.yml
-    secrets: inherit
+      - name: Publish run id for ZhiYuan signing handoff
+        shell: bash
+        run: |
+          {
+            echo '### Handoff to ZhiYuan signing'
+            echo
+            echo "- run id: \`$GITHUB_RUN_ID\`"
+            echo "- artifact: \`windows-build\`"
+            echo "- version: \`${{ steps.resolve-version.outputs.version }}\`"
+            echo
+            echo 'Provide this run id to the ZhiYuan repository signing workflow.'
+            echo "https://github.com/rongxinzy/xiaoruan-ai-agent/actions/runs/$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"

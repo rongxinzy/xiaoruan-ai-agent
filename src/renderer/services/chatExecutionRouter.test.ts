@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import {
-  buildChatAgentSystemPrompt,
-  ChatExecution,
-  resolveChatExecution,
-} from './chatExecutionRouter';
+import { ChatExecution, resolveChatExecution } from './chatExecutionRouter';
 
 describe('resolveChatExecution', () => {
   test('returns direct when no skills and no session', () => {
@@ -39,30 +35,5 @@ describe('resolveChatExecution', () => {
 
   test('returns direct when session is null', () => {
     expect(resolveChatExecution({ activeSkillIds: [], session: null })).toBe(ChatExecution.Direct);
-  });
-});
-
-describe('buildChatAgentSystemPrompt', () => {
-  test('joins skill prompt and base prompt with a blank line', () => {
-    expect(buildChatAgentSystemPrompt('skill prompt', 'base prompt')).toBe(
-      'skill prompt\n\nbase prompt',
-    );
-  });
-
-  test('returns skill prompt alone when base is missing', () => {
-    expect(buildChatAgentSystemPrompt('skill prompt', undefined)).toBe('skill prompt');
-  });
-
-  test('returns base prompt alone when skill prompt is missing', () => {
-    expect(buildChatAgentSystemPrompt(undefined, 'base prompt')).toBe('base prompt');
-  });
-
-  test('returns undefined when both parts are missing', () => {
-    expect(buildChatAgentSystemPrompt(undefined, undefined)).toBeUndefined();
-  });
-
-  test('ignores whitespace-only parts', () => {
-    expect(buildChatAgentSystemPrompt('   ', 'base prompt')).toBe('base prompt');
-    expect(buildChatAgentSystemPrompt('   ', '')).toBeUndefined();
   });
 });

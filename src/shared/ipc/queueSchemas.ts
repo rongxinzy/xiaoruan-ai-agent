@@ -24,7 +24,6 @@ export const CoworkQueueEnqueueSchema = z.object({
   imageAttachments: z.array(CoworkQueueImageAttachmentSchema).max(CoworkQueueAttachmentLimit.MaxImages).optional(),
   fileAttachments: z.array(CoworkQueueFileAttachmentSchema).optional(),
   skillIds: z.array(z.string().min(1)).max(32).optional(),
-  skillPrompt: z.string().max(100_000).optional(),
   productionLoopMode: z.enum([ProductionLoopMode.Auto, ProductionLoopMode.Off]).optional(),
 });
 

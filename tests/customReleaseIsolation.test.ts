@@ -28,11 +28,8 @@ test('candidate and official publishing workflows are removed', () => {
   }
 });
 
-test('the normal package workflow uploads only after its build dependency passes', () => {
-  expect(workflow('build-platforms').jobs['upload-packages'].needs).toContain('build-platforms');
-  expect(workflow('build-platforms').jobs['upload-packages'].uses).toBe(
-    './.github/workflows/upload-custom-packages.yml',
-  );
+test('the normal package workflow does not upload packages', () => {
+  expect(workflow('build-platforms').jobs['upload-packages']).toBeUndefined();
 });
 
 test('the normal private package build is Windows x64 only', () => {
@@ -40,6 +37,13 @@ test('the normal private package build is Windows x64 only', () => {
   expect(content).toContain('runs-on: windows-latest');
   expect(content).toContain('engram:runtime:win-x64');
   expect(content).toContain('name: windows-build');
+  expect(content).toContain('bun run dist:win');
+  expect(content).toContain("CSC_IDENTITY_AUTO_DISCOVERY: 'false'");
+  expect(content).toContain('release_version:');
+  expect(content).toContain('APP_BUILD_VERSION:');
+  expect(content).toContain('GITHUB_RUN_ID');
+  expect(content).not.toContain('bun run dist:win:signed');
+  expect(content).not.toContain('Connect Certum SimplySign');
   expect(content).not.toContain('plan-platforms');
   expect(content).not.toContain('matrix:');
   expect(content).not.toContain('build_macos:');
@@ -48,6 +52,8 @@ test('the normal private package build is Windows x64 only', () => {
   expect(content).not.toContain('Build Linux');
   expect(content).not.toContain('bun run dist:mac');
   expect(content).not.toContain('bun run dist:linux');
+  expect(content).not.toContain('upload-packages');
+  expect(content).not.toContain('upload-custom-packages.yml');
 });
 
 test('the custom upload job uses only dedicated storage and main-branch credentials', () => {

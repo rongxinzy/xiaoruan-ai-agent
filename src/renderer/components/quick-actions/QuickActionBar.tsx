@@ -5,7 +5,6 @@ import {
   Globe,
   GraduationCap,
   Presentation,
-  Smartphone,
   Telescope,
 } from 'lucide-react';
 import React from 'react';
@@ -17,14 +16,15 @@ interface QuickActionBarProps {
   onActionSelect: (actionId: string) => void;
 }
 
-// 图标映射
+// 图标映射：键必须是 quick-actions.json 里的 icon 名称（heroicons 命名），
+// 否则该实例芯片会没有图标。
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  Presentation,
-  Globe,
-  Smartphone,
-  ChartColumn,
-  GraduationCap,
+  PresentationChartBarIcon: Presentation,
+  ChartBarIcon: ChartColumn,
+  AcademicCapIcon: GraduationCap,
+  GlobeAltIcon: Globe,
   Telescope,
+  GraduationCap,
   FileText,
 };
 

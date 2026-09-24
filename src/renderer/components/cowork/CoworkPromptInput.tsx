@@ -38,7 +38,6 @@ import { clearSelection } from '../../store/slices/quickActionSlice';
 import { clearActiveSkills, setSkills } from '../../store/slices/skillSlice';
 import { WorkMode } from '../../store/workMode/constants';
 import { CoworkFileAttachment, CoworkImageAttachment } from '../../types/cowork';
-import { Skill } from '../../types/skill';
 import ActiveMcpBadge from '../mcp/ActiveMcpBadge';
 import ActiveExpertBadge from './ActiveExpertBadge';
 import { CoworkInlineAttachments } from './CoworkInlineAttachments';
@@ -118,31 +117,9 @@ const extractBase64FromDataUrl = (
   if (!match) return null;
   return { mimeType: match[1], base64Data: match[2] };
 };
-const getFileNameFromPath = (path: string): string => {
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || path;
-};
-
-const getSkillDirectoryFromPath = (skillPath: string): string => {
-  const normalized = skillPath.trim().replace(/\\/g, '/');
-  return normalized.replace(/\/SKILL\.md$/i, '') || normalized;
-};
-
-const buildInlinedSkillPrompt = (skill: Skill): string => {
-  const skillDirectory = getSkillDirectoryFromPath(skill.skillPath);
-  return [
-    `## Skill: ${skill.name}`,
-    '<skill_context>',
-    `  <location>${skill.skillPath}</location>`,
-    `  <directory>${skillDirectory}</directory>`,
-    '  <path_rules>',
-    '    Resolve relative file references from this skill against <directory>.',
-    '    Do not assume skills are under the current workspace directory.',
-    '  </path_rules>',
-    '</skill_context>',
-    '',
-    skill.prompt,
-  ].join('\n');
+const getFileNameFromPath = (filePath: string): string => {
+  const parts = filePath.split(/[/\\]/);
+  return parts[parts.length - 1] || filePath;
 };
 
 const isMacPlatform = navigator.platform.includes('Mac');
@@ -163,7 +140,6 @@ export interface CoworkPromptInputRef {
 interface CoworkPromptInputProps {
   onSubmit: (
     prompt: string,
-    skillPrompt?: string,
     imageAttachments?: CoworkImageAttachment[],
     fileAttachments?: CoworkFileAttachment[],
     expertIds?: string[],
@@ -328,7 +304,6 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
     }));
 
     const activeSkillIds = useSelector((state: RootState) => state.skill.activeSkillIds);
-    const skills = useSelector((state: RootState) => state.skill.skills);
     const {
       selectedModel: effectiveSelectedModel,
       handleModelSelect,
@@ -485,14 +460,9 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
       if (!validateModelSelection()) return;
       setShowFolderRequiredWarning(false);
 
-      // Get active skills prompts and combine them
-      const activeSkills = activeSkillIds
-        .map(id => skills.find(s => s.id === id))
-        .filter((s): s is Skill => s !== undefined);
-      const skillPrompt =
-        activeSkills.length > 0
-          ? activeSkills.map(buildInlinedSkillPrompt).join('\n\n')
-          : undefined;
+      // Skills stay visible to the model through the session's capability set
+      // (Pi renders them into the system prompt from their directories), so the
+      // submission never inlines skill text.
 
       // Extract image attachments (with base64 data) for vision-capable models
       console.log('[CoworkPromptInput] handleSubmit: attachment diagnosis', {
@@ -621,7 +591,6 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
       setImageVisionHint(false);
       const result = await onSubmit(
         finalPrompt,
-        skillPrompt,
         imageAtts.length > 0 ? imageAtts : undefined,
         fileAtts.length > 0 ? fileAtts : undefined,
         selectedExpertIds,
@@ -633,9 +602,11 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
         setValue(finalPrompt);
         dispatch(setDraftPrompt({ sessionId: draftKey, draft: finalPrompt }));
         dispatch(setDraftAttachments({ draftKey, attachments }));
-      } else if (activeSkills.length > 0) {
+      } else if (activeSkillIds.length > 0) {
         // Skills describe this one input only. Clear their selection after a
         // successful send so the next message starts with a clean context.
+        // Keyed on the selection itself: an id that no longer resolves to a
+        // loaded skill would otherwise keep the selection alive for the next turn.
         dispatch(clearActiveSkills());
         dispatch(clearSelection());
       }
@@ -648,7 +619,6 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
       validateModelSelection,
       onSubmit,
       activeSkillIds,
-      skills,
       attachments,
       showFolderSelector,
       workingDirectory,

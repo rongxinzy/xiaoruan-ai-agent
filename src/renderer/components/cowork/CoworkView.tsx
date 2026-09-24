@@ -18,16 +18,8 @@ import {
 } from '../../../shared/productionLoop';
 import { agentService } from '../../services/agent';
 import { ChatChatTransport } from '../../services/chatChatTransport';
-import {
-  buildChatAgentSystemPrompt,
-  ChatExecution,
-  resolveChatExecution,
-} from '../../services/chatExecutionRouter';
-import {
-  isChatSkillShortcutSelection,
-  resolveChatSkillShortcutPermissionMode,
-  resolveSkillPlaceholderKey,
-} from '../chat/constants';
+import { ChatExecution, resolveChatExecution } from '../../services/chatExecutionRouter';
+import { resolveSkillPlaceholderKey } from '../chat/constants';
 import { coworkService } from '../../services/cowork';
 import { coworkQueueService } from '../../services/coworkQueue';
 import { DirectChatTurnState } from '../../services/directChatTurnState';
@@ -76,8 +68,12 @@ import CoworkSessionViewport from './CoworkSessionViewport';
 import { mergeDirectChatSnapshotMessages } from './directChatSnapshot';
 import SecurityStatusIndicator from './SecurityStatusIndicator';
 import {
+  isQuickActionBundleActive,
+  isQuickActionBundleAvailable,
+  isQuickActionBundleSelected,
+  QuickActionEffect,
   quickActionSkillIds,
-  shouldClearQuickActionSelection,
+  resolveQuickActionEffect,
 } from '../quick-actions/quickActionSelection';
 import { useUnmanagedWorkingDirectory } from './useUnmanagedWorkingDirectory';
 import { useTaskResumeContext } from './hooks/useTaskResumeContext';
@@ -364,7 +360,6 @@ const CoworkView: React.FC<CoworkViewProps> = ({
 
   const handleStartSession = async (
     prompt: string,
-    skillPrompt?: string,
     imageAttachments?: CoworkImageAttachment[],
     fileAttachments?: CoworkFileAttachment[],
     expertIds: string[] = [],
@@ -830,9 +825,10 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         currentAgent?.source === CoworkSessionExpertSource.Member;
       const agentSystemPrompt = isExpertAgent ? undefined : currentAgent?.systemPrompt?.trim();
       const baseSystemPrompt = agentSystemPrompt || config.systemPrompt || '';
-      // Combine skill prompt with system prompt. Including skillPrompt here is
-      // what lets chat-mode skill submissions reach the model (issue #117).
-      const combinedSystemPrompt = buildChatAgentSystemPrompt(skillPrompt, baseSystemPrompt);
+      // Skills are capabilities of the session, not text of the prompt: Pi
+      // renders them into the system prompt from their directories, so nothing
+      // from a skill is merged into the session prompt here.
+      const sessionSystemPrompt = baseSystemPrompt;
 
       // Agent-backed chat hides the folder selector, so the engine relies on
       // the configured default working directory. Bail out early with a toast
@@ -851,12 +847,20 @@ const CoworkView: React.FC<CoworkViewProps> = ({
       const sessionModelOverride = currentAgentSelectedModel
         ? toAgentModelRef(currentAgentSelectedModel)
         : '';
+      // A trusted shortcut bundle only auto-allows its tools when the instance was
+      // explicitly opened (sidebar shortcut or instance chip). Attaching the same
+      // skill by hand must not silently grant AllowAll for the whole session.
+      const selectedInstance = quickActions.find(action => action.id === selectedActionId);
       const shouldAutoAllowChatSkill =
         workMode === WorkMode.Chat &&
         isChatAgentExecution &&
-        isChatSkillShortcutSelection(sessionSkillIds);
+        !!selectedInstance &&
+        isQuickActionBundleSelected(selectedInstance, sessionSkillIds);
+      // The opened instance is the trusted entry: its bundle gets AllowAll for
+      // this chat session, so the value here and the per-session record written
+      // after the session starts cannot disagree.
       const sessionPermissionMode = shouldAutoAllowChatSkill
-        ? resolveChatSkillShortcutPermissionMode(sessionSkillIds, config.permissionMode)
+        ? CoworkPermissionMode.AllowAll
         : config.permissionMode;
       console.log('[CoworkView] creating session:', {
         modelId: currentAgentSelectedModel?.id,
@@ -865,8 +869,8 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         agentName: currentAgent?.name,
         agentSource: currentAgent?.source,
         agentSystemPrompt: agentSystemPrompt ? `${agentSystemPrompt.slice(0, 80)}...` : '(empty)',
-        combinedSystemPrompt: combinedSystemPrompt
-          ? `${combinedSystemPrompt.slice(0, 120)}...`
+        sessionSystemPrompt: sessionSystemPrompt
+          ? `${sessionSystemPrompt.slice(0, 120)}...`
           : '(undefined)',
       });
       const { session: startedSession, error: startError } = await coworkService.startSession(
@@ -874,7 +878,9 @@ const CoworkView: React.FC<CoworkViewProps> = ({
           prompt,
           title: fallbackTitle,
           cwd: currentWorkspacePath || undefined,
-          systemPrompt: combinedSystemPrompt,
+          // An empty base prompt must stay undefined so main can fall back to the
+          // agent's/default system prompt instead of composing from ''.
+          systemPrompt: sessionSystemPrompt || undefined,
           // Agent-backed chat stays tagged as a chat session so it remains in
           // the Chat sidebar list; work sessions keep the default work mode.
           mode: isChatAgentExecution ? CoworkSessionMode.Chat : CoworkSessionMode.Work,
@@ -940,7 +946,6 @@ const CoworkView: React.FC<CoworkViewProps> = ({
 
   const handleContinueSession = async (
     prompt: string,
-    skillPrompt?: string,
     imageAttachments?: CoworkImageAttachment[],
     fileAttachments?: CoworkFileAttachment[],
     expertIds: string[] = [],
@@ -976,7 +981,6 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         imageAttachments,
         fileAttachments,
         [...activeSkillIds],
-        skillPrompt,
         productionLoopMode,
       );
       if (!result.success) {
@@ -1366,12 +1370,11 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         currentAgent?.source === CoworkSessionExpertSource.Member;
       const agentSystemPrompt = isExpertAgent ? undefined : currentAgent?.systemPrompt?.trim();
       const baseSystemPrompt = agentSystemPrompt || config.systemPrompt || '';
-      const combinedSystemPrompt = buildChatAgentSystemPrompt(skillPrompt, baseSystemPrompt);
 
       await coworkService.continueSession({
         sessionId: currentSession.id,
         prompt,
-        systemPrompt: currentSession.systemPrompt || combinedSystemPrompt,
+        systemPrompt: currentSession.systemPrompt || baseSystemPrompt,
         activeSkillIds: sessionSkillIds,
         expertIds,
         permissionMode: sessionPermissionMode,
@@ -1431,31 +1434,26 @@ const CoworkView: React.FC<CoworkViewProps> = ({
     await coworkService.stopSession(currentSession.id);
   };
 
-  // Get selected quick action
-  const selectedAction = React.useMemo(() => {
-    const explicitlySelected = quickActions.find(action => action.id === selectedActionId);
-    if (explicitlySelected) return explicitlySelected;
-
-    // Skills can also be activated from the Chat sidebar or the skill badge.
-    // In that path there is no quick-action selection event, so derive the
-    // matching case panel from the active skill mapping.
-    return quickActions.find(action =>
-      quickActionSkillIds(action).every(skillId => activeSkillIds.includes(skillId)),
-    );
-  }, [activeSkillIds, quickActions, selectedActionId]);
+  // Get selected quick action. Only an explicit selection (the Chat sidebar
+  // shortcut or an instance chip) switches the home panel into its instance
+  // view; manually attaching the same skill must leave the chips row untouched.
+  const selectedAction = React.useMemo(
+    () => quickActions.find(action => action.id === selectedActionId),
+    [quickActions, selectedActionId],
+  );
 
   // Handle quick action button click and activate its complete Skill bundle.
   const handleActionSelect = (actionId: string) => {
     dispatch(selectAction(actionId));
+    // A new selection starts unopened; the lifecycle effect decides whether it
+    // opens (bundle attachable), stays prompt-only, or closes.
     quickActionActivationRef.current = null;
     const action = quickActions.find(a => a.id === actionId);
-    const skillIds = action ? quickActionSkillIds(action) : [];
-    const skillsAvailable = skillIds.every(skillId =>
-      skills.some(skill => skill.id === skillId && skill.enabled),
-    );
+    const skillsAvailable = action ? isQuickActionBundleAvailable(action, skills) : false;
     if (action && skillsAvailable) {
-      quickActionActivationRef.current = actionId;
-      dispatch(setActiveSkillIds(skillIds));
+      // Dispatch a copy: the configuration array must not become the live skill
+      // state, and re-selecting the same instance still has to be observable.
+      dispatch(setActiveSkillIds([...quickActionSkillIds(action)]));
     } else {
       // Do not send a new quick-action prompt with skills left over from a
       // previous action when the requested bundle is unavailable.
@@ -1467,8 +1465,9 @@ const CoworkView: React.FC<CoworkViewProps> = ({
     }, 0);
   };
 
-  // Activate a mapped skill once it becomes available, and clear the quick action when
-  // the user removes that skill from the input area.
+  // An instance lives exactly as long as its skills do: opening it attaches the
+  // bundle, and removing, disabling, or deleting any of those skills closes it
+  // so the instance chips take its place again.
   useEffect(() => {
     if (!selectedActionId) {
       quickActionActivationRef.current = null;
@@ -1476,22 +1475,30 @@ const CoworkView: React.FC<CoworkViewProps> = ({
     }
     const action = quickActions.find(a => a.id === selectedActionId);
     if (!action) return;
-    const skillIds = quickActionSkillIds(action);
-    const skillsAvailable = skillIds.every(skillId =>
-      skills.some(skill => skill.id === skillId && skill.enabled),
-    );
-    if (!skillsAvailable) return;
 
-    if (quickActionActivationRef.current !== selectedActionId) {
-      quickActionActivationRef.current = selectedActionId;
-      if (!skillIds.every(skillId => activeSkillIds.includes(skillId))) {
-        dispatch(setActiveSkillIds(skillIds));
-      }
-      return;
-    }
-
-    if (shouldClearQuickActionSelection(action, skills, activeSkillIds)) {
-      dispatch(clearSelection());
+    switch (
+      resolveQuickActionEffect({
+        action,
+        activated: quickActionActivationRef.current === selectedActionId,
+        activeSkillIds,
+        skills,
+      })
+    ) {
+      case QuickActionEffect.Open:
+        // Marking the selection here covers every entry point — the instance chip
+        // and the Chat shortcut both land in this branch, including a click that
+        // ran before the skill list finished loading.
+        quickActionActivationRef.current = selectedActionId;
+        if (!isQuickActionBundleActive(action, activeSkillIds)) {
+          dispatch(setActiveSkillIds([...quickActionSkillIds(action)]));
+        }
+        return;
+      case QuickActionEffect.Close:
+        quickActionActivationRef.current = null;
+        dispatch(clearSelection());
+        return;
+      case QuickActionEffect.Wait:
+        return;
     }
   }, [activeSkillIds, dispatch, quickActions, selectedActionId, skills]);
 
@@ -1697,15 +1704,16 @@ const CoworkView: React.FC<CoworkViewProps> = ({
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* Quick Actions. The instance chips stay visible while an instance is
+              open, so it can always be switched without first removing its skill
+              (and an instance without prompts cannot leave an empty area). */}
           <div
             className="mx-auto flex w-full max-w-5xl flex-col gap-4 animate-fade-in-up"
             style={{ animationDelay: '300ms', animationFillMode: 'both' }}
           >
-            {selectedAction ? (
+            <QuickActionBar actions={quickActions} onActionSelect={handleActionSelect} />
+            {selectedAction && (
               <PromptPanel action={selectedAction} onPromptSelect={handleQuickActionPromptSelect} />
-            ) : (
-              <QuickActionBar actions={quickActions} onActionSelect={handleActionSelect} />
             )}
           </div>
         </div>
