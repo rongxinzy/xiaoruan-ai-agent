@@ -1,34 +1,75 @@
-name: Build Xiaoruan Windows package to R2 (manual)
+name: Build platform artifacts (manual)
 
 on:
   workflow_dispatch:
+    inputs:
+      build_macos:
+        description: 'Build macOS'
+        required: true
+        default: true
+        type: boolean
+      build_windows:
+        description: 'Build Windows'
+        required: true
+        default: true
+        type: boolean
+      build_linux:
+        description: 'Build Linux'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
-  actions: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  plan-platforms:
+    if: github.repository == 'rongxinzy/xiaoruan-ai-agent'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          BUILD_MACOS: ${{ inputs.build_macos }}
+          BUILD_WINDOWS: ${{ inputs.build_windows }}
+          BUILD_LINUX: ${{ inputs.build_linux }}
+        shell: bash
+        run: |
+          matrix='{"include":['
+          separator=''
+
+          if [[ "$BUILD_MACOS" == "true" ]]; then
+            matrix+='{"platform":"macos","runner":"macos-latest","artifact":"macos-build","runtime_target":"mac-arm64"}'
+            separator=','
+          fi
+          if [[ "$BUILD_WINDOWS" == "true" ]]; then
+            matrix+="${separator}{\"platform\":\"windows\",\"runner\":\"windows-latest\",\"artifact\":\"windows-build\",\"runtime_target\":\"win-x64\"}"
+            separator=','
+          fi
+          if [[ "$BUILD_LINUX" == "true" ]]; then
+            matrix+="${separator}{\"platform\":\"linux\",\"runner\":\"ubuntu-latest\",\"artifact\":\"linux-build\",\"runtime_target\":\"linux-x64\"}"
+          fi
+
+          matrix+=']}'
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   build-platforms:
-    if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
-    runs-on: windows-latest
-    environment: xiaoruan-release
+    needs: plan-platforms
+    strategy:
+      # A manual platform build is a single release unit; cancel sibling builds
+      # as soon as one selected platform fails.
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.plan-platforms.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    # Certum / Apple signing credentials live on the shared release environment
+    # (same as Validate Certum cloud signing).
+    environment: release
     timeout-minutes: 90
     steps:
-      - name: Require dedicated R2 credentials before building
-        shell: bash
-        env:
-          ACCOUNT_ID: ${{ vars.XIAORUAN_R2_ACCOUNT_ID }}
-          ACCESS_KEY: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
-          SECRET_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
-        run: |
-          [[ -n "$ACCOUNT_ID" && -n "$ACCESS_KEY" && -n "$SECRET_KEY" ]] || {
-            echo 'Configure XIAORUAN_R2_ACCOUNT_ID and dedicated R2 secrets in xiaoruan-release' >&2
-            exit 1
-          }
-
       - uses: actions/checkout@v6
       - name: Enforce retired runtime decoupling
         run: node scripts/ci/check-openclaw-decoupling.mjs
@@ -50,36 +91,149 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
             vendor/engram-runtime
             vendor/channel-runtime
-          key: packaging-${{ runner.os }}-win-x64-node24-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'scripts/**') }}
+          key: packaging-${{ runner.os }}-${{ matrix.runtime_target }}-node24-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'scripts/**') }}
           restore-keys: |
-            packaging-${{ runner.os }}-win-x64-node24-bun1.4.0-
+            packaging-${{ runner.os }}-${{ matrix.runtime_target }}-node24-bun1.4.0-
+      - name: Install Electron system dependencies
+        if: ${{ matrix.platform == 'linux' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libatspi2.0-0 libgbm1 libgtk-3-0 libnotify4 libnss3 libsecret-1-0 \
+            libxss1 libxtst6 libuuid1 xdg-utils xvfb
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run apply:patches
       - name: Set up Windows runtimes
+        if: ${{ matrix.platform == 'windows' }}
         run: |
           bun run setup:uv-runtime
           bun run setup:python-runtime
-          bun run engram:runtime:win-x64
-      - name: Build Windows
-        run: bun run dist:win
+          bun run engram:runtime:${{ matrix.runtime_target }}
+      - name: Set up POSIX runtimes
+        if: ${{ matrix.platform != 'windows' }}
+        run: |
+          bun run setup:posix-uv-runtime
+          bun run setup:posix-python-runtime
+          bun run engram:runtime:${{ matrix.runtime_target }}
+
+      # Windows: Certum cloud signing (same path as RongxinAI release-candidate)
+      - name: Connect Certum SimplySign
+        if: ${{ matrix.platform == 'windows' }}
+        id: certum-signing
+        uses: ./.github/actions/setup-certum-signing
+        with:
+          user-id: ${{ secrets.CERTUM_USER_ID }}
+          otp-uri: ${{ secrets.CERTUM_OTP_URI }}
+          certificate-thumbprint: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
+      - name: Build signed Windows
+        if: ${{ matrix.platform == 'windows' }}
+        run: bun run dist:win:signed
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CERTUM_CERT_THUMBPRINT: ${{ steps.certum-signing.outputs.thumbprint }}
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
+      - name: Verify Windows Authenticode signatures
+        if: ${{ matrix.platform == 'windows' }}
+        shell: powershell
+        run: >-
+          powershell -NoProfile -ExecutionPolicy Bypass
+          -File scripts/ci/verify-windows-authenticode.ps1
+          -ProjectRoot '${{ github.workspace }}'
+          -ExpectedThumbprint '${{ steps.certum-signing.outputs.thumbprint }}'
       - name: Verify Windows package runtimes with a clean PATH
+        if: ${{ matrix.platform == 'windows' }}
         shell: powershell
         run: >-
           powershell -NoProfile -ExecutionPolicy Bypass
           -File scripts/ci/windows-runtime-smoke.ps1
           -ProjectRoot ${{ github.workspace }}
+
+      # macOS: sign/notarize when Apple credentials are fully configured
+      - name: Validate optional macOS signing credentials
+        if: ${{ matrix.platform == 'macos' }}
+        shell: bash
+        run: |
+          values=("$CSC_LINK" "$CSC_KEY_PASSWORD" "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" "$APPLE_TEAM_ID")
+          provided=0
+          for value in "${values[@]}"; do [[ -n "$value" ]] && provided=$((provided + 1)); done
+          if [[ $provided -eq 0 ]]; then
+            echo 'XIAORUAN_MAC_AUTO_UPDATE_ENABLED=false' >> "$GITHUB_ENV"
+            echo 'CSC_IDENTITY_AUTO_DISCOVERY=false' >> "$GITHUB_ENV"
+            echo '::warning title=Unsigned macOS build::Apple signing credentials are unavailable.'
+          elif [[ $provided -ne ${#values[@]} ]]; then
+            echo 'macOS signing credentials are only partially configured' >&2
+            exit 1
+          else
+            echo 'XIAORUAN_MAC_AUTO_UPDATE_ENABLED=true' >> "$GITHUB_ENV"
+            echo 'CSC_IDENTITY_AUTO_DISCOVERY=true' >> "$GITHUB_ENV"
+          fi
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Build unsigned macOS
+        if: ${{ matrix.platform == 'macos' && env.XIAORUAN_MAC_AUTO_UPDATE_ENABLED != 'true' }}
+        run: bun run dist:mac
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
+      - name: Build signed macOS
+        if: ${{ matrix.platform == 'macos' && env.XIAORUAN_MAC_AUTO_UPDATE_ENABLED == 'true' }}
+        run: bun run dist:mac
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
+      - name: Verify signed and notarized macOS
+        if: ${{ matrix.platform == 'macos' && env.XIAORUAN_MAC_AUTO_UPDATE_ENABLED == 'true' }}
+        shell: bash
+        run: |
+          app_path="$(find release -maxdepth 3 -type d -name '*.app' -print -quit)"
+          [[ -n "$app_path" ]] || { echo 'Packaged macOS app was not found' >&2; exit 1; }
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          xcrun stapler validate "$app_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+
+      - name: Build Linux
+        if: ${{ matrix.platform == 'linux' }}
+        run: bun run dist:linux
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
+      - name: Verify the packaged renderer in a virtual Ubuntu desktop
+        if: ${{ matrix.platform == 'linux' }}
+        run: >-
+          node scripts/verify-linux-renderer.mjs
+          release/linux-unpacked
+          release/linux-render-smoke.png
+
       - uses: actions/upload-artifact@v6
+        if: ${{ matrix.platform == 'macos' }}
         with:
-          name: windows-build
+          name: ${{ matrix.artifact }}
+          path: release/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v6
+        if: ${{ matrix.platform == 'windows' }}
+        with:
+          name: ${{ matrix.artifact }}
           path: release/*.exe
           if-no-files-found: error
           retention-days: 7
-
-  upload-packages:
-    needs: [build-platforms]
-    uses: ./.github/workflows/upload-custom-packages.yml
-    secrets: inherit
+      - uses: actions/upload-artifact@v6
+        if: ${{ always() && matrix.platform == 'linux' }}
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/linux-render-smoke.png
+          if-no-files-found: error
+          retention-days: 7
