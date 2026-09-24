@@ -47,7 +47,7 @@ jobs:
             echo "https://github.com/rongxinzy/xiaoruan-ai-agent/actions/runs/$GITHUB_RUN_ID"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Enforce retired runtime decoupling
         run: node scripts/ci/check-openclaw-decoupling.mjs
       - uses: actions/setup-node@v6
