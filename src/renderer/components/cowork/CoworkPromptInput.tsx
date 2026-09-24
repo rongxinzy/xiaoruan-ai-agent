@@ -376,7 +376,9 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
 
     useEffect(() => {
       const handleFocusInput = (event: Event) => {
-        const detail = (event as CustomEvent<{ clear?: boolean; text?: string }>).detail;
+        const detail = (
+          event as CustomEvent<{ clear?: boolean; clearExperts?: boolean; text?: string }>
+        ).detail;
         const shouldClear = detail?.clear ?? true;
         if (detail?.text !== undefined) {
           setValue(detail.text);
@@ -386,6 +388,10 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
           setValue('');
           dispatch(clearDraftAttachments(draftKey));
           setImageVisionHint(false);
+        }
+        // Only clear when new-chat explicitly requests it; do not tie to shouldClear (avoids ask-ai side effects).
+        if (detail?.clearExperts === true) {
+          setSelectedExpertIds([]);
         }
         requestAnimationFrame(() => {
           textareaRef.current?.focus();
