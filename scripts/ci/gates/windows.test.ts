@@ -65,15 +65,18 @@ test('PRs restore without saving; verified main runs publish the same cache grap
   expect(install?.if).toBeUndefined();
 });
 
-test('the private package workflow builds signed Windows x64 without uploading', () => {
+test('the private package workflow builds unsigned Windows x64 without uploading', () => {
   const privateBuild = workflow('build-platforms.yml');
   expect(privateBuild.on).toHaveProperty('workflow_dispatch');
   expect(privateBuild.on).not.toHaveProperty('schedule');
   expect(privateBuild.on).not.toHaveProperty('push');
   expect(privateBuild.on).not.toHaveProperty('release');
   expect(
-    privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win:signed'),
+    privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win'),
   ).toBe(true);
+  expect(
+    privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win:signed'),
+  ).toBe(false);
   expect(
     privateBuild.jobs['build-platforms'].steps.some(step =>
       step.run?.includes('windows-runtime-smoke.ps1'),
