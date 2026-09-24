@@ -10,6 +10,7 @@ import { selectIsStreaming } from '../../store/selectors/coworkSelectors';
 import { clearCurrentSession } from '../../store/slices/coworkSlice';
 import { selectAction } from '../../store/slices/quickActionSlice';
 import { setActiveSkillIds } from '../../store/slices/skillSlice';
+import { findQuickActionForShortcut } from '../quick-actions/quickActionSelection';
 import {
   AnimatedFileTextIcon,
   type AnimatedFileTextIconHandle,
@@ -91,21 +92,11 @@ const ChatSkillShortcuts: React.FC = () => {
       return;
     }
     dispatch(setActiveSkillIds([...selectedSkillIds]));
-    const quickActionIdByShortcut: Record<string, string> = {
-      sheets: 'data-analysis',
-      website: 'website',
-      docs: 'docs',
-      'deep-research': 'deep-research',
-      'academic-research': 'academic-research',
-    };
-    const quickActionId = quickActionIdByShortcut[entry.id] ?? null;
-    dispatch(
-      selectAction(
-        quickActionId && quickActions.some(action => action.id === quickActionId)
-          ? quickActionId
-          : null,
-      ),
-    );
+    // Resolve the instance from the configuration instead of a shortcut table:
+    // a missing entry used to silently drop that shortcut's instance panel
+    // (ppt), and a stale entry could re-attach a second skill badge.
+    const quickAction = findQuickActionForShortcut(quickActions, entry.id, selectedSkillIds);
+    dispatch(selectAction(quickAction?.id ?? null));
     dispatch(clearCurrentSession());
     window.setTimeout(() => {
       // 2026/09/16 lixiang  切换快捷 skill 只聚焦输入框，保留已输入的 prompt，不清空

@@ -1,7 +1,5 @@
 import type {
   LocalizedQuickAction,
-  Prompt,
-  QuickAction,
   QuickActionsConfig,
   QuickActionsI18n,
 } from '../types/quickAction';
@@ -94,57 +92,6 @@ export class QuickActionService {
         }),
       };
     });
-  }
-
-  /**
-   * 获取所有快捷操作（原始数据）
-   */
-  async getActions(): Promise<QuickAction[]> {
-    const config = await this.loadConfig();
-    return config.actions;
-  }
-
-  /**
-   * 根据 ID 获取快捷操作（已本地化）
-   */
-  async getLocalizedActionById(id: string): Promise<LocalizedQuickAction | undefined> {
-    const actions = await this.getLocalizedActions();
-    return actions.find(action => action.id === id);
-  }
-
-  /**
-   * 根据 ID 获取快捷操作（原始数据）
-   */
-  async getActionById(id: string): Promise<QuickAction | undefined> {
-    const actions = await this.getActions();
-    return actions.find(action => action.id === id);
-  }
-
-  /**
-   * 根据 actionId 和 promptId 获取提示词（原始数据）
-   */
-  async getPrompt(actionId: string, promptId: string): Promise<Prompt | undefined> {
-    const action = await this.getActionById(actionId);
-    if (!action) return undefined;
-    return action.prompts.find(prompt => prompt.id === promptId);
-  }
-
-  /**
-   * 根据 skillMapping 获取对应的快捷操作（已本地化）
-   */
-  async getLocalizedActionBySkillMapping(
-    skillMapping: string,
-  ): Promise<LocalizedQuickAction | undefined> {
-    const actions = await this.getLocalizedActions();
-    return actions.find(action => action.skillMapping === skillMapping);
-  }
-
-  /**
-   * 根据 skillMapping 获取对应的快捷操作（原始数据）
-   */
-  async getActionBySkillMapping(skillMapping: string): Promise<QuickAction | undefined> {
-    const actions = await this.getActions();
-    return actions.find(action => action.skillMapping === skillMapping);
   }
 
   /**
