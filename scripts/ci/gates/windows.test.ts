@@ -71,12 +71,16 @@ test('the private package workflow builds Windows x64 and uploads only after it 
   expect(privateBuild.on).not.toHaveProperty('schedule');
   expect(privateBuild.on).not.toHaveProperty('push');
   expect(privateBuild.on).not.toHaveProperty('release');
-  expect(privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win')).toBe(true);
-  expect(privateBuild.jobs['build-platforms'].steps.some(step => step.run?.includes('windows-runtime-smoke.ps1'))).toBe(true);
+  expect(
+    privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win:signed'),
+  ).toBe(true);
+  expect(
+    privateBuild.jobs['build-platforms'].steps.some(step =>
+      step.run?.includes('windows-runtime-smoke.ps1'),
+    ),
+  ).toBe(true);
   expect(privateBuild.jobs['upload-packages'].uses).toBe('./.github/workflows/upload-custom-packages.yml');
-  expect(privateBuild.jobs['upload-packages'].needs).toEqual([
-    'build-platforms',
-  ]);
+  expect(privateBuild.jobs['upload-packages'].needs).toEqual(['build-platforms']);
 });
 
 test('shared qualification fails on thresholds and retains reports without hiding failure', () => {

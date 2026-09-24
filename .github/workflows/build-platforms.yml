@@ -2,6 +2,11 @@ name: Build Xiaoruan Windows package to R2 (manual)
 
 on:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Package SemVer without a v prefix (e.g. 1.0.1). Optional leading v is stripped.'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,24 +16,41 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  resolve-version:
+    if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - id: resolve
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${RELEASE_VERSION#v}"
+          raw="${raw#V}"
+          if [[ ! "$raw" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "release_version must be SemVer (got: $RELEASE_VERSION)" >&2
+            exit 1
+          fi
+          echo "version=$raw" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Build identity'
+            echo
+            echo "- package version: \`$raw\`"
+            echo "- source commit: \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   build-platforms:
+    needs: resolve-version
     if: github.repository == 'rongxinzy/xiaoruan-ai-agent' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
-    environment: xiaoruan-release
+    # Certum signing credentials live on the shared release environment.
+    environment: release
     timeout-minutes: 90
     steps:
-      - name: Require dedicated R2 credentials before building
-        shell: bash
-        env:
-          ACCOUNT_ID: ${{ vars.XIAORUAN_R2_ACCOUNT_ID }}
-          ACCESS_KEY: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
-          SECRET_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
-        run: |
-          [[ -n "$ACCOUNT_ID" && -n "$ACCESS_KEY" && -n "$SECRET_KEY" ]] || {
-            echo 'Configure XIAORUAN_R2_ACCOUNT_ID and dedicated R2 secrets in xiaoruan-release' >&2
-            exit 1
-          }
-
       - uses: actions/checkout@v6
       - name: Enforce retired runtime decoupling
         run: node scripts/ci/check-openclaw-decoupling.mjs
@@ -60,12 +82,30 @@ jobs:
           bun run setup:uv-runtime
           bun run setup:python-runtime
           bun run engram:runtime:win-x64
+      - name: Connect Certum SimplySign
+        id: certum-signing
+        uses: ./.github/actions/setup-certum-signing
+        with:
+          user-id: ${{ secrets.CERTUM_USER_ID }}
+          otp-uri: ${{ secrets.CERTUM_OTP_URI }}
+          certificate-thumbprint: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
       - name: Build Windows
-        run: bun run dist:win
+        run: bun run dist:win:signed
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          APP_BUILD_VERSION: ${{ needs.resolve-version.outputs.version }}
+          CERTUM_CERT_THUMBPRINT: ${{ steps.certum-signing.outputs.thumbprint }}
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
+      - name: Verify Windows Authenticode signatures
+        shell: powershell
+        run: >-
+          powershell -NoProfile -ExecutionPolicy Bypass
+          -File scripts/ci/verify-windows-authenticode.ps1
+          -ProjectRoot '${{ github.workspace }}'
+          -ExpectedThumbprint '${{ steps.certum-signing.outputs.thumbprint }}'
+      - name: Verify packaged app version
+        shell: bash
+        run: node scripts/ci/verify-packaged-app-version.mjs '${{ needs.resolve-version.outputs.version }}'
       - name: Verify Windows package runtimes with a clean PATH
         shell: powershell
         run: >-
