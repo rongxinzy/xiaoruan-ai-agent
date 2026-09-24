@@ -2458,6 +2458,31 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     const item = this.pendingMessageQueue.take(sessionId, itemId);
     if (!item) return { success: false, error: 'Pending message was not found.' };
     this.emitQueueUpdated(sessionId);
+    // A steer lands in the running session, so its picks must be loaded before
+    // the prompt is sent: Pi filters both <available_skills> and the
+    // run_skill_script whitelist from the session's skill set, and a skill
+    // attached to this queued input is additive exactly like a follow-up's.
+    const previousSkillIds = active.resourceState.skillIds;
+    const steeredSkillIds = mergeSkillIds(previousSkillIds, item.skillIds);
+    if (!haveSameStringList(steeredSkillIds, previousSkillIds)) {
+      active.resourceState.skillIds = steeredSkillIds;
+      try {
+        // Pi reloads the existing ResourceLoader without replacing transcript
+        // state, model, MCP tools, or custom expert tools.
+        await active.piSession.reload();
+        // AgentSession.reload() reloads SettingsManager from disk, so restore
+        // the per-process bundled PortableGit override after every reload.
+        this.applyPiShellOverride(active.settingsManager);
+        this.applyPiCompactionOverrides(
+          active.settingsManager,
+          typeof active.model.contextWindow === 'number' ? active.model.contextWindow : undefined,
+        );
+        active.requestedSkillIds = steeredSkillIds;
+      } catch (error) {
+        active.resourceState.skillIds = previousSkillIds;
+        throw error;
+      }
+    }
     try {
       // A steer lands in the running session, so its picks must be loaded before
       // the prompt is sent: Pi filters both <available_skills> and the
