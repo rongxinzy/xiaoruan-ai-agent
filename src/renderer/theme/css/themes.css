@@ -2870,11 +2870,6 @@
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-:where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -5270,11 +5265,6 @@
 }
 }
 @media (hover: hover) {
-:where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -7052,7 +7042,6 @@ to {
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-task-template-gallery-card-2),
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-:where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-active-skill-badge-button-1),
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-installed-skill-grid-card-1),
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-installed-skill-grid-button-1),
 :where(:root:not([data-theme]), [data-theme="xiaoruan-light"]) :where(.theme-page-marketplace-skill-grid-button-1),
@@ -10469,11 +10458,6 @@ to {
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-[data-theme="xiaoruan-dark"] :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 [data-theme="xiaoruan-dark"] :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -12872,11 +12856,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="xiaoruan-dark"] :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 [data-theme="xiaoruan-dark"] :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -14666,7 +14645,6 @@ to {
 [data-theme="xiaoruan-dark"] :where(.theme-page-task-template-gallery-card-2),
 [data-theme="xiaoruan-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 [data-theme="xiaoruan-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-[data-theme="xiaoruan-dark"] :where(.theme-page-active-skill-badge-button-1),
 [data-theme="xiaoruan-dark"] :where(.theme-page-installed-skill-grid-card-1),
 [data-theme="xiaoruan-dark"] :where(.theme-page-installed-skill-grid-button-1),
 [data-theme="xiaoruan-dark"] :where(.theme-page-marketplace-skill-grid-button-1),
@@ -18083,11 +18061,6 @@ to {
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-[data-theme="classic-light"] :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 [data-theme="classic-light"] :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -20483,11 +20456,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="classic-light"] :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 [data-theme="classic-light"] :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -22265,7 +22233,6 @@ to {
 [data-theme="classic-light"] :where(.theme-page-task-template-gallery-card-2),
 [data-theme="classic-light"] :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 [data-theme="classic-light"] :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-[data-theme="classic-light"] :where(.theme-page-active-skill-badge-button-1),
 [data-theme="classic-light"] :where(.theme-page-installed-skill-grid-card-1),
 [data-theme="classic-light"] :where(.theme-page-installed-skill-grid-button-1),
 [data-theme="classic-light"] :where(.theme-page-marketplace-skill-grid-button-1),
@@ -25682,11 +25649,6 @@ to {
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-[data-theme="classic-dark"] :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 [data-theme="classic-dark"] :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -28085,11 +28047,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="classic-dark"] :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 [data-theme="classic-dark"] :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -29879,7 +29836,6 @@ to {
 [data-theme="classic-dark"] :where(.theme-page-task-template-gallery-card-2),
 [data-theme="classic-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 [data-theme="classic-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-[data-theme="classic-dark"] :where(.theme-page-active-skill-badge-button-1),
 [data-theme="classic-dark"] :where(.theme-page-installed-skill-grid-card-1),
 [data-theme="classic-dark"] :where(.theme-page-installed-skill-grid-button-1),
 [data-theme="classic-dark"] :where(.theme-page-marketplace-skill-grid-button-1),
@@ -33296,11 +33252,6 @@ to {
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-[data-theme="daming-light"] :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 [data-theme="daming-light"] :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -35696,11 +35647,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="daming-light"] :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 [data-theme="daming-light"] :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -37478,7 +37424,6 @@ to {
 [data-theme="daming-light"] :where(.theme-page-task-template-gallery-card-2),
 [data-theme="daming-light"] :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 [data-theme="daming-light"] :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-[data-theme="daming-light"] :where(.theme-page-active-skill-badge-button-1),
 [data-theme="daming-light"] :where(.theme-page-installed-skill-grid-card-1),
 [data-theme="daming-light"] :where(.theme-page-installed-skill-grid-button-1),
 [data-theme="daming-light"] :where(.theme-page-marketplace-skill-grid-button-1),
@@ -40895,11 +40840,6 @@ to {
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-[data-theme="daming-dark"] :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 [data-theme="daming-dark"] :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -43298,11 +43238,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="daming-dark"] :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 [data-theme="daming-dark"] :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -45092,7 +45027,6 @@ to {
 [data-theme="daming-dark"] :where(.theme-page-task-template-gallery-card-2),
 [data-theme="daming-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 [data-theme="daming-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-[data-theme="daming-dark"] :where(.theme-page-active-skill-badge-button-1),
 [data-theme="daming-dark"] :where(.theme-page-installed-skill-grid-card-1),
 [data-theme="daming-dark"] :where(.theme-page-installed-skill-grid-button-1),
 [data-theme="daming-dark"] :where(.theme-page-marketplace-skill-grid-button-1),
@@ -48511,11 +48445,6 @@ to {
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-[data-theme="changan-light"] :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 [data-theme="changan-light"] :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -50911,11 +50840,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="changan-light"] :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 [data-theme="changan-light"] :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -52696,7 +52620,6 @@ to {
 [data-theme="changan-light"] :where(.theme-page-task-template-gallery-card-2),
 [data-theme="changan-light"] :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 [data-theme="changan-light"] :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-[data-theme="changan-light"] :where(.theme-page-active-skill-badge-button-1),
 [data-theme="changan-light"] :where(.theme-page-installed-skill-grid-card-1),
 [data-theme="changan-light"] :where(.theme-page-installed-skill-grid-button-1),
 [data-theme="changan-light"] :where(.theme-page-marketplace-skill-grid-button-1),
@@ -56115,11 +56038,6 @@ to {
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-[data-theme="changan-dark"] :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 [data-theme="changan-dark"] :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -58518,11 +58436,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="changan-dark"] :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 [data-theme="changan-dark"] :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -60315,7 +60228,6 @@ to {
 [data-theme="changan-dark"] :where(.theme-page-task-template-gallery-card-2),
 [data-theme="changan-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 [data-theme="changan-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-[data-theme="changan-dark"] :where(.theme-page-active-skill-badge-button-1),
 [data-theme="changan-dark"] :where(.theme-page-installed-skill-grid-card-1),
 [data-theme="changan-dark"] :where(.theme-page-installed-skill-grid-button-1),
 [data-theme="changan-dark"] :where(.theme-page-marketplace-skill-grid-button-1),
@@ -63734,11 +63646,6 @@ to {
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-[data-theme="weiyang-light"] :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 [data-theme="weiyang-light"] :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -66134,11 +66041,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="weiyang-light"] :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 [data-theme="weiyang-light"] :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -67919,7 +67821,6 @@ to {
 [data-theme="weiyang-light"] :where(.theme-page-task-template-gallery-card-2),
 [data-theme="weiyang-light"] :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 [data-theme="weiyang-light"] :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-[data-theme="weiyang-light"] :where(.theme-page-active-skill-badge-button-1),
 [data-theme="weiyang-light"] :where(.theme-page-installed-skill-grid-card-1),
 [data-theme="weiyang-light"] :where(.theme-page-installed-skill-grid-button-1),
 [data-theme="weiyang-light"] :where(.theme-page-marketplace-skill-grid-button-1),
@@ -71338,11 +71239,6 @@ to {
   font-size: var(--zy-component-text-xs);
   line-height: var(--zy-component-text-xs--line-height);
 }
-[data-theme="weiyang-dark"] :where(.theme-page-active-skill-badge-button-1) {
-  height: 1rem;
-  width: 1rem;
-  border-radius: 9999px;
-}
 [data-theme="weiyang-dark"] :where(.theme-page-installed-skill-grid-card-1) {
   min-height: 5rem;
   gap: 0.75rem;
@@ -73741,11 +73637,6 @@ to {
 }
 }
 @media (hover: hover) {
-[data-theme="weiyang-dark"] :where(.theme-page-active-skill-badge-button-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
-  background-color: var(--zy-background);
-}
-}
-@media (hover: hover) {
 [data-theme="weiyang-dark"] :where(.theme-page-installed-skill-grid-card-1):where(:not(:disabled):not([aria-disabled="true"]):not([data-disabled=""]):not([data-disabled="true"]):hover) {
   background-color: var(--muted);
 }
@@ -75538,7 +75429,6 @@ to {
 [data-theme="weiyang-dark"] :where(.theme-page-task-template-gallery-card-2),
 [data-theme="weiyang-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-1),
 [data-theme="weiyang-dark"] :where(.theme-page-pi-runtime-model-config-select-trigger-2),
-[data-theme="weiyang-dark"] :where(.theme-page-active-skill-badge-button-1),
 [data-theme="weiyang-dark"] :where(.theme-page-installed-skill-grid-card-1),
 [data-theme="weiyang-dark"] :where(.theme-page-installed-skill-grid-button-1),
 [data-theme="weiyang-dark"] :where(.theme-page-marketplace-skill-grid-button-1),

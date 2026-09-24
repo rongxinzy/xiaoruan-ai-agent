@@ -812,7 +812,6 @@ interface IElectronAPI {
       }>;
       fileAttachments?: Array<{ name: string; path: string; extension: string; isImage?: boolean }>;
       skillIds?: string[];
-      skillPrompt?: string;
       productionLoopMode?: ProductionLoopMode;
     }) => Promise<{ success: boolean; item?: CoworkPendingMessage; error?: string }>;
     updatePendingMessage: (options: {
