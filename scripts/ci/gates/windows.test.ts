@@ -75,6 +75,9 @@ test('the private package workflow builds Windows x64 and uploads only after it 
     privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win:signed'),
   ).toBe(true);
   expect(
+    privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win'),
+  ).toBe(true);
+  expect(
     privateBuild.jobs['build-platforms'].steps.some(step =>
       step.run?.includes('windows-runtime-smoke.ps1'),
     ),

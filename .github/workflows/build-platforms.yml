@@ -75,7 +75,23 @@ jobs:
           bun run setup:uv-runtime
           bun run setup:python-runtime
           bun run engram:runtime:win-x64
+      - name: Detect Certum signing credentials
+        id: certum-config
+        shell: bash
+        env:
+          CERTUM_USER_ID: ${{ secrets.CERTUM_USER_ID }}
+          CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+          CERTUM_CERT_THUMBPRINT: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${CERTUM_USER_ID}" && -n "${CERTUM_OTP_URI}" && -n "${CERTUM_CERT_THUMBPRINT}" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo '::warning title=Unsigned Windows package::Certum signing secrets are unavailable; building without code signing.'
+          fi
       - name: Connect Certum SimplySign
+        if: ${{ steps.certum-config.outputs.enabled == 'true' }}
         id: certum-signing
         uses: ./.github/actions/setup-certum-signing
         with:
@@ -83,11 +99,20 @@ jobs:
           otp-uri: ${{ secrets.CERTUM_OTP_URI }}
           certificate-thumbprint: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
       - name: Build Windows
+        if: ${{ steps.certum-config.outputs.enabled == 'true' }}
         run: bun run dist:win:signed
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           APP_BUILD_VERSION: ${{ steps.resolve-version.outputs.version }}
           CERTUM_CERT_THUMBPRINT: ${{ steps.certum-signing.outputs.thumbprint }}
+          MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
+      - name: Build Windows
+        if: ${{ steps.certum-config.outputs.enabled != 'true' }}
+        run: bun run dist:win
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          APP_BUILD_VERSION: ${{ steps.resolve-version.outputs.version }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
       - name: Verify packaged app version
         shell: bash
