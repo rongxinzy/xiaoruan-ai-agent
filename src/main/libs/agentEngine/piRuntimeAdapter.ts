@@ -149,6 +149,7 @@ import {
 import { extractPiSubagentExecutionMetadata } from './piSubagentExecution';
 import { buildPiSubagentTool, PiSubagentToolName } from './piSubagentTool';
 import { buildPiSkillScriptTool } from './piSkillScriptTool';
+import { resolvePiSkillRoots } from './piSkillRoots';
 import { buildPiSkillRuntimeCapabilitiesTool } from './piSkillRuntimeCapabilitiesTool';
 import { resolvePiBuiltinProviderId } from './piProviderIds';
 import { buildPiDocumentReaderTool } from './piDocumentReaderTool';
@@ -404,6 +405,7 @@ interface PiResourceState {
   unattended: boolean;
   /** Bundled preset skill dirs for the session's experts (file-sourced, live). */
   expertSkillDirs: string[];
+  skillRoots: Record<string, string>;
 }
 
 interface InitializingPiSession {
@@ -818,7 +820,13 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         fileToolsEnabled: options.confirmationMode !== 'text',
         unattended: options.unattended === true,
         expertSkillDirs: this.resolveExpertPresetSkillDirs(options.expertIds),
+        skillRoots: {},
       };
+      resourceState.skillRoots = resolvePiSkillRoots(
+        resourceState.skillIds,
+        this.resolveZhiyuanSkillDirs(),
+        resourceState.expertSkillDirs,
+      );
 
       const shortcutKindForContract = isAcademicResearchSkillSet(resourceState.skillIds)
         ? null
@@ -1067,6 +1075,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           buildPiSkillScriptTool({
             workspaceRoot,
             allowedSkillIds: resourceState.skillIds,
+            skillRoots: resourceState.skillRoots,
           }),
         );
       }
