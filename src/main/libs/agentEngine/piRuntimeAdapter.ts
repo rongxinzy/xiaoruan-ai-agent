@@ -1132,6 +1132,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
               fileToolsEnabled: true,
               unattended: resourceState.unattended,
               expertSkillDirs: [],
+              skillRoots: resolvePiSkillRoots(skillIds, this.resolveZhiyuanSkillDirs(), []),
             },
             {
               sessionId,
