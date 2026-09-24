@@ -65,7 +65,7 @@ test('PRs restore without saving; verified main runs publish the same cache grap
   expect(install?.if).toBeUndefined();
 });
 
-test('the private package workflow builds Windows x64 and uploads only after it succeeds', () => {
+test('the private package workflow builds signed Windows x64 without uploading', () => {
   const privateBuild = workflow('build-platforms.yml');
   expect(privateBuild.on).toHaveProperty('workflow_dispatch');
   expect(privateBuild.on).not.toHaveProperty('schedule');
@@ -75,15 +75,11 @@ test('the private package workflow builds Windows x64 and uploads only after it 
     privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win:signed'),
   ).toBe(true);
   expect(
-    privateBuild.jobs['build-platforms'].steps.some(step => step.run === 'bun run dist:win'),
-  ).toBe(true);
-  expect(
     privateBuild.jobs['build-platforms'].steps.some(step =>
       step.run?.includes('windows-runtime-smoke.ps1'),
     ),
   ).toBe(true);
-  expect(privateBuild.jobs['upload-packages'].uses).toBe('./.github/workflows/upload-custom-packages.yml');
-  expect(privateBuild.jobs['upload-packages'].needs).toEqual(['build-platforms']);
+  expect(privateBuild.jobs['upload-packages']).toBeUndefined();
 });
 
 test('shared qualification fails on thresholds and retains reports without hiding failure', () => {
