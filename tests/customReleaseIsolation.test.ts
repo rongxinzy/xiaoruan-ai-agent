@@ -40,6 +40,9 @@ test('the normal private package build is Windows x64 only', () => {
   expect(content).toContain('runs-on: windows-latest');
   expect(content).toContain('engram:runtime:win-x64');
   expect(content).toContain('name: windows-build');
+  expect(content).toContain('bun run dist:win:signed');
+  expect(content).toContain('release_version:');
+  expect(content).toContain('APP_BUILD_VERSION:');
   expect(content).not.toContain('plan-platforms');
   expect(content).not.toContain('matrix:');
   expect(content).not.toContain('build_macos:');
