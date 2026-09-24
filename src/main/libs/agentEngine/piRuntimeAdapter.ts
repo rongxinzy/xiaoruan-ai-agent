@@ -42,6 +42,7 @@ import {
   type CoworkSessionInterruption,
 } from '../../../shared/cowork/interruption';
 import { CoworkToolActivityPhase } from '../../../shared/cowork/toolActivity';
+import { hasReportedTokenUsage } from '../../../shared/cowork/messageUsage';
 import {
   HarnessVersion,
   type HarnessActivationEvent,
@@ -3254,6 +3255,19 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         ?.getSession(sessionId)
         ?.messages.find(item => item.id === messageId);
       if (!message) return;
+      // Pi materializes `usage` with zeros and only fills it once the provider
+      // reports one; persisting that default would read as a real zero in the
+      // stats line (see hasReportedTokenUsage).
+      const reportedUsage = piUsage
+        ? {
+            inputTokens: piUsage.input,
+            outputTokens: piUsage.output,
+            cacheReadTokens: piUsage.cacheRead,
+            cacheWriteTokens: piUsage.cacheWrite,
+            reasoningTokens: piUsage.reasoning,
+            totalTokens: piUsage.totalTokens,
+          }
+        : null;
       const metadata = {
         ...message?.metadata,
         contextUsage: usage,
@@ -3267,18 +3281,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
               },
             }
           : {}),
-        ...(piUsage
-          ? {
-              usage: {
-                inputTokens: piUsage.input,
-                outputTokens: piUsage.output,
-                cacheReadTokens: piUsage.cacheRead,
-                cacheWriteTokens: piUsage.cacheWrite,
-                reasoningTokens: piUsage.reasoning,
-                totalTokens: piUsage.totalTokens,
-              },
-            }
-          : {}),
+        ...(reportedUsage && hasReportedTokenUsage(reportedUsage) ? { usage: reportedUsage } : {}),
       };
       this.store?.updateMessage(sessionId, messageId, { metadata });
       this.emit('messageUpdate', sessionId, messageId, message.content, metadata);
