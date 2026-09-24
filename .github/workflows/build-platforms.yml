@@ -137,7 +137,7 @@ jobs:
           bun run setup:posix-python-runtime
           bun run engram:runtime:${{ matrix.runtime_target }}
 
-      # Windows: Certum cloud signing (same path as RongxinAI release-candidate)
+      # Windows: Certum cloud signing (same path as upstream release-candidate)
       - name: Connect Certum SimplySign
         if: ${{ matrix.platform == 'windows' }}
         id: certum-signing
