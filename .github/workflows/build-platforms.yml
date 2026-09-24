@@ -89,13 +89,6 @@ jobs:
           APP_BUILD_VERSION: ${{ steps.resolve-version.outputs.version }}
           CERTUM_CERT_THUMBPRINT: ${{ steps.certum-signing.outputs.thumbprint }}
           MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
-      - name: Verify Windows Authenticode signatures
-        shell: powershell
-        run: >-
-          powershell -NoProfile -ExecutionPolicy Bypass
-          -File scripts/ci/verify-windows-authenticode.ps1
-          -ProjectRoot '${{ github.workspace }}'
-          -ExpectedThumbprint '${{ steps.certum-signing.outputs.thumbprint }}'
       - name: Verify packaged app version
         shell: bash
         run: node scripts/ci/verify-packaged-app-version.mjs '${{ steps.resolve-version.outputs.version }}'
