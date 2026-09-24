@@ -1596,7 +1596,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
           resumeDisabled={taskResume.isResuming} // 2026/09/17 lixiang  恢复中禁用继续执行，避免重复点击
           onResumeTask={taskResume.select}
           onCancelTaskResume={taskResume.cancel}
-          // 2026/09/21 lixiang  会话页也展示底部工作区，避免进任务后路径“消失”
+          // 会话页保留 cwd，但不展示底部文件夹名（仅点左侧文件夹时在首页展示）
           workingDirectory={currentWorkspacePath}
           workingDirectoryName={currentWorkspaceDisplayName}
           onWorkingDirectoryChange={async (dir: string) => {
@@ -1614,7 +1614,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
               );
             }
           }}
-          showFolderSelector={workMode !== WorkMode.Chat && !currentWorkspace?.isHidden}
+          showFolderSelector={false}
           showNoFolderAction={!currentWorkspaceId}
         />
       </div>
