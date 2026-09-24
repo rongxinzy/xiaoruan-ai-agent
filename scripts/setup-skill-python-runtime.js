@@ -21,6 +21,7 @@ const SHARED_ENVIRONMENT_NAME = 'shared';
 const LAYERS_DIRECTORY_NAME = 'layers';
 const SKILLS_DIRECTORY_NAME = 'skills';
 const LOCKS_DIRECTORY_NAME = 'locks';
+const SHARED_LOCK_FILE_NAME = 'shared.txt';
 
 const IMPORT_NAME_OVERRIDES = {
   pillow: 'PIL',
@@ -375,6 +376,10 @@ function skillManifestRoot(runtimeRoot, skillId) {
   return path.join(runtimeRoot, SKILLS_DIRECTORY_NAME, skillId);
 }
 
+function sharedLockPath(runtimeRoot) {
+  return path.join(runtimeRoot, LOCKS_DIRECTORY_NAME, SHARED_LOCK_FILE_NAME);
+}
+
 function requirementHashes(requirements) {
   return Object.fromEntries(
     requirements.map(entry => [entry.skillId, sha256File(entry.requirementsPath)]),
@@ -417,6 +422,7 @@ function checkSkillPythonRuntimeHealth(options = {}) {
 
   const runtimeRoot = options.runtimeRoot || RUNTIME_ROOT;
   const sharedRoot = sharedEnvironmentRoot(runtimeRoot);
+  const sharedLock = sharedLockPath(runtimeRoot);
   const lockPaths = requirements.map(entry =>
     path.join(runtimeRoot, LOCKS_DIRECTORY_NAME, `${entry.skillId}.txt`),
   );
@@ -426,6 +432,7 @@ function checkSkillPythonRuntimeHealth(options = {}) {
   if (!sharedManifest || sharedManifest.version !== MANIFEST_VERSION || sharedManifest.kind !== 'shared-layer') {
     missing.push('shared: matching runtime.json');
   }
+  if (!fs.existsSync(sharedLock)) missing.push('shared: requirements lock');
   if (!isEnvironmentRelocatable(sharedRoot)) missing.push('shared: relocatable symlinks');
 
   for (const entry of requirements) {
@@ -491,6 +498,7 @@ async function ensureSkillPythonRuntimes(options = {}) {
   const arch = options.arch || process.arch;
   const skillsRoot = options.skillsRoot || SKILLS_ROOT;
   const runtimeRoot = options.runtimeRoot || RUNTIME_ROOT;
+  const sharedLock = sharedLockPath(runtimeRoot);
   const requirements = listRequirementFiles(skillsRoot);
   const lockPaths = requirements.map(entry =>
     path.join(runtimeRoot, LOCKS_DIRECTORY_NAME, `${entry.skillId}.txt`),
@@ -517,6 +525,7 @@ async function ensureSkillPythonRuntimes(options = {}) {
     existingPython &&
     isEnvironmentRelocatable(sharedRoot) &&
     manifestMatches(readManifest(sharedRoot), sharedExpected) &&
+    fs.existsSync(sharedLock) &&
     lockPaths.every(lockPath => fs.existsSync(lockPath)) &&
     requirements.every(entry => probePython(existingPython, parseImportNames(entry.requirementsPath)).ok);
 
@@ -525,6 +534,18 @@ async function ensureSkillPythonRuntimes(options = {}) {
     fs.mkdirSync(runtimeRoot, { recursive: true });
     fs.mkdirSync(path.join(runtimeRoot, LOCKS_DIRECTORY_NAME), { recursive: true });
     console.log('[setup-skill-python-runtime] creating shared relocatable dependency layer');
+    run(
+      base.uvPath,
+      [
+        'pip',
+        'compile',
+        '--generate-hashes',
+        '--output-file',
+        sharedLock,
+        ...requirements.map(entry => entry.requirementsPath),
+      ],
+      { env: { UV_NO_PROGRESS: '1', UV_PYTHON: base.pythonPath } },
+    );
     for (const [index, entry] of requirements.entries()) {
       run(
         base.uvPath,
@@ -564,7 +585,8 @@ async function ensureSkillPythonRuntimes(options = {}) {
       'install',
       '--python',
       environmentPython,
-      ...lockPaths.flatMap(lockPath => ['--requirement', lockPath]),
+      '--requirement',
+      sharedLock,
       '--link-mode',
       'copy',
       '--no-managed-python',
@@ -625,6 +647,7 @@ module.exports = {
   parseImportNames,
   pythonExecutableForEnvironment,
   rebaseEnvironmentSymlinks,
+  sharedLockPath,
   validateSkillDependencyDeclarations,
   ensureSkillPythonRuntimes,
 };
