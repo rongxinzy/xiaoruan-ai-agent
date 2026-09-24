@@ -104,8 +104,3 @@ jobs:
           path: release/*.exe
           if-no-files-found: error
           retention-days: 7
-
-  upload-packages:
-    needs: [build-platforms]
-    uses: ./.github/workflows/upload-custom-packages.yml
-    secrets: inherit
