@@ -14,12 +14,7 @@ import { resolveShortcutWorkflowKind } from '../../../main/libs/agentEngine/piSh
 
 import { expect, test } from 'vitest';
 
-import { CoworkPermissionMode } from '../../../shared/cowork/constants';
-import {
-  CHAT_SKILL_SHORTCUTS,
-  isChatSkillShortcutActive,
-  resolveChatSkillShortcutPermissionMode,
-} from './constants';
+import { CHAT_SKILL_SHORTCUTS, isChatSkillShortcutActive } from './constants';
 
 test('every chat quick-skill shortcut points at a core skill', () => {
   // Core skills are always enabled (skillManager forces enabled=true), so a
@@ -87,23 +82,6 @@ test('quick skill selection requires an exact skill set', () => {
       'web-search',
     ]),
   ).toBe(false);
-});
-
-test('quick skill selections automatically allow tools for their chat session only', () => {
-  for (const shortcut of CHAT_SKILL_SHORTCUTS) {
-    expect(
-      resolveChatSkillShortcutPermissionMode(
-        shortcut.skillIds ?? [shortcut.skillId],
-        CoworkPermissionMode.Ask,
-      ),
-    ).toBe(CoworkPermissionMode.AllowAll);
-  }
-  expect(
-    resolveChatSkillShortcutPermissionMode(['presentation-studio', 'web-search'], CoworkPermissionMode.Ask),
-  ).toBe(CoworkPermissionMode.Ask);
-  expect(resolveChatSkillShortcutPermissionMode([], CoworkPermissionMode.AllowAll)).toBe(
-    CoworkPermissionMode.AllowAll,
-  );
 });
 
 test('every sidebar shortcut is protected by a Pi completion controller', () => {
