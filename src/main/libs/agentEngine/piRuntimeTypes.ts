@@ -81,7 +81,15 @@ export type PiConversationHistoryMessage = {
 
 export type PiStartOptions = {
   skipInitialUserMessage?: boolean;
+  /** Execution skill set for this session (user selection plus expert preset). */
   skillIds?: string[];
+  /**
+   * Skills the user attached to this one input, persisted on the user message so
+   * the transcript shows the chips the user actually chose. Omitting it means the
+   * turn carries no attachment and shows no chips: the session's `skillIds` never
+   * appears as user-attached.
+   */
+  attachedSkillIds?: string[];
   systemPrompt?: string;
   approvalMode?: WorkbenchApprovalMode;
   /** No foreground user is available to answer questions during this run. */
@@ -111,7 +119,15 @@ export type PiStartOptions = {
 
 export type PiContinueOptions = {
   systemPrompt?: string;
+  /** Execution skill set for this turn (user selection plus expert preset). */
   skillIds?: string[];
+  /**
+   * Skills the user attached to this one input, persisted on the user message so
+   * the transcript shows the chips the user actually chose. Omitting it means the
+   * turn carries no attachment and shows no chips: the session's `skillIds` never
+   * appears as user-attached.
+   */
+  attachedSkillIds?: string[];
   /** UI session mode, preserved when a skill change recreates the Pi session. */
   sessionMode?: 'work' | 'chat';
   goalMode?: boolean;
@@ -165,7 +181,6 @@ export interface PiRuntime {
     imageAttachments?: PiImageAttachment[],
     fileAttachments?: Array<{ name: string; path: string; extension: string; isImage?: boolean }>,
     skillIds?: string[],
-    skillPrompt?: string,
   ): { success: boolean; item?: CoworkPendingMessage; error?: string };
   updatePendingMessage(
     sessionId: string,

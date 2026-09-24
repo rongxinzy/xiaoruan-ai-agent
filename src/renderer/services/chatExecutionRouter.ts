@@ -38,14 +38,3 @@ export const resolveChatExecution = ({
   }
   return ChatExecution.Direct;
 };
-
-/**
- * Combines the skill prompt with the base system prompt, mirroring the
- * work-branch combine logic in CoworkView. Returns undefined when both
- * parts are empty so callers can omit the field entirely.
- */
-export const buildChatAgentSystemPrompt = (
-  skillPrompt: string | undefined,
-  baseSystemPrompt: string | undefined,
-): string | undefined =>
-  [skillPrompt, baseSystemPrompt].filter(part => part?.trim()).join('\n\n') || undefined;

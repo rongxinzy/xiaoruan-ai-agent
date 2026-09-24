@@ -505,7 +505,6 @@ contextBridge.exposeInMainWorld('electron', {
       }>;
       fileAttachments?: Array<{ name: string; path: string; extension: string; isImage?: boolean }>;
       skillIds?: string[];
-      skillPrompt?: string;
       productionLoopMode?: import('../shared/productionLoop').ProductionLoopMode;
     }) => ipcRenderer.invoke(CoworkQueueIpc.Enqueue, options),
     updatePendingMessage: (options: { sessionId: string; itemId: string; text: string }) =>

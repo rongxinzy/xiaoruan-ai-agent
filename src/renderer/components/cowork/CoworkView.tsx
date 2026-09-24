@@ -18,11 +18,7 @@ import {
 } from '../../../shared/productionLoop';
 import { agentService } from '../../services/agent';
 import { ChatChatTransport } from '../../services/chatChatTransport';
-import {
-  buildChatAgentSystemPrompt,
-  ChatExecution,
-  resolveChatExecution,
-} from '../../services/chatExecutionRouter';
+import { ChatExecution, resolveChatExecution } from '../../services/chatExecutionRouter';
 import {
   isChatSkillShortcutSelection,
   resolveChatSkillShortcutPermissionMode,
@@ -364,7 +360,6 @@ const CoworkView: React.FC<CoworkViewProps> = ({
 
   const handleStartSession = async (
     prompt: string,
-    skillPrompt?: string,
     imageAttachments?: CoworkImageAttachment[],
     fileAttachments?: CoworkFileAttachment[],
     expertIds: string[] = [],
@@ -830,9 +825,10 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         currentAgent?.source === CoworkSessionExpertSource.Member;
       const agentSystemPrompt = isExpertAgent ? undefined : currentAgent?.systemPrompt?.trim();
       const baseSystemPrompt = agentSystemPrompt || config.systemPrompt || '';
-      // Combine skill prompt with system prompt. Including skillPrompt here is
-      // what lets chat-mode skill submissions reach the model (issue #117).
-      const combinedSystemPrompt = buildChatAgentSystemPrompt(skillPrompt, baseSystemPrompt);
+      // Skills are capabilities of the session, not text of the prompt: Pi
+      // renders them into the system prompt from their directories, so nothing
+      // from a skill is merged into the session prompt here.
+      const sessionSystemPrompt = baseSystemPrompt;
 
       // Agent-backed chat hides the folder selector, so the engine relies on
       // the configured default working directory. Bail out early with a toast
@@ -865,8 +861,8 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         agentName: currentAgent?.name,
         agentSource: currentAgent?.source,
         agentSystemPrompt: agentSystemPrompt ? `${agentSystemPrompt.slice(0, 80)}...` : '(empty)',
-        combinedSystemPrompt: combinedSystemPrompt
-          ? `${combinedSystemPrompt.slice(0, 120)}...`
+        sessionSystemPrompt: sessionSystemPrompt
+          ? `${sessionSystemPrompt.slice(0, 120)}...`
           : '(undefined)',
       });
       const { session: startedSession, error: startError } = await coworkService.startSession(
@@ -874,7 +870,9 @@ const CoworkView: React.FC<CoworkViewProps> = ({
           prompt,
           title: fallbackTitle,
           cwd: currentWorkspacePath || undefined,
-          systemPrompt: combinedSystemPrompt,
+          // An empty base prompt must stay undefined so main can fall back to the
+          // agent's/default system prompt instead of composing from ''.
+          systemPrompt: sessionSystemPrompt || undefined,
           // Agent-backed chat stays tagged as a chat session so it remains in
           // the Chat sidebar list; work sessions keep the default work mode.
           mode: isChatAgentExecution ? CoworkSessionMode.Chat : CoworkSessionMode.Work,
@@ -940,7 +938,6 @@ const CoworkView: React.FC<CoworkViewProps> = ({
 
   const handleContinueSession = async (
     prompt: string,
-    skillPrompt?: string,
     imageAttachments?: CoworkImageAttachment[],
     fileAttachments?: CoworkFileAttachment[],
     expertIds: string[] = [],
@@ -976,7 +973,6 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         imageAttachments,
         fileAttachments,
         [...activeSkillIds],
-        skillPrompt,
         productionLoopMode,
       );
       if (!result.success) {
@@ -1366,12 +1362,11 @@ const CoworkView: React.FC<CoworkViewProps> = ({
         currentAgent?.source === CoworkSessionExpertSource.Member;
       const agentSystemPrompt = isExpertAgent ? undefined : currentAgent?.systemPrompt?.trim();
       const baseSystemPrompt = agentSystemPrompt || config.systemPrompt || '';
-      const combinedSystemPrompt = buildChatAgentSystemPrompt(skillPrompt, baseSystemPrompt);
 
       await coworkService.continueSession({
         sessionId: currentSession.id,
         prompt,
-        systemPrompt: currentSession.systemPrompt || combinedSystemPrompt,
+        systemPrompt: currentSession.systemPrompt || baseSystemPrompt,
         activeSkillIds: sessionSkillIds,
         expertIds,
         permissionMode: sessionPermissionMode,

@@ -40,7 +40,6 @@ class CoworkQueueService {
     imageAttachments?: CoworkImageAttachment[],
     fileAttachments?: CoworkFileAttachment[],
     skillIds?: string[],
-    skillPrompt?: string,
     productionLoopMode?: ProductionLoopMode,
   ) {
     return window.electron.cowork.enqueuePendingMessage({
@@ -49,7 +48,6 @@ class CoworkQueueService {
       imageAttachments,
       fileAttachments,
       skillIds,
-      skillPrompt,
       productionLoopMode,
     });
   }
