@@ -52,6 +52,12 @@ export interface WorkbenchApprovalRequestedEvent {
 export interface WorkbenchToolAuthorizationResult {
   allow: boolean;
   reason?: string;
+  /**
+   * The run cannot continue. The runtime must end the turn instead of handing
+   * the model another ordinary tool error, otherwise it keeps requesting tools
+   * against a run that is already over (issue #116).
+   */
+  terminateRun?: boolean;
 }
 
 export interface VerifiedWorkbenchRunEvent {
@@ -599,7 +605,14 @@ export class WorkbenchTaskService extends EventEmitter {
       return { allow: false, reason: 'The tool call does not belong to this session.' };
     }
     if (task.activeRunId !== run.id || run.status !== WorkbenchRunStatus.Running) {
-      return { allow: false, reason: 'The tool call does not belong to the active run.' };
+      // The run is already over (failed, paused, cancelled or superseded), so
+      // every further tool call fails. End the turn instead of letting the model
+      // keep asking.
+      return {
+        allow: false,
+        reason: 'The tool call does not belong to the active run.',
+        terminateRun: true,
+      };
     }
     const riskLevel = classifyWorkbenchToolRisk(input.toolName, input.toolInput);
     if (
@@ -615,6 +628,7 @@ export class WorkbenchTaskService extends EventEmitter {
           message:
             'Stopped the run: the output contract was never committed, so no tool call could execute.',
         });
+        return { allow: false, reason, terminateRun: true };
       }
       return { allow: false, reason };
     }

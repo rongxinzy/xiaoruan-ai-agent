@@ -1318,8 +1318,14 @@ test('the contract gate explains the previous failure and stops a spinning run',
     expect(second.reason).toContain('Text output does not take file formats.');
 
     await authorize('call-3');
-    await authorize('call-4');
+    const fourth = await authorize('call-4');
+    // The breaker must tell the runtime to end the turn, not just flip the run
+    // status in the database.
+    expect(fourth.terminateRun).toBe(true);
     expect(service.repository.getTask(task.id)?.status).toBe(WorkbenchTaskStatus.Failed);
+    const afterFailure = await authorize('call-5');
+    expect(afterFailure.terminateRun).toBe(true);
+    expect(afterFailure.reason).toContain('does not belong to the active run');
   } finally {
     db.close();
   }

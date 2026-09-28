@@ -13,13 +13,47 @@ const internalControlTools = new Set([
   'declare_artifact',
 ]);
 const reversibleTools = new Set(['write', 'edit']);
+// Read-only shell commands, validated segment by segment instead of with one
+// permissive pattern: a pattern that allows arbitrary arguments also allows
+// `sort -o out.txt` or `find . -fprint out.txt`, which write files while looking
+// read-only (a ReadOnly classification bypasses both the contract gate and the
+// per-tool approval prompt).
 const irreversibleShellPattern =
   /(?:\brm\b|\brmdir\b|\bdel\b|\bremove-item\b|\bformat\b|\bshutdown\b|\bgit\s+push\b|\bgit\s+reset\s+--hard\b|\bdrop\s+(?:table|database)\b)/i;
-// Read-only commands, optionally piped into read-only filters, so
-// `ls -lt | head -20` qualifies. Redirection, command substitution and
-// chaining stay excluded.
-const safeShellCommandPattern =
-  /^(?:\s*(?:cd\s+[^;&|<>]+\s*&&\s*)?(?:pwd|ls(?:\s+[-\w./]+)?|find\s+[-\w./'"\s]+|grep\s+[-\w./'"\s]+|rg\s+[-\w./'"\s]+|python(?:3)?\s+--version|node\s+--version))(?:\s*\|\s*(?:head|tail|wc|sort|uniq|cat|nl|cut)\b[-\w./\s]*)*\s*$/i;
+/** Chaining, redirection, substitution or escaping inside one segment. */
+const unsafeShellSegmentPattern = /[;&<>`$()\r\n]/;
+const readOnlyCdPrefixPattern =
+  /^cd\s+(?:"[^"$`;&|<>()\r\n]+"|'[^'$`;&|<>()\r\n]+'|[-\w./~:@\\]+)\s*&&/;
+const READ_ONLY_SHELL_COMMANDS: Record<string, RegExp> = {
+  pwd: /^pwd$/,
+  ls: /^ls(?:\s+[-\w./~:@\\'"]+)*$/,
+  find: /^find\s+[-\w./~:@\\'"]+(?:\s+(?:-(?:maxdepth|mindepth|name|iname|path|ipath|size|mtime|mmin|user|group)\s+[-\w.*?/\\'"]+|-type\s+[bcdpfls]))*$/,
+  grep: /^grep(?:\s+[-\w./~:@\\'"*?^[\]|]+)*$/,
+  rg: /^rg(?:\s+[-\w./~:@\\'"*?^[\]|]+)*$/,
+  node: /^node\s+--version$/,
+  python: /^python(?:3)?\s+--version$/,
+};
+/** Pipes are allowed only into filters that cannot write to disk. A position
+ * cannot start with `-`, otherwise `sort -o out.txt` would pass as a path. */
+const READ_ONLY_SHELL_FILTERS: Record<string, RegExp> = {
+  head: /^head(?:\s+(?:-n\s+\d+|-\d+))?(?:\s+[^\s-][-\w./~:@\\'"]*)*$/,
+  tail: /^tail(?:\s+(?:-n\s+\d+|-\d+))?(?:\s+[^\s-][-\w./~:@\\'"]*)*$/,
+  wc: /^wc(?:\s+-[lmwc])?(?:\s+[^\s-][-\w./~:@\\'"]*)*$/,
+  sort: /^sort(?:\s+(?:-u|-r|-n|-f|-k\s*\d+(?:,\d+)?))*(?:\s+[^\s-][-\w./~:@\\'"]*)*$/,
+  uniq: /^uniq(?:\s+(?:-c|-d|-u))*(?:\s+[^\s-][-\w./~:@\\'"]*)*$/,
+  cat: /^cat(?:\s+[^\s-][-\w./~:@\\'"]*)*$/,
+  nl: /^nl(?:\s+[^\s-][-\w./~:@\\'"]*)*$/,
+};
+/**
+ * Every segment of a pipeline must be read-only, including the first one
+ * (`head -n 5 a.txt | tail -1` is a legitimate look-around too). Argument
+ * patterns, not the segment position, are what keep writes out: `sort -o`,
+ * `find -fprint/-exec/-delete` and any redirection are rejected above.
+ */
+const READ_ONLY_SHELL_SEGMENTS: Record<string, RegExp> = {
+  ...READ_ONLY_SHELL_COMMANDS,
+  ...READ_ONLY_SHELL_FILTERS,
+};
 
 const stableValue = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(stableValue);
@@ -56,7 +90,19 @@ export function classifyWorkbenchToolRisk(
 }
 
 export function isSafeShellCommand(command: string): boolean {
-  return safeShellCommandPattern.test(command.trim()) && !irreversibleShellPattern.test(command);
+  const trimmed = command.trim();
+  if (!trimmed || irreversibleShellPattern.test(trimmed)) return false;
+  const body = trimmed.replace(readOnlyCdPrefixPattern, '').trim();
+  if (!body) return false;
+  const segments = body.split('|').map(segment => segment.trim());
+  if (segments.some(segment => !segment || unsafeShellSegmentPattern.test(segment))) return false;
+  return segments.every(segment => isReadOnlyShellSegment(segment, READ_ONLY_SHELL_SEGMENTS));
+}
+
+function isReadOnlyShellSegment(segment: string, allowed: Record<string, RegExp>): boolean {
+  const name = segment.split(/\s+/)[0];
+  const pattern = allowed[name];
+  return pattern !== undefined && pattern.test(segment);
 }
 
 export function createToolIdempotencyKey(
