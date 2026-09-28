@@ -412,21 +412,49 @@ const TurnBlockComponent: React.FC<{
     ? getToolActivityExecutionStatus(latestToolActivity)
     : null;
   const lastVisibleGroup = visibleGroups[visibleGroups.length - 1];
-  // The collapsed "completed N steps" row is the only activity signal while the
-  // turn waits with no live status, so it carries the running shimmer then
-  // (issue #133). DESIGN.md allows one cyclic animation per screen, so it stays
-  // static whenever another indicator (live tool status or the typing
-  // indicator) is already animating.
-  const summaryIsActive = !isTurnComplete && !showTypingIndicator && toolActivities.length === 0;
-  const lastVisibleGroupFirstItem = lastVisibleGroup?.items[0];
+  // A group whose tools already produced results (or whose turn ended) shows a
+  // settled summary instead of a live status; everything else renders a
+  // shimmering "running" header.
+  const isSummarizedGroup = (group: (typeof groups)[number]): boolean =>
+    group.followedByAnswer ||
+    isTurnComplete ||
+    (group.items.some(item => item.type === 'tool_group') &&
+      group.items.every(item => item.type !== 'tool_group' || Boolean(item.group.toolResult)));
+  // Answer-led groups render through renderItem and own no header.
+  const isAnswerLeadingGroup = (group: (typeof groups)[number]): boolean => {
+    const first = group.items[0];
+    return (
+      (first?.type === 'assistant' && !first.message.metadata?.isThinking) ||
+      Boolean(first && isStandaloneSystemItem(first))
+    );
+  };
+  const isRunningThinkingItem = (item: (typeof visibleAssistantItems)[number]): boolean =>
+    item.type === 'assistant' &&
+    Boolean(item.message.metadata?.isThinking) &&
+    getThinkingPresentation(item.message.metadata, false, hasText(item.message.content)).isStreaming;
   const hasTrailingExecutionGroup = Boolean(
-    lastVisibleGroupFirstItem &&
-    !(
-      lastVisibleGroupFirstItem.type === 'assistant' &&
-      !lastVisibleGroupFirstItem.message.metadata?.isThinking
-    ) &&
-    !isStandaloneSystemItem(lastVisibleGroupFirstItem),
+    lastVisibleGroup &&
+    lastVisibleGroup.items.length > 0 &&
+    !isAnswerLeadingGroup(lastVisibleGroup),
   );
+  // The bottom tool indicator renders only for a trailing answer group; the
+  // summary row must not defer to an indicator that is suppressed (review
+  // finding: nothing animated while the next tool prepared its arguments).
+  const showTrailingToolStatus =
+    toolActivityStatus !== null && !finalAnswerItem && !hasTrailingExecutionGroup;
+  const hasLiveGroup = visibleGroups.some(
+    group => !isAnswerLeadingGroup(group) && !isSummarizedGroup(group),
+  );
+  // At most one cyclic animation may be on screen per DESIGN.md. The collapsed
+  // "completed N steps" row is the fallback activity signal — a stalled turn has
+  // nothing else moving, which is what issue #133 reports — so it shimmers only
+  // when no other indicator is actually rendered.
+  const summaryIsActive =
+    !isTurnComplete && !showTypingIndicator && !showTrailingToolStatus && !hasLiveGroup;
+  // The fallback belongs to the last group that renders a summary header: a
+  // trailing interim answer renders plainly and must not silence it (review
+  // finding).
+  const lastSummaryGroup = [...visibleGroups].reverse().find(group => !isAnswerLeadingGroup(group));
 
   const isExecutionStep = (item: (typeof visibleAssistantItems)[number] | undefined) =>
     item?.type === 'tool_group' ||
@@ -447,10 +475,7 @@ const TurnBlockComponent: React.FC<{
 
     // A turn that has ended, or a group whose tools already have results, never
     // keeps a live "正在执行命令" header. Resume only highlights the new command.
-    const toolsSettled =
-      group.items.some(item => item.type === 'tool_group') &&
-      group.items.every(item => item.type !== 'tool_group' || Boolean(item.group.toolResult));
-    const showCompletedSummary = group.followedByAnswer || isTurnComplete || toolsSettled;
+    const showCompletedSummary = isSummarizedGroup(group);
     const currentStatus = showCompletedSummary ? null : getCurrentExecutionStatus(group.items);
     const isActiveTool = currentStatus?.kind === ExecutionStatusKind.Tool;
     return (
@@ -466,22 +491,29 @@ const TurnBlockComponent: React.FC<{
               item.type === 'tool_group' && item.group.toolUse.id === pendingToolGroup.toolUse.id,
           ),
         )}
-      >
-        <ChainOfThoughtHeader icon={isActiveTool ? Wrench : SparklesIcon}>
-          {showCompletedSummary ? (
-            summaryIsActive && group === lastVisibleGroup ? (
-              <Shimmer duration={1.5}>
-                {getCompletedExecutionSummaryText(getExecutionSummary(group.items))}
-              </Shimmer>
+        renderHeader={isOpen => (
+          <ChainOfThoughtHeader icon={isActiveTool ? Wrench : SparklesIcon}>
+            {showCompletedSummary ? (
+              summaryIsActive &&
+              group === lastSummaryGroup &&
+              // When the block is open and its reasoning is still streaming, the
+              // inner "思考中" indicator already animates; the header yields to it
+              // so only one cyclic animation is on screen.
+              (!isOpen || !group.items.some(isRunningThinkingItem)) ? (
+                <Shimmer duration={1.5}>
+                  {getCompletedExecutionSummaryText(getExecutionSummary(group.items))}
+                </Shimmer>
+              ) : (
+                getCompletedExecutionSummaryText(getExecutionSummary(group.items))
+              )
+            ) : currentStatus ? (
+              <Shimmer duration={1}>{getExecutionStatusText(currentStatus)}</Shimmer>
             ) : (
-              getCompletedExecutionSummaryText(getExecutionSummary(group.items))
-            )
-          ) : currentStatus ? (
-            <Shimmer duration={1}>{getExecutionStatusText(currentStatus)}</Shimmer>
-          ) : (
-            <Shimmer duration={1}>{i18nService.t('coworkIntermediateProcess')}</Shimmer>
-          )}     
-        </ChainOfThoughtHeader>
+              <Shimmer duration={1}>{i18nService.t('coworkIntermediateProcess')}</Shimmer>
+            )}
+          </ChainOfThoughtHeader>
+        )}
+      >
         <ChainOfThoughtContent>
           {group.items.map((item, idx) =>
             renderItem(item, idx, false, false, true, idx === group.items.length - 1),
@@ -556,7 +588,7 @@ const TurnBlockComponent: React.FC<{
                 renderExecutionGroup(group, `turn-group-${index}`, index === lastAnswerGroupIndex),
               )
             )}
-            {toolActivityStatus && !finalAnswerItem && !hasTrailingExecutionGroup && (
+            {showTrailingToolStatus && (
               <ChainOfThought key="transient-working-summary" defaultOpen={false}>
                 <ChainOfThoughtHeader icon={Wrench}>
                   <Shimmer duration={1}>{getExecutionStatusText(toolActivityStatus)}</Shimmer>
