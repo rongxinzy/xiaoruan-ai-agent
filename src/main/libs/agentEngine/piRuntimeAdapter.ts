@@ -70,10 +70,7 @@ import {
   ProviderModelPiApi,
   resolveProviderModelPiReasoning,
 } from '../../../shared/providers';
-import {
-  LLAMACPP_AGENT_MIN_CONTEXT_WINDOW,
-  type LlamaCppRunningModelContext,
-} from '../../../shared/llamacpp';
+import { LLAMACPP_AGENT_MIN_CONTEXT_WINDOW } from '../../../shared/llamacpp';
 import {
   persistCoworkImageAttachments,
   readCoworkImageBase64,
@@ -110,6 +107,7 @@ import {
   resolveRawApiConfig,
   resolveRawApiConfigForModelRef,
 } from '../claudeSettings';
+import type { LlamaCppRunningModelContext } from '../llamacppManager';
 import { applyApplicationRuntimeEnv, getSkillsRoot, resolveGitBashPathForPi } from '../coworkUtil';
 import type { McpServerManager } from '../mcpServerManager';
 import { isRasterPreviewDecodable, renderOfficePreview } from '../officePreviewRenderer';
