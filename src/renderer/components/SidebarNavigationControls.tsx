@@ -24,6 +24,7 @@ interface SidebarNavigationControlsProps {
   activeView: SidebarActiveView;
   onNewChat: () => void;
   onShowExpert: () => void;
+  onShowCoding: () => void;
   onShowTodo: () => void;
   onShowLocalInference: () => void;
   onShowScheduledTasks: () => void;
@@ -39,6 +40,7 @@ export const SidebarNavigationControls = ({
   activeView,
   onNewChat,
   onShowExpert,
+  onShowCoding,
   onShowTodo,
   onShowLocalInference,
   onShowScheduledTasks,
@@ -84,6 +86,7 @@ export const SidebarNavigationControls = ({
     );
   }
   if (!isChat) {
+    addView('coding', i18nService.t('codingAgent'), onShowCoding);
     addView('todo', i18nService.t('todoTitle'), onShowTodo, 'todo');
     addView(
       'scheduledTasks',

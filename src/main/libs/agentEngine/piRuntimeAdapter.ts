@@ -71,6 +71,10 @@ import {
   resolveProviderModelPiReasoning,
 } from '../../../shared/providers';
 import {
+  LLAMACPP_AGENT_MIN_CONTEXT_WINDOW,
+  type LlamaCppRunningModelContext,
+} from '../../../shared/llamacpp';
+import {
   persistCoworkImageAttachments,
   readCoworkImageBase64,
 } from '../../coworkImageAttachments';
@@ -622,9 +626,18 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
   private readonly pendingMemoryCompletions = new Map<string, Promise<string>>();
   private workbenchApprovalListener: ((event: WorkbenchApprovalRequestedEvent) => void) | null =
     null;
+  private llamaCppContextProbe:
+    | ((modelName: string) => Promise<LlamaCppRunningModelContext | null>)
+    | null = null;
 
   setCoworkStore(store: CoworkStore): void {
     this.store = store;
+  }
+
+  setLlamaCppContextProbe(
+    probe: (modelName: string) => Promise<LlamaCppRunningModelContext | null>,
+  ): void {
+    this.llamaCppContextProbe = probe;
   }
 
   setImageAttachmentRoot(root: string): void {
@@ -922,6 +935,42 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             ? t('coworkLocalModelToolCallingUnsupported')
             : t('coworkLocalModelToolCallingUnknown'),
         );
+      }
+      if (options.sessionMode === 'work' && isLocalProviderName(resolvedModel.providerName)) {
+        let context: LlamaCppRunningModelContext | null = null;
+        try {
+          context = this.llamaCppContextProbe
+            ? await this.llamaCppContextProbe(modelId)
+            : {
+                runtimeContextWindow:
+                  typeof resolvedModel.model.contextWindow === 'number'
+                    ? resolvedModel.model.contextWindow
+                    : undefined,
+              };
+        } catch (error) {
+          console.warn('[PiRuntime] failed to confirm local model context:', error);
+        }
+        const runtimeContextWindow = context?.runtimeContextWindow;
+        const trainedContextWindow = context?.trainedContextWindow;
+        if (trainedContextWindow && trainedContextWindow < LLAMACPP_AGENT_MIN_CONTEXT_WINDOW) {
+          throw new Error(
+            t('coworkLlamaCppTrainingContextTooSmall', {
+              trained: trainedContextWindow,
+              required: LLAMACPP_AGENT_MIN_CONTEXT_WINDOW,
+            }),
+          );
+        }
+        if (!runtimeContextWindow) {
+          throw new Error(t('coworkLlamaCppContextWindowUnknown'));
+        }
+        if (runtimeContextWindow < LLAMACPP_AGENT_MIN_CONTEXT_WINDOW) {
+          throw new Error(
+            t('coworkLlamaCppContextWindowTooSmall', {
+              current: runtimeContextWindow,
+              required: LLAMACPP_AGENT_MIN_CONTEXT_WINDOW,
+            }),
+          );
+        }
       }
       resourceState.maxOutputTokens = resolvedModel.maxOutputTokens;
       sessionOptions.model = resolvedModel.model;
@@ -2745,6 +2794,25 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           const { text, thinking } = active.streamAccumulator.reconcile(event.message);
           const finalThinking = thinking || active.thinkingText;
           const finalAnswer = text || active.answerText;
+
+          if (
+            event.message.stopReason === 'length' &&
+            active.workbenchContract.kind !== WorkbenchContractKind.Chat &&
+            finalAnswer.trim().length <= 1 &&
+            !active.lastCompletedAnswerText.trim() &&
+            !(
+              Array.isArray(event.message.content) &&
+              event.message.content.some(block => block?.type === 'toolCall')
+            )
+          ) {
+            const message = t('coworkErrorInputTooLong');
+            active.pendingError = {
+              message,
+              classified: makeCoworkError(CoworkErrorKind.InputTooLong, message),
+              sticky: true,
+            };
+            active.turnFailed = true;
+          }
 
           if (invalidatesPiFinalResponse(event.message)) {
             active.lastCompletedAnswerMessageId = null;
