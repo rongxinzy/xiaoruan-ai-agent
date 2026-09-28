@@ -412,6 +412,12 @@ const TurnBlockComponent: React.FC<{
     ? getToolActivityExecutionStatus(latestToolActivity)
     : null;
   const lastVisibleGroup = visibleGroups[visibleGroups.length - 1];
+  // The collapsed "completed N steps" row is the only activity signal while the
+  // turn waits with no live status, so it carries the running shimmer then
+  // (issue #133). DESIGN.md allows one cyclic animation per screen, so it stays
+  // static whenever another indicator (live tool status or the typing
+  // indicator) is already animating.
+  const summaryIsActive = !isTurnComplete && !showTypingIndicator && toolActivities.length === 0;
   const lastVisibleGroupFirstItem = lastVisibleGroup?.items[0];
   const hasTrailingExecutionGroup = Boolean(
     lastVisibleGroupFirstItem &&
@@ -463,7 +469,13 @@ const TurnBlockComponent: React.FC<{
       >
         <ChainOfThoughtHeader icon={isActiveTool ? Wrench : SparklesIcon}>
           {showCompletedSummary ? (
-            getCompletedExecutionSummaryText(getExecutionSummary(group.items))
+            summaryIsActive && group === lastVisibleGroup ? (
+              <Shimmer duration={1.5}>
+                {getCompletedExecutionSummaryText(getExecutionSummary(group.items))}
+              </Shimmer>
+            ) : (
+              getCompletedExecutionSummaryText(getExecutionSummary(group.items))
+            )
           ) : currentStatus ? (
             <Shimmer duration={1}>{getExecutionStatusText(currentStatus)}</Shimmer>
           ) : (
@@ -521,7 +533,11 @@ const TurnBlockComponent: React.FC<{
               )}
             </div>
             {finalAnswerItem && executionItems.length > 0 && (
-              <ExecutionSummary summary={executionSummary} persistKey={`execsummary-${turn.id}`}>
+              <ExecutionSummary
+                summary={executionSummary}
+                persistKey={`execsummary-${turn.id}`}
+                active={summaryIsActive}
+              >
                 {executionItems.map((item, index) => {
                   const isAnswer = item.type === 'assistant' && !item.message.metadata?.isThinking;
                   const connectsToNextStep =
