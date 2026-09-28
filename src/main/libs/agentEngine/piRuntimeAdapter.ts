@@ -217,6 +217,22 @@ import {
   resolveStreamStallTimeoutMs,
 } from './piStreamStallRecovery';
 
+const summarizePiHistory = (messages: readonly CoworkMessage[]) => {
+  let contentBytes = 0;
+  let metadataBytes = 0;
+  for (const message of messages) {
+    contentBytes += Buffer.byteLength(message.content, 'utf8');
+    if (message.metadata) {
+      try {
+        metadataBytes += Buffer.byteLength(JSON.stringify(message.metadata), 'utf8');
+      } catch {
+        // Ignore malformed metadata in diagnostics; the normal session path handles it.
+      }
+    }
+  }
+  return { messageCount: messages.length, contentBytes, metadataBytes };
+};
+
 // ── Types ──
 
 /** Minimal type for the Pi AgentSession — only the methods used by this adapter. */
@@ -1632,10 +1648,17 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       // Rebuilds need the full transcript: the default page size (30) would
       // amputate everything but the last few minutes of a long task.
       // buildPiConversationPrompt applies the character budget instead.
+      const historyLoadStartedAt = Date.now();
       const storedSession = this.store?.getSession(sessionId, null);
       const history = storedSession?.messages ?? [];
       const piPrompt = buildPiConversationPrompt(history, prompt, {
         maxChars: calculatePiConversationHistoryCharLimit(),
+      });
+      agentResourceDiagnostics.recordPiHistoryRestored(sessionId, {
+        source: 'continue',
+        ...summarizePiHistory(history),
+        promptChars: piPrompt.length,
+        restoreMs: Date.now() - historyLoadStartedAt,
       });
       return this.startSession(sessionId, prompt, {
         ...options,
@@ -1701,10 +1724,23 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       unattendedTopologyChanged
     ) {
       // Full transcript, not the default page: see the continue-rebuild note.
+      const historyLoadStartedAt = Date.now();
       const history = this.store?.getSession(sessionId, null)?.messages ?? [];
       if (mcpToolTopologyChanged) {
         console.log('[PiRuntime] recreating session after MCP tool manifest refresh');
       }
+      const piPrompt = buildPiConversationPrompt(history, prompt, {
+        maxChars: calculatePiConversationHistoryCharLimit(
+          typeof active.model.contextWindow === 'number' ? active.model.contextWindow : undefined,
+          typeof active.model.maxTokens === 'number' ? active.model.maxTokens : undefined,
+        ),
+      });
+      agentResourceDiagnostics.recordPiHistoryRestored(sessionId, {
+        source: 'recreate',
+        ...summarizePiHistory(history),
+        promptChars: piPrompt.length,
+        restoreMs: Date.now() - historyLoadStartedAt,
+      });
       this.disposeSessionForRecreation(sessionId, active);
       return this.startSession(sessionId, prompt, {
         ...options,
