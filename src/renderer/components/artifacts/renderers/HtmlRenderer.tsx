@@ -5,7 +5,11 @@ import { i18nService } from '@/services/i18n';
 import type { Artifact } from '@/types/artifact';
 import { MAX_INLINE_PREVIEW_RESOURCES, MAX_PREVIEW_HTML_CHARS } from './constants';
 
+import { PreviewOpenExternalMessage } from './constants';
+
 const t = (key: string) => i18nService.t(key);
+
+const OPEN_EXTERNAL_HREF = /^(mailto:|tel:|https?:)/i;
 
 interface HtmlRendererProps {
   artifact: Artifact;
@@ -50,23 +54,67 @@ export function ensurePreviewColorScheme(html: string): string {
 }
 
 /**
- * 2026/09/20 lisa srcDoc 预览里相对页面跳转会变空白（手机菜单常见）；拦截非 hash 导航，
- * 优先滚到同页锚点/同名区块，否则留在当前页（issue #805）
+ * 2026/09/20 lisa srcDoc 预览里相对页面跳转会变空白（手机菜单常见）；
+ * 2026/09/28：hash / mailto / tel / http(s) 在 srcDoc 里都会把 iframe 导航成空白——
+ * 可锚点则同页滚动，可外开则 postMessage 给父页 shell.openExternal，否则停在当前页。
  */
 export function injectPreviewNavigationGuard(html: string): string {
   if (html.includes('data-xiaoruan-preview-nav-guard')) return html;
+  const messageType = PreviewOpenExternalMessage.Type;
   const script =
     '<script data-xiaoruan-preview-nav-guard>' +
     '(function(){' +
+    'function findByAttr(attr,id){' +
+    'var nodes=document.querySelectorAll("["+attr+"]");' +
+    'for(var i=0;i<nodes.length;i++){if(nodes[i].getAttribute(attr)===id)return nodes[i];}' +
+    'return null;' +
+    '}' +
+    'function findSection(id,label){' +
+    'if(id){' +
+    'var el=document.getElementById(id)||findByAttr("name",id)||findByAttr("data-section",id);' +
+    'if(el)return el;' +
+    '}' +
+    'var key=(label||id||"").trim();' +
+    'if(!key)return null;' +
+    'var nodes=document.querySelectorAll("section,h1,h2,h3,h4,[id],[data-section]");' +
+    'for(var i=0;i<nodes.length;i++){' +
+    'var n=nodes[i];' +
+    'var text=(n.getAttribute("data-section")||n.id||n.textContent||"").replace(/\\s+/g," ").trim();' +
+    'if(!text)continue;' +
+    'if(text===key||text.indexOf(key)!==-1||key.indexOf(text)!==-1)return n;' +
+    '}' +
+    'return null;' +
+    '}' +
+    'function scrollTo(el){' +
+    'if(el&&el.scrollIntoView)el.scrollIntoView({behavior:"smooth",block:"start"});' +
+    '}' +
+    'function resolveOpenUrl(href){' +
+    'if(/^(mailto:|tel:|https?:)/i.test(href))return href;' +
+    'if(/^[^\\s@/?#]+@[^\\s@/?#]+\\.[^\\s@/?#]+$/i.test(href))return "mailto:"+href;' +
+    'return null;' +
+    '}' +
+    'function requestOpenExternal(url){' +
+    'try{parent.postMessage({type:' +
+    JSON.stringify(messageType) +
+    ',url:url},"*");}catch(_err){}' +
+    '}' +
     'document.addEventListener("click",function(e){' +
     'var a=e.target&&e.target.closest?e.target.closest("a"):null;' +
     'if(!a)return;' +
-    'var href=a.getAttribute("href");' +
-    'if(!href||href.charAt(0)==="#"||/^javascript:/i.test(href)||/^mailto:/i.test(href)||/^tel:/i.test(href)||/^https?:/i.test(href)||/^file:/i.test(href))return;' +
+    'var href=(a.getAttribute("href")||"").trim();' +
+    'if(!href||/^javascript:/i.test(href))return;' +
     'e.preventDefault();e.stopPropagation();' +
-    'var id=href.replace(/^\\.\\/?/,"").replace(/\\.html?$/i,"").replace(/[\\\\/]/g,"-");' +
-    'var el=document.getElementById(id)||document.querySelector("[name=\\""+id+"\\"]")||document.querySelector("[data-section=\\""+id+"\\"]");' +
-    'if(el&&el.scrollIntoView)el.scrollIntoView({behavior:"smooth",block:"start"});' +
+    'var openUrl=resolveOpenUrl(href);' +
+    'if(openUrl){requestOpenExternal(openUrl);return;}' +
+    'var hashIdx=href.indexOf("#");' +
+    'var hashId=hashIdx>=0?decodeURIComponent(href.slice(hashIdx+1)).replace(/^#/,""):"";' +
+    'var pathPart=hashIdx===0?"":href.slice(0,hashIdx>=0?hashIdx:href.length);' +
+    'var pathId=pathPart.replace(/^\\.\\/?/,"").replace(/\\.html?$/i,"").replace(/[\\\\/]/g,"-");' +
+    'var isHashOnly=href.charAt(0)==="#";' +
+    'var isRelative=!/^[a-z][a-z0-9+.-]*:/i.test(href);' +
+    'if(!isHashOnly&&!isRelative)return;' +
+    'var label=(a.textContent||"").replace(/\\s+/g," ").trim();' +
+    'scrollTo(findSection(hashId||pathId,label));' +
     '},true);' +
     '})();' +
     '</script>';
@@ -77,6 +125,18 @@ export function injectPreviewNavigationGuard(html: string): string {
     return html.replace(/<\/html>/i, `${script}</html>`);
   }
   return `${html}${script}`;
+}
+
+function isPreviewOpenExternalMessage(
+  data: unknown,
+): data is { type: string; url: string } {
+  if (!data || typeof data !== 'object') return false;
+  const record = data as { type?: unknown; url?: unknown };
+  return (
+    record.type === PreviewOpenExternalMessage.Type &&
+    typeof record.url === 'string' &&
+    OPEN_EXTERNAL_HREF.test(record.url.trim())
+  );
 }
 
 function preparePreviewHtml(html: string): string {
@@ -91,6 +151,20 @@ const HtmlRenderer: React.FC<HtmlRendererProps> = ({ artifact }) => {
   // A saved page (or a huge generated document) is not previewable: skip the
   // decode/inline work instead of freezing the renderer on it.
   const [oversized, setOversized] = useState(false);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (!isPreviewOpenExternalMessage(event.data)) return;
+      const url = event.data.url.trim();
+      const openExternal = window.electron?.shell?.openExternal;
+      if (!openExternal) return;
+      void openExternal(url).catch((error: unknown) => {
+        console.error('[HtmlRenderer] failed to open external url from preview:', error);
+      });
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
 
   useEffect(() => {
     if (!artifact.content && !artifact.filePath) {

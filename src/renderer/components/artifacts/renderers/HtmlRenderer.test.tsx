@@ -6,7 +6,9 @@ import { i18nService } from '@/services/i18n';
 import { ArtifactRole, type Artifact } from '@/types/artifact';
 
 import HtmlRenderer, { ensurePreviewColorScheme, injectPreviewNavigationGuard } from './HtmlRenderer';
-import { MAX_PREVIEW_HTML_CHARS } from './constants';
+
+import { PreviewOpenExternalMessage } from './constants';
+
 
 const makeArtifact = (overrides: Partial<Artifact> = {}): Artifact => ({
   id: 'artifact-1',
@@ -62,5 +64,26 @@ describe('injectPreviewNavigationGuard', () => {
     expect(once).toContain('data-xiaoruan-preview-nav-guard');
     expect(once.indexOf('data-xiaoruan-preview-nav-guard')).toBeLessThan(once.indexOf('</body>'));
     expect(injectPreviewNavigationGuard(once)).toBe(once);
+  });
+
+  test('intercepts hash anchors instead of letting srcDoc navigate blank', () => {
+    const html = '<html><body><a href="#about">关于</a><section id="about">关于我</section></body></html>';
+    const guarded = injectPreviewNavigationGuard(html);
+    expect(guarded).toContain('href.charAt(0)==="#"');
+    expect(guarded).toContain('findSection');
+    expect(guarded).toContain('scrollIntoView');
+    // Must not early-return on hash-only links (that left srcDoc navigations blank)
+    expect(guarded).not.toMatch(/href\.charAt\(0\)==="#"\|\|/);
+  });
+
+  test('routes mailto through parent postMessage instead of iframe navigation', () => {
+    const html =
+      '<html><body><a href="mailto:zhangxiaoming@email.com">邮箱</a></body></html>';
+    const guarded = injectPreviewNavigationGuard(html);
+    expect(guarded).toContain(PreviewOpenExternalMessage.Type);
+    expect(guarded).toContain('resolveOpenUrl');
+    expect(guarded).toContain('requestOpenExternal');
+    // Must intercept mailto (do not early-return and let srcDoc go blank)
+    expect(guarded).not.toMatch(/\|\|\/\^mailto:/);
   });
 });
