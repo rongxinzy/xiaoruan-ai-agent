@@ -16,3 +16,4 @@ export const MODEL_AUTO_ROTATE_SPEED = -2;
 export const PreviewOpenExternalMessage = {
   Type: 'xiaoruan-preview-open-external',
 } as const;
+
