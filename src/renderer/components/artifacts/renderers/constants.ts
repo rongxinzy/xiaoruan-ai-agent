@@ -25,3 +25,4 @@ export const MAX_INLINE_PREVIEW_RESOURCES = 24;
 export const PreviewOpenExternalMessage = {
   Type: 'xiaoruan-preview-open-external',
 } as const;
+

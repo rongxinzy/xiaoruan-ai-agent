@@ -8,6 +8,7 @@ import { ArtifactRole, type Artifact } from '@/types/artifact';
 import HtmlRenderer, { ensurePreviewColorScheme, injectPreviewNavigationGuard } from './HtmlRenderer';
 import { PreviewOpenExternalMessage,MAX_PREVIEW_HTML_CHARS } from './constants';
 
+
 const makeArtifact = (overrides: Partial<Artifact> = {}): Artifact => ({
   id: 'artifact-1',
   messageId: 'message-1',

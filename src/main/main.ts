@@ -1315,6 +1315,9 @@ const getPiRuntimeAdapter = (): PiRuntimeAdapter => {
       injected.length > 0 ? injected.join(', ') : '(none — provider config may be empty)',
     );
     piRuntimeAdapter = new PiRuntimeAdapter();
+    piRuntimeAdapter.setLlamaCppContextProbe(modelName =>
+      getLlamaCppManager().getRunningModelContext(modelName),
+    );
     piRuntimeAdapter.setImageAttachmentRoot(coworkImageRoot(app.getPath('userData')));
     piRuntimeAdapter.setCoworkStore(getCoworkStore());
     piRuntimeAdapter.setWorkbenchTaskService(getWorkbenchTaskService());

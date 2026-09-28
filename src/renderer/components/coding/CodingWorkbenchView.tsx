@@ -63,6 +63,7 @@ import { CodingWorkspaceFileBrowser } from './CodingWorkspaceFileBrowser';
 import { CodingSidePanelLauncher } from './CodingSidePanelLauncher';
 import { CodingParticipants } from './CodingParticipants';
 import { CodingSessionSetupDialog } from './CodingSessionSetupDialog';
+import { CodingWorkbenchPlaceholder } from './CodingWorkbenchPlaceholder';
 import {
   CodingAgentStatusI18nKey,
   CodingInspectorTab,
@@ -794,18 +795,24 @@ export const CodingWorkbenchView = ({
     if (result.success) onLaneSelected(laneId);
   };
 
-  if (!workspaceRoot)
+  if (!workspaceRoot) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        {i18nService.t('codingAgentSelectWorkspace')}
-      </div>
+      <CodingWorkbenchPlaceholder
+        message={i18nService.t('codingAgentSelectWorkspace')}
+        isSidebarCollapsed={isSidebarCollapsed}
+        onToggleSidebar={onToggleSidebar}
+      />
     );
-  if (!snapshot)
+  }
+  if (!snapshot) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        {i18nService.t('codingAgentLoading')}
-      </div>
+      <CodingWorkbenchPlaceholder
+        message={i18nService.t('codingAgentLoading')}
+        isSidebarCollapsed={isSidebarCollapsed}
+        onToggleSidebar={onToggleSidebar}
+      />
     );
+  }
 
   return (
     <div

@@ -140,6 +140,11 @@ export type LlamaCppModelsUnloadedForQuitEvent = {
   modelNames: string[];
 };
 
+export type LlamaCppRunningModelContext = {
+  runtimeContextWindow?: number;
+  trainedContextWindow?: number;
+};
+
 export class LlamaCppManager extends EventEmitter {
   private executablePath: string | null = null;
   private process: ChildProcess | null = null;
@@ -1149,6 +1154,22 @@ export class LlamaCppManager extends EventEmitter {
       this.refreshThinkingToggleSupport();
     }
     return this.hydrateRunningModels(runningModels);
+  }
+
+  async getRunningModelContext(modelName: string): Promise<LlamaCppRunningModelContext | null> {
+    const normalizedName = modelName.trim();
+    if (!normalizedName) return null;
+    const model = (await this.listRunningModels()).find(candidate =>
+      [candidate.name, candidate.id, candidate.model, candidate.path]
+        .filter((value): value is string => typeof value === 'string')
+        .some(value => value.trim() === normalizedName),
+    );
+    if (!model) return null;
+    return {
+      runtimeContextWindow: model.runtime_context_length,
+      trainedContextWindow:
+        model.trained_context_length ?? model.details?.context_length ?? model.context_length,
+    };
   }
 
   async listRouterModels(timeoutMs = 30_000): Promise<LlamaCppModel[]> {

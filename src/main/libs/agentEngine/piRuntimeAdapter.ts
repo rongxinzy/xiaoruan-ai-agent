@@ -70,6 +70,7 @@ import {
   ProviderModelPiApi,
   resolveProviderModelPiReasoning,
 } from '../../../shared/providers';
+import { LLAMACPP_AGENT_MIN_CONTEXT_WINDOW } from '../../../shared/llamacpp';
 import {
   persistCoworkImageAttachments,
   readCoworkImageBase64,
@@ -106,6 +107,7 @@ import {
   resolveRawApiConfig,
   resolveRawApiConfigForModelRef,
 } from '../claudeSettings';
+import type { LlamaCppRunningModelContext } from '../llamacppManager';
 import { applyApplicationRuntimeEnv, getSkillsRoot, resolveGitBashPathForPi } from '../coworkUtil';
 import type { McpServerManager } from '../mcpServerManager';
 import { isRasterPreviewDecodable, renderOfficePreview } from '../officePreviewRenderer';
@@ -150,6 +152,7 @@ import { extractPiSubagentExecutionMetadata } from './piSubagentExecution';
 import { buildPiSubagentTool, PiSubagentToolName } from './piSubagentTool';
 import { buildPiSkillScriptTool } from './piSkillScriptTool';
 import { resolvePiSkillRoots } from './piSkillRoots';
+import { buildPiCadViewerTool, PiCadViewerService } from './piCadViewerTool';
 import { buildPiSkillRuntimeCapabilitiesTool } from './piSkillRuntimeCapabilitiesTool';
 import { resolvePiBuiltinProviderId } from './piProviderIds';
 import { buildPiDocumentReaderTool } from './piDocumentReaderTool';
@@ -590,6 +593,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
   private readonly retainedSessionIds = new Set<string>();
   private imageAttachmentRoot: string | null = null;
   private readonly pendingMessageQueue = new PiPendingMessageQueue();
+  private readonly cadViewerService = new PiCadViewerService();
   private readonly approvalSessionMap = new Map<string, string>();
   private readonly pendingAskUserQuestions = new Map<
     string,
@@ -620,9 +624,18 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
   private readonly pendingMemoryCompletions = new Map<string, Promise<string>>();
   private workbenchApprovalListener: ((event: WorkbenchApprovalRequestedEvent) => void) | null =
     null;
+  private llamaCppContextProbe:
+    | ((modelName: string) => Promise<LlamaCppRunningModelContext | null>)
+    | null = null;
 
   setCoworkStore(store: CoworkStore): void {
     this.store = store;
+  }
+
+  setLlamaCppContextProbe(
+    probe: (modelName: string) => Promise<LlamaCppRunningModelContext | null>,
+  ): void {
+    this.llamaCppContextProbe = probe;
   }
 
   setImageAttachmentRoot(root: string): void {
@@ -921,6 +934,42 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             : t('coworkLocalModelToolCallingUnknown'),
         );
       }
+      if (options.sessionMode === 'work' && isLocalProviderName(resolvedModel.providerName)) {
+        let context: LlamaCppRunningModelContext | null = null;
+        try {
+          context = this.llamaCppContextProbe
+            ? await this.llamaCppContextProbe(modelId)
+            : {
+                runtimeContextWindow:
+                  typeof resolvedModel.model.contextWindow === 'number'
+                    ? resolvedModel.model.contextWindow
+                    : undefined,
+              };
+        } catch (error) {
+          console.warn('[PiRuntime] failed to confirm local model context:', error);
+        }
+        const runtimeContextWindow = context?.runtimeContextWindow;
+        const trainedContextWindow = context?.trainedContextWindow;
+        if (trainedContextWindow && trainedContextWindow < LLAMACPP_AGENT_MIN_CONTEXT_WINDOW) {
+          throw new Error(
+            t('coworkLlamaCppTrainingContextTooSmall', {
+              trained: trainedContextWindow,
+              required: LLAMACPP_AGENT_MIN_CONTEXT_WINDOW,
+            }),
+          );
+        }
+        if (!runtimeContextWindow) {
+          throw new Error(t('coworkLlamaCppContextWindowUnknown'));
+        }
+        if (runtimeContextWindow < LLAMACPP_AGENT_MIN_CONTEXT_WINDOW) {
+          throw new Error(
+            t('coworkLlamaCppContextWindowTooSmall', {
+              current: runtimeContextWindow,
+              required: LLAMACPP_AGENT_MIN_CONTEXT_WINDOW,
+            }),
+          );
+        }
+      }
       resourceState.maxOutputTokens = resolvedModel.maxOutputTokens;
       sessionOptions.model = resolvedModel.model;
       if (options.thinkingLevel) {
@@ -964,12 +1013,24 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             const runId = this.activeSessions.get(sessionId)?.workbenchRunId ?? workbenchRunId;
             if (!runId || !this.workbenchTaskService)
               throw new Error('No active workbench run is available.');
-            setWorkbenchOutputRequirements(
-              this.workbenchTaskService.repository,
-              sessionId,
-              runId,
-              requirements,
-            );
+            try {
+              setWorkbenchOutputRequirements(
+                this.workbenchTaskService.repository,
+                sessionId,
+                runId,
+                requirements,
+              );
+            } catch (error) {
+              // The gate keeps denying every tool call while no contract is
+              // committed, so the failure has to be remembered: otherwise the
+              // next denial repeats "commit the contract" with no hint that the
+              // previous attempt was rejected (issue #116).
+              this.workbenchTaskService.recordOutputContractFailure(
+                runId,
+                error instanceof Error ? error.message : String(error),
+              );
+              throw error;
+            }
           }),
         );
       }
@@ -1093,6 +1154,16 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             skillRoots: resourceState.skillRoots,
           }),
         );
+        const cadSkillRoot = resourceState.skillRoots['text-to-cad'];
+        if (cadSkillRoot) {
+          customTools.push(
+            buildPiCadViewerTool({
+              workspaceRoot,
+              skillRoot: cadSkillRoot,
+              service: this.cadViewerService,
+            }),
+          );
+        }
       }
 
       // Subagent tool: registered for every cowork session. When the session
@@ -1883,6 +1954,9 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       active.workbenchContract.kind !== WorkbenchContractKind.Chat &&
       this.pendingMessageQueue.hasPendingFollowUp(sessionId);
     this.releaseStoppedSession(sessionId);
+    // Stopping flushes the throttled store write, which may carry isStreaming; the
+    // partial answer bubble must not stay in flight after the run is gone.
+    this.closeIdlePlaceholders(sessionId, active);
 
     if (shouldDrainFollowUp) {
       const next = this.pendingMessageQueue.findNextPending(
@@ -1971,6 +2045,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     for (const sessionId of sessionIds) {
       this.stopActiveSession(sessionId, 'The application stopped the active session.', false);
     }
+    void this.cadViewerService.stop();
   }
 
   /** Applies the current approval mode to sessions that are already running. */
@@ -2426,12 +2501,21 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
                     toolInput,
                     approvalMode: approvalContext.getApprovalMode(),
                   });
-                  return authorization && !authorization.allow
-                    ? {
-                        block: true as const,
-                        reason: authorization.reason || 'The action was not approved.',
-                      }
-                    : undefined;
+                  if (!authorization) return undefined;
+                  if (authorization.allow) return undefined;
+                  if (authorization.terminateRun) {
+                    // The run cannot continue: end the turn with a visible error
+                    // instead of returning another tool error the model would
+                    // answer with yet another tool call (issue #116).
+                    this.endTerminatedWorkbenchTurn(
+                      approvalContext.sessionId,
+                      authorization.reason ?? 'The workbench run can no longer continue.',
+                    );
+                  }
+                  return {
+                    block: true as const,
+                    reason: authorization.reason || 'The action was not approved.',
+                  };
                 });
               },
             ]
@@ -2711,6 +2795,9 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
               sticky: false,
             };
             active.turnFailed = true;
+            // A failed turn leaves its bubble behind too; a retry streams into the
+            // same id and flips the flag back on by itself.
+            this.closeIdlePlaceholders(sessionId, active);
             return;
           }
 
@@ -2726,6 +2813,25 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           const { text, thinking } = active.streamAccumulator.reconcile(event.message);
           const finalThinking = thinking || active.thinkingText;
           const finalAnswer = text || active.answerText;
+
+          if (
+            event.message.stopReason === 'length' &&
+            active.workbenchContract.kind !== WorkbenchContractKind.Chat &&
+            finalAnswer.trim().length <= 1 &&
+            !active.lastCompletedAnswerText.trim() &&
+            !(
+              Array.isArray(event.message.content) &&
+              event.message.content.some(block => block?.type === 'toolCall')
+            )
+          ) {
+            const message = t('coworkErrorInputTooLong');
+            active.pendingError = {
+              message,
+              classified: makeCoworkError(CoworkErrorKind.InputTooLong, message),
+              sticky: true,
+            };
+            active.turnFailed = true;
+          }
 
           if (invalidatesPiFinalResponse(event.message)) {
             active.lastCompletedAnswerMessageId = null;
@@ -2757,6 +2863,12 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
               active.firstVisibleTextAt,
             );
           }
+
+          // A turn can finish without any text (it answered with a tool call).
+          // Its placeholder bubbles must still be closed: they were created with
+          // isStreaming and would otherwise keep every later view of the session
+          // spinning.
+          this.closeIdlePlaceholders(sessionId, active);
 
           // Turn's segments are done; next turn starts fresh messages.
           active.assistantMessageId = null;
@@ -3143,6 +3255,30 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     active.turnFailed = true;
   }
 
+  /**
+   * Ends the turn when a workbench run can no longer execute tools. The run is
+   * already failed, so every further tool call is denied: without ending the
+   * turn the model answers each denial with another tool call (issue #116).
+   *
+   * The error is flushed immediately so the user sees the concrete reason
+   * instead of a turn that silently stops producing output.
+   */
+  private endTerminatedWorkbenchTurn(sessionId: string, message: string): void {
+    const active = this.activeSessions.get(sessionId);
+    if (!active || active.aborted || active.turnFailed) return;
+    console.warn(`[PiRuntime] ending the turn of session ${sessionId}: ${message}`);
+    active.pendingError = {
+      message,
+      classified: makeCoworkError(CoworkErrorKind.ToolPermissionDenied, message),
+      sticky: true,
+    };
+    active.piSession.abortBash();
+    void active.piSession.abort().catch((error: unknown) => {
+      console.warn('[PiRuntime] failed to abort a terminated workbench run:', error);
+    });
+    this.flushPendingError(sessionId, active);
+  }
+
   // ── Private: assistant message lifecycle ──
 
   /**
@@ -3244,6 +3380,35 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     this.emit('messageUpdate', sessionId, messageId, content, metadata);
     if (kind === 'thinking') {
       active.thinkingLifecycle.markMessageFinalized();
+    }
+  }
+
+  /**
+   * Closes placeholder bubbles that never received text, so a finished turn can
+   * no longer look like it is still streaming.
+   */
+  private closeIdlePlaceholders(sessionId: string, active: ActivePiSession): void {
+    const placeholderIds = [active.thinkingMessageId, active.assistantMessageId].filter(
+      (messageId): messageId is string => Boolean(messageId),
+    );
+    for (const messageId of placeholderIds) {
+      this.clearPendingMessageUpdate(messageId);
+      this.clearPendingStoreUpdate(messageId);
+    }
+    if (!this.store || placeholderIds.length === 0) return;
+
+    const messages = this.store.getSession(sessionId)?.messages ?? [];
+    for (const messageId of placeholderIds) {
+      const message = messages.find(candidate => candidate.id === messageId);
+      // A bubble finalizeMessage already closed (the ordinary turn with text) needs
+      // no second write, emit, or session updated_at bump.
+      if (!message || message.metadata?.isStreaming !== true) continue;
+      const metadata = { ...message.metadata, isStreaming: false, isFinal: true };
+      this.store.updateMessage(sessionId, messageId, { metadata });
+      // Republish the row with its own content, so a live view stops spinning
+      // without waiting for the session to be reloaded.
+      this.emit('messageUpdate', sessionId, messageId, message.content, metadata);
+      console.debug('[PiRuntime] closed an idle placeholder message for', sessionId);
     }
   }
 

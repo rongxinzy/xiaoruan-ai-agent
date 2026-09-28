@@ -108,6 +108,7 @@ reasonix.toml
 
 # Scratch/debug artifacts (theme capture scripts, ad-hoc HTML, screenshots)
 /tmp/
+/.tmp-doc-read/
 
 # App runtime output (root-scoped so build tools can scan same-named source directories)
 /cowork/
