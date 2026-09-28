@@ -1102,6 +1102,34 @@ describe('PiRuntimeAdapter', () => {
       );
     });
 
+    it('rejects a Work session when the fresh local context probe reports a small runtime window', async () => {
+      adapter.on('error', () => undefined);
+      adapter.setLlamaCppContextProbe(
+        vi.fn().mockResolvedValue({ runtimeContextWindow: 8192, trainedContextWindow: 32768 }),
+      );
+
+      await expect(
+        adapter.startSession('small-context', 'Use a tool', {
+          modelOverride: 'llamacpp/qwen-local',
+          sessionMode: 'work',
+        }),
+      ).rejects.toThrow('32768');
+      expect(mockCreateAgentSession).not.toHaveBeenCalled();
+    });
+
+    it('rejects a Work session when the fresh local context probe cannot confirm a window', async () => {
+      adapter.on('error', () => undefined);
+      adapter.setLlamaCppContextProbe(vi.fn().mockResolvedValue(null));
+
+      await expect(
+        adapter.startSession('unknown-context', 'Use a tool', {
+          modelOverride: 'llamacpp/qwen-local',
+          sessionMode: 'work',
+        }),
+      ).rejects.toThrow();
+      expect(mockCreateAgentSession).not.toHaveBeenCalled();
+    });
+
     it('should keep supported remote models on the Pi built-in path', async () => {
       await adapter.startSession('test', 'Hello Pi', { modelOverride: 'openai/gpt-5.2' });
 
