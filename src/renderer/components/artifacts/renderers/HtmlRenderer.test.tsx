@@ -6,8 +6,7 @@ import { i18nService } from '@/services/i18n';
 import { ArtifactRole, type Artifact } from '@/types/artifact';
 
 import HtmlRenderer, { ensurePreviewColorScheme, injectPreviewNavigationGuard } from './HtmlRenderer';
-
-import { PreviewOpenExternalMessage } from './constants';
+import { PreviewOpenExternalMessage,MAX_PREVIEW_HTML_CHARS } from './constants';
 
 
 const makeArtifact = (overrides: Partial<Artifact> = {}): Artifact => ({
