@@ -1013,12 +1013,24 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             const runId = this.activeSessions.get(sessionId)?.workbenchRunId ?? workbenchRunId;
             if (!runId || !this.workbenchTaskService)
               throw new Error('No active workbench run is available.');
-            setWorkbenchOutputRequirements(
-              this.workbenchTaskService.repository,
-              sessionId,
-              runId,
-              requirements,
-            );
+            try {
+              setWorkbenchOutputRequirements(
+                this.workbenchTaskService.repository,
+                sessionId,
+                runId,
+                requirements,
+              );
+            } catch (error) {
+              // The gate keeps denying every tool call while no contract is
+              // committed, so the failure has to be remembered: otherwise the
+              // next denial repeats "commit the contract" with no hint that the
+              // previous attempt was rejected (issue #116).
+              this.workbenchTaskService.recordOutputContractFailure(
+                runId,
+                error instanceof Error ? error.message : String(error),
+              );
+              throw error;
+            }
           }),
         );
       }
@@ -2489,12 +2501,21 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
                     toolInput,
                     approvalMode: approvalContext.getApprovalMode(),
                   });
-                  return authorization && !authorization.allow
-                    ? {
-                        block: true as const,
-                        reason: authorization.reason || 'The action was not approved.',
-                      }
-                    : undefined;
+                  if (!authorization) return undefined;
+                  if (authorization.allow) return undefined;
+                  if (authorization.terminateRun) {
+                    // The run cannot continue: end the turn with a visible error
+                    // instead of returning another tool error the model would
+                    // answer with yet another tool call (issue #116).
+                    this.endTerminatedWorkbenchTurn(
+                      approvalContext.sessionId,
+                      authorization.reason ?? 'The workbench run can no longer continue.',
+                    );
+                  }
+                  return {
+                    block: true as const,
+                    reason: authorization.reason || 'The action was not approved.',
+                  };
                 });
               },
             ]
@@ -3232,6 +3253,30 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       sticky: true,
     };
     active.turnFailed = true;
+  }
+
+  /**
+   * Ends the turn when a workbench run can no longer execute tools. The run is
+   * already failed, so every further tool call is denied: without ending the
+   * turn the model answers each denial with another tool call (issue #116).
+   *
+   * The error is flushed immediately so the user sees the concrete reason
+   * instead of a turn that silently stops producing output.
+   */
+  private endTerminatedWorkbenchTurn(sessionId: string, message: string): void {
+    const active = this.activeSessions.get(sessionId);
+    if (!active || active.aborted || active.turnFailed) return;
+    console.warn(`[PiRuntime] ending the turn of session ${sessionId}: ${message}`);
+    active.pendingError = {
+      message,
+      classified: makeCoworkError(CoworkErrorKind.ToolPermissionDenied, message),
+      sticky: true,
+    };
+    active.piSession.abortBash();
+    void active.piSession.abort().catch((error: unknown) => {
+      console.warn('[PiRuntime] failed to abort a terminated workbench run:', error);
+    });
+    this.flushPendingError(sessionId, active);
   }
 
   // ── Private: assistant message lifecycle ──
