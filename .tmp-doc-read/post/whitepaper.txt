@@ -1,0 +1,665 @@
+晓软智能体 产品技术白皮书
+文档版本: v2026.7.16
+
+
+1. 执行摘要
+晓软智能体是面向本地工作流的桌面 AI Agent 平台，采用 Electron + React 架构。当前定制版以 AISphere 作为唯一内置模型来源，并提供协作、编程、技能、MCP、定时任务和消息渠道能力。
+本白皮书面向技术决策者和架构师，从技术架构、安全模型、性能特性、部署方案和集成能力五个维度阐述 晓软智能体 的技术能力。
+核心技术指标:
+
+
+
+2. 产品定位与技术理念
+2.1 产品定位
+晓软智能体 定位于专业的 AI Agent 桌面工作站，区别于通用聊天类 AI 应用，它提供以下核心价值：
+可控性: 模型目录由用户绑定的 AISphere 平台提供，凭据由主进程管理；应用不提供产品账号、免费额度或第三方供应商入口。
+可扩展性: 通过技能（Skills）、MCP 协议、自定义供应商实现能力扩展。
+工具化: Agent 可调用系统工具（文件读写、终端命令、网络请求），完成实际的工程任务。
+多平台覆盖: 同时支持桌面端 Agent 交互和即时通讯端机器人响应。
+2.2 技术理念
+进程隔离: Electron 主进程、渲染进程、渠道运行时和本地能力服务按边界隔离。
+本地优先: 核心数据（配置、会话、模型参数）均存储在本地 SQLite 数据库，云端仅用于模型 API 调用。
+文档即代码: 代码与文档同步发布，关键功能必有对应文档覆盖。
+开放标准: 采用 OpenAPI、MCP、RRULE 等开放标准，确保互操作性。
+
+
+3. 技术架构
+3.1 总体架构
+晓软智能体 采用分层架构设计，自下而上分为四个逻辑层：
+第 1 层 --- 外部运行时层:
+
+第 2 层 --- Electron 主进程层:
+
+第 3 层 --- 渲染进程层:
+
+第 4 层 --- 共享模块层:
+
+3.2 进程模型
+晓软智能体 采用 Electron 标准双进程架构：
+
+
+安全隔离措施:
+contextIsolation: true：渲染进程无权直接访问 Node.js API。
+nodeIntegration: false：禁用 Node.js 集成。
+webSecurity: true：同源策略生效，阻止跨域请求。
+Chromium 操作系统级沙箱在 Windows 下显式禁用（--no-sandbox），原因为管理员权限运行时沙箱无法降权会导致 GPU 进程启动失败（error_code=18）。
+所有渲染进程与主进程的通信必须通过 contextBridge 暴露的 window.electron API 和 IPC 通道进行。
+Preload 桥接层 (src/main/preload.ts):
+暴露 window.electron 命名空间，包含 cowork、auth、store、shell、appUpdate、llamacpp、mcp、skills、im 等多个命名空间。
+提供 ipcRenderer.on 风格的流事件监听，支持清理函数模式。
+3.3 IPC 通信体系
+晓软智能体 在渲染进程和主进程之间定义了 60 余个 IPC 通道，按功能域分类：
+
+消息安全校验 (src/shared/ipc/schemas.ts):
+使用 Zod 定义 IPC 消息的 Schema（ApiFetchSchema、ApiStreamSchema、CoworkSessionStartSchema）。
+字符数限制、对象深度限制、键数限制，防止大负载攻击。
+3.4 状态管理架构
+渲染进程使用 Redux Toolkit 管理全局状态，共定义 10 个 Slice：
+
+
+
+
+
+
+
+4. Agent 引擎子系统
+统一 Agent 执行与渠道调度
+Work、Chat、Channel 和 Cron 统一使用同一 Agent 执行内核；消息渠道和定时任务只负责接收、调度、投递和活动状态，不拥有独立的 Agent 任务状态。
+
+4.2 统一 Agent 运行时
+统一 Agent 运行时 是 晓软智能体 的 Agent 运行时引擎，负责 IM 会话和 Cron 定时任务：
+运行方式: 作为独立 Node.js 子进程运行，与主进程通过 HTTP API 通信。
+生命周期管理: 统一 Agent 运行时EngineManager 管理安装（从源码构建）、启动、状态监控、崩溃重启。
+状态机: not_installed --> ready --> starting --> running | error
+配置同步: 统一 Agent 运行时ConfigSync 将 Cowork 配置（模型供应商、认证凭证等）同步为 统一 Agent 运行时 配置文件。
+插件体系: 通过 统一 Agent 运行时 插件（企业微信、飞书、钉钉、微信连接器）实现 IM 集成。
+本地扩展: 支持加载 openclaw-extensions/ 目录下的本地扩展模块。
+4.3 Agent 引擎路由
+CoworkEngineRouter 是 Agent 调度的核心路由模块，位于 src/main/libs/agentEngine/coworkEngineRouter.ts。它实现：
+引擎分发: 将 Cowork 会话请求路由到活跃的引擎适配器（统一 Agent 运行时RuntimeAdapter）。
+流事件转发: 将引擎产生的流事件（消息增量、工具调用、思考链）转发至渲染进程的 IPC 监听器。
+权限拦截: 当引擎请求工具执行时，生成 permissionRequest 事件，暂停执行等待用户确认。
+4.4 运行时引擎事件
+CoworkRuntime 接口定义了标准化的引擎事件流，渲染进程通过以下 6 种事件类型监听引擎状态：
+
+
+
+5. 本地推理子系统
+5.1 引擎架构
+本地推理子系统以 本地推理组件 为核心引擎，由 8 个协同模块组成：
+
+5.2 模型生命周期
+1. 发现: 通过模型市场搜索或手动导入模型文件。
+2. 下载: llamacppModelInstallation 管理下载队列，支持断点续传和进度显示。
+3. 安装: 模型文件写入本地存储目录，校验完整性。
+4. 启动: 用户选择模型并配置参数后，llamacppServe 启动 llama-server 子进程。
+5. 绑定: 运行中的模型通过 LlamaCpp统一 Agent 运行时Binding 注册为 统一 Agent 运行时 的 llamacpp Provider，检查上下文窗口是否满足最低要求后对用户可见。
+6. 服务: Client 通过 REST API 与 llama-server 通信，转发推理请求。
+7. 停止: 用户停止模型或应用退出时，终止 llama-server 子进程。
+5.3 平台支持
+晓软智能体 的 本地推理组件 集成覆盖多种运行时平台：
+Windows (x86_64, CUDA, Vulkan)
+GPU 加速通过 Vulkan（跨平台）和 CUDA（NVIDIA 专用）实现。
+
+
+6. 安全模型
+6.1 进程隔离策略
+晓软智能体 实施严格的进程隔离，核心安全措施包括：
+渲染进程隔离:
+// Electron BrowserWindow 配置 (main.ts:5861-5865)
+{
+  webPreferences: {
+    contextIsolation: true,   // 隔离渲染上下文
+    nodeIntegration: false,   // 禁用 Node.js 集成
+    webSecurity: true,        // 同源策略
+  }
+}
+// 同时: app.commandLine.appendSwitch('no-sandbox')  // main.ts:810
+// Chromium OS 级沙箱在 Windows 下显式禁用，因管理员运行时无法降权
+渲染进程所有 Node.js API 访问必须通过 preload 脚本的 contextBridge 暴露的白名单 API。
+Content Security Policy 限制可加载的外部资源来源。
+子进程隔离:
+统一 Agent 运行时 和 llama-server 均作为独立子进程运行。
+子进程崩溃不影响主进程和渲染进程。
+子进程的网络访问受操作系统级别防火墙控制。
+6.2 技能安全扫描
+技能包在安装和加载时经过安全扫描流程：
+1. 读取技能定义文件（SKILL.md）。
+2. 解析技能声明的工具权限和资源访问需求。
+3. 检查是否包含危险操作（如未授权的文件系统访问、网络调用）。
+4. 不满足安全要求的技能将被拒绝加载。
+6.4 API 密钥管理
+AISphere 地址和绑定状态按应用配置保存；实际平台凭据仅由主进程持有，不进入渲染进程配置或日志。
+支持密码加密导出/导入功能（EncryptedPayload 格式）。
+在传输至模型供应商时通过 HTTPS 加密通道发送。
+6.5 网络安全
+所有对外 API 通信使用 HTTPS。
+支持用户自定义代理配置。
+网络状态监控，离线时主动通知渲染进程。
+消息渠道按区域筛选：中文界面显示微信、钉钉、飞书、企业微信和 QQ；英文界面还显示 Telegram 和 Discord。
+
+
+7. 性能特性
+7.1 流式响应
+所有 AI 对话采用 SSE（Server-Sent Events）流式传输。
+消息内容实时增量渲染，首字符响应时间（TTFB）依赖模型供应商性能。
+本地模型推理延迟取决于硬件配置（GPU 型号、显存大小）。
+7.2 会话管理性能
+会话列表支持分页加载（COWORK_SESSION_PAGE_SIZE）。
+使用 SQLite 索引优化会话查询。
+应用启动时采用并发初始化策略（Promise.all 并行加载多个子系统）。
+7.3 内存占用
+基础应用运行时内存占用约 300-500 MB（Electron + React）。
+运行本地模型时额外内存占用取决于模型大小（如 7B 参数量化模型约需 4-8 GB）。
+长会话历史存储在 SQLite 中，不占用内存。
+7.4 启动性能
+冷启动设置了 24 秒超时保护。
+初始化阶段有详细的性能标记日志（performance.now()），便于诊断启动瓶颈。
+
+
+8. 可扩展性设计
+8.1 技能扩展体系
+技能是 晓软智能体 的一级扩展机制：
+技能定义格式: Markdown 格式的 SKILL.md 文件，包含技能描述、触发条件、工具权限声明。
+附属资源: 每个技能可携带脚本（scripts/）、参考资料（references/）、资源文件（assets/）。
+技能市场: 支持从远程技能市场浏览和安装技能包。
+自定义技能: 用户可通过自然语言描述创建自定义技能。
+8.2 MCP 协议扩展
+晓软智能体 原生支持 MCP 协议，允许接入任何兼容 MCP 标准的工具服务器：
+MCP 桥接服务 (McpBridgeServer): 实现 Agent 引擎与外部 MCP 服务器的协议转换。
+连通行探测 (mcpConnectionProbe): 支持连接状态验证。
+多服务器管理: 支持同时连接多个 MCP 服务器。
+8.3 自定义供应商
+用户可配置最多 10 个自定义 LLM 供应商（custom_0 至 custom_9），每个供应商可配置：
+API Base URL
+平台凭据
+模型列表（模型 ID、显示名称、是否支持图像）
+8.4 统一 Agent 运行时 插件体系
+统一 Agent 运行时 支持通过 npm 包形式加载第三方连接器插件：
+@wecom/wecom-openclaw-plugin --- 企业微信连接器
+@larksuite/openclaw-lark --- 飞书连接器
+@dingtalk-real-ai/dingtalk-connector --- 钉钉连接器
+@tencent-weixin/openclaw-weixin --- 微信连接器
+
+
+9. 部署方案
+9.1 单机部署
+适用场景: 个人用户、小型开发团队
+从官方渠道下载对应平台的安装包。
+运行安装向导完成安装。
+用户绑定 AISphere 地址并从平台目录选择模型；外部编程 Agent 的账号和模型配置保持在外部 Agent 自身。
+数据全部存储在本地。
+9.2 依赖项管理
+运行时依赖:
+
+构建依赖（仅开发环境需要）:
+Node.js >=24 <25
+npm >=9
+PortableGit (Windows)
+Visual Studio Build Tools (Windows, 用于 native 模块编译)
+
+
+10. 集成能力
+10.1 LLM 供应商集成
+晓软智能体 内置支持 17 个 LLM 供应商，涵盖国内外主流厂商：
+
+10.2 即时通讯平台集成
+
+10.3 数据协议与标准支持
+
+
+
+11. 技术栈总览
+11.1 核心技术栈
+
+11.2 关键 npm 依赖
+{
+  "核心框架": {
+    "electron": "Electron 桌面框架",
+    "react": "UI 渲染框架",
+    "react-dom": "React DOM 渲染器",
+    "typescript": "类型系统"
+  },
+  "状态与数据": {
+    "@reduxjs/toolkit": "Redux 状态管理",
+    "react-redux": "React-Redux 绑定",
+    "better-sqlite3": "SQLite 数据库驱动",
+    "zod": "运行时 Schema 校验"
+  },
+  "UI 与样式": {
+    "@radix-ui/*": "无样式 UI 组件基元",
+    "tailwindcss": "工具优先 CSS 框架",
+    "lucide-react": "图标库",
+    "recharts": "图表库"
+  },
+  "工具": {
+    "i18next": "国际化框架",
+    "uuid": "唯一 ID 生成",
+    "marked": "Markdown 解析"
+  }
+}
+
+
+12. 数据持久化设计
+12.1 存储架构
+晓软智能体 采用混合存储策略：
+
+12.2 数据可靠性
+SQLite WAL 模式确保并发写入安全。
+主进程初始化时自动检测数据库完整性。
+数据库文件损坏时自动从备份恢复。
+应用退出时有序关闭数据库连接。
+
+
+13. 版本与兼容性策略
+13.1 版本号规范
+采用语义化版本号 (Semantic Versioning)：
+主版本号 (MAJOR): 不兼容的 API 变更。
+次版本号 (MINOR): 向后兼容的功能新增。
+修订号 (PATCH): 向后兼容的问题修复。
+13.2 向后兼容性
+配置文件格式保持向后兼容，新增字段提供默认值。
+会话数据格式变更时提供自动迁移逻辑。
+技能包规范版本化，旧版技能在新版应用中继续可用。
+已有 IPC 通道不会变更或移除，仅新增通道。
+13.3 废弃策略
+废弃旧版 API 时提供至少一个次版本的过渡期。
+过渡期内同时支持新旧接口，并在设置面板中显示升级提示。
+废弃功能在文档中标注 @deprecated 及移除时间节点。
+
+
+14. 总结
+晓软智能体 是一个功能完备、架构清晰的桌面 AI Agent 平台。其核心竞争力体现在以下方面：
+1. 全栈可控: 从 UI 层到推理引擎层均为自主可控的技术选型，无黑盒依赖。
+2. 安全设计: 多层进程隔离、令牌安全管理、技能安全扫描。
+3. 高度可扩展: 技能体系、MCP 协议、自定义供应商、统一 Agent 运行时 插件体系构成完整的扩展矩阵。
+4. 多端覆盖: 同时支持桌面端 Agent 交互、本地推理和即时通讯端机器人响应。
+本地优先: 会话、配置、技能和任务状态保存在本地；当前定制版模型调用依赖绑定的 AISphere，不承诺完全离线运行。
+适用于对数据安全有严格要求、需要 AI 工具化能力、期望多平台覆盖的开发者。
+
+文档结束
+15. 当前定制版边界
+模型绑定：设置页只提供 AISphere 地址、连接/刷新和平台模型选择。平台发现接口和模型目录由主进程校验，模型请求通过本机网关转发。
+身份与更新：不提供产品账号登录、游客令牌、内置免费模型注册、第三方模型供应商配置或产品内自动更新入口。
+编程工作台：内置 Agent 与外部 ACP Agent 通过适配器隔离。外部 Agent 使用自己的账号、模型、工具和配置，不接收应用模型凭据。
+渠道与定时任务：渠道连接器承载外部消息和投递，定时任务负责触发和记录；两者均调用统一 Agent 执行内核。
+指标
+参数
+应用框架
+Electron + React 19 + TypeScript
+状态管理
+Redux Toolkit (11 Slice)
+数据持久化
+better-sqlite3 (SQLite)
+模型供应商
+17 个（含自定义）
+Agent 引擎
+统一 Agent 运行时（IM/Cron） + 统一 Agent 运行时（Work）
+本地推理引擎
+本地推理组件
+即时通讯平台
+5 个（企业微信、飞书、钉钉、微信、QQ）
+进程架构
+双进程（主进程 + 渲染进程）+ 子进程隔离
+IPC 通道
+60+
+安全模型
+contextIsolation + nodeIntegration: false + webSecurity
+组件
+运行方式
+职责
+统一 Agent 运行时
+独立子进程
+Agent 编排引擎，管理会话、模型调用、工具执行
+本地推理组件 (llama-server)
+独立子进程
+本地 AI 模型推理引擎
+模块
+关键文件
+职责
+应用入口与 IPC
+src/main/main.ts
+窗口管理、约 40 个 IPC 通道注册
+SQLite 持久化
+src/main/sqliteStore.ts
+KV 键值存储、Cowork 会话/消息数据管理
+Cowork 存储
+src/main/coworkStore.ts
+会话/消息 CRUD 操作
+Agent 引擎路由
+src/main/libs/agentEngine/coworkEngineRouter.ts
+将请求分发到 统一 Agent 运行时 或 统一 Agent 运行时
+技能管理
+src/main/skillManager.ts
+技能加载、安全扫描
+MCP 管理
+src/main/libs/mcpServerManager.ts
+MCP 服务器配置与连接管理
+本地推理组件 管理
+src/main/libs/llamacppManager.ts
+本地推理组件 服务生命周期
+统一 Agent 运行时 管理
+src/main/libs/openclawEngineManager.ts
+统一 Agent 运行时 运行时安装、启动、状态监控
+IM 网关
+src/main/im/imGatewayManager.ts
+多平台 IM 消息路由
+应用更新
+src/main/libs/appUpdateCoordinator.ts
+自动更新检测与安装
+模块
+关键文件
+职责
+应用入口
+src/renderer/App.tsx
+全局状态初始化、视图路由、权限管理
+协作工作台
+src/renderer/components/cowork/
+会话管理、消息展示、模型选择
+技能管理
+src/renderer/components/skills/
+技能浏览、安装、启用
+MCP 管理
+src/renderer/components/mcp/
+MCP 服务器组配置
+本地推理
+src/renderer/components/localInference/
+模型管理、市场下载
+预设专家
+src/renderer/components/expert/
+专家 Agent 浏览与使用
+定时任务
+src/renderer/components/scheduledTasks/
+任务创建、管理、历史
+设置面板
+src/renderer/components/Settings.tsx
+全局配置管理
+IM 设置
+src/renderer/components/im/IMSettings.tsx
+平台机器人实例配置
+状态管理
+src/renderer/store/
+11 个 Redux Slice
+服务层
+src/renderer/services/
+13 个 Service 服务
+模块
+路径
+职责
+IPC 通道定义
+src/shared/ipc/channels.ts
+60+ 通道常量
+Provider 注册表
+src/shared/providers/constants.ts
+17 个供应商配置
+UI 组件库
+src/shared/components/ui/
+35 个 shadcn/ui 组件
+AI 组件
+src/shared/components/ai-elements/
+AI 专用 UI 组件
+本地推理组件 共享定义
+src/shared/llamacpp/
+类型定义、流处理
+功能域
+通道示例
+方向
+说明
+存储
+store:get、store:set、store:delete
+双向
+KV 键值对操作
+Cowork
+cowork:start、cowork:send、cowork:stream-event
+双向
+会话管理与流式事件
+本地推理组件
+llamacpp:install、llamacpp:serve
+双向
+本地推理管理
+技能
+skills:list、skills:install、skills:scan
+双向
+技能生命周期
+MCP
+mcp:connect、mcp:disconnect、mcp:probe
+双向
+MCP 连接管理
+IM
+im:gateway:*
+双向
+IM 消息路由
+应用更新
+appUpdate:check、appUpdate:download
+双向
+自动更新
+Slice
+管理状态
+关键字段
+coworkSlice
+协作会话
+sessions、currentSessionId、streaming、messages
+modelSlice
+模型状态
+availableModels、defaultSelectedModel、serverModels
+agentSlice
+Agent 配置
+currentAgentId
+skillSlice
+技能状态
+activeSkills、installedSkills
+artifactSlice
+工件预览
+artifacts
+workspaceSlice
+工作空间
+currentWorkspaceId、workspaces
+configSlice
+应用配置
+全局配置缓存
+themeSlice
+主题
+主题模式
+quickActionSlice
+快捷操作
+选中的快捷操作
+toastSlice
+消息提示
+提示队列
+引擎
+运行方式
+当前职责
+统一 Agent 运行时
+独立子进程，通过 HTTP API 通信
+IM/Cron 会话
+统一 Agent 运行时
+进程内运行，直接导入
+Work 会话
+事件类型
+触发时机
+携带数据
+message
+Agent 产生新消息文本
+增量文本内容
+thinking
+Agent 产生思考链
+思考步骤文本
+toolCall
+Agent 请求工具调用
+工具名、参数
+toolResult
+工具调用完成
+工具名、返回结果
+permissionRequest
+需要用户授权
+工具名、参数、请求 ID
+done
+会话完成
+终止原因
+error
+会话异常终止
+错误信息
+模块
+关键文件
+职责
+本地推理组件 管理器
+llamacppManager.ts
+服务生命周期、平台分发
+后端管理器
+llamacppBackendManager.ts
+CPU/GPU 后端切换
+本地推理组件 客户端
+llamacppClient.ts
+REST API 客户端
+模型安装
+llamacppModelInstallation.ts
+模型下载与安装
+模型启动
+llamacppServe.ts
+llama-server 子进程管理
+统一 Agent 运行时 绑定
+openclawConfigSync.ts 中实现
+模型与 统一 Agent 运行时 Provider 映射
+共享定义
+shared/llamacpp/
+类型定义、流处理
+IPC 处理
+ipcHandlers/llamacpp.ts
+渲染进程-主进程通信
+依赖项
+用途
+是否必需
+统一 Agent 运行时
+Agent 编排引擎
+是
+PortableGit (Windows)
+统一 Agent 运行时 源码构建
+Windows 平台是
+本地推理组件
+本地推理引擎
+仅使用本地模型时需要
+Node.js >=24
+应用运行环境
+是（内置）
+类别
+供应商
+主流云供应商
+DeepSeek、智谱 (GL-4)、MiniMax、通义千问、千帆、小米、阶跃星辰、火山引擎、月之暗面 (Moonshot)
+本地
+本地推理组件（通过 llama-server）
+自定义
+10 个可自定义供应商
+平台
+可见性
+集成方式
+企业微信 (WeCom)
+中文环境
+统一 Agent 运行时 插件
+飞书 (Feishu/Lark)
+中文环境
+统一 Agent 运行时 插件
+钉钉 (DingTalk)
+中文环境
+统一 Agent 运行时 插件
+微信 (WeChat)
+中文环境
+统一 Agent 运行时 插件
+QQ
+中文环境
+内置实现
+标准/协议
+用途
+实现方式
+MCP (Model Context Protocol)
+工具服务器连接
+McpBridgeServer
+SSE (Server-Sent Events)
+流式推理响应
+API 服务层
+RRULE (RFC 5545)
+定时任务调度
+SQLite automation 表
+OpenAPI 兼容
+API 代理请求格式
+CoworkOpenAICompatProxy
+Zod Schema
+IPC 消息校验
+shared/ipc/schemas.ts
+层次
+技术
+版本
+应用框架
+Electron
+^35.x
+UI 框架
+React
+^19.x
+构建工具
+Vite
+^6.x
+类型系统
+TypeScript
+^5.x
+状态管理
+Redux Toolkit
+^2.x
+数据库
+better-sqlite3
+^11.x
+UI 组件库
+Radix UI (shadcn/ui)
+latest
+样式方案
+Tailwind CSS
+^4.x
+图表
+Recharts
+^2.x
+代码检查
+ESLint
+^9.x
+单元测试
+Vitest
+^3.x
+打包分发
+electron-builder
+latest
+Agent 运行时
+统一 Agent 运行时
+源码构建
+本地推理
+本地推理组件
+submodule
+编程语言
+TypeScript/JavaScript/C++
+-
+数据类型
+存储方式
+位置
+用户配置
+SQLite KV 表
+用户数据目录
+会话数据
+SQLite (cowork_sessions, cowork_messages)
+用户数据目录
+MCP 配置
+SQLite
+用户数据目录
+定时任务
+SQLite (automations, automation_runtime_state, automation_runs)
+用户数据目录
+IM 配置
+SQLite
+用户数据目录
+技能文件
+文件系统 (Markdown + 附属资源)
+SKILLs/ 目录
+Agent 记忆
+文件系统 (Markdown)
+统一 Agent 运行时 工作目录
+本地模型
+文件系统 (GGUF 格式)
+模型存储目录
+日志
+文件系统
+日志目录

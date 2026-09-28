@@ -1,0 +1,950 @@
+晓软智能体 系统设计文档
+文档版本: v2026.7.16
+编制日期: 2026年7月16日
+
+
+目录
+1. [系统概述](#1-系统概述)
+2. [技术架构总览](#2-技术架构总览)
+3. [进程模型与IPC通信](#3-进程模型与ipc通信)
+4. [主进程架构](#4-主进程架构)
+5. [渲染进程架构](#5-渲染进程架构)
+6. [共享模块层](#6-共享模块层)
+7. [Agent引擎子系统](#7-agent引擎子系统)
+8. [本地推理子系统](#8-本地推理子系统)
+9. [技能与扩展子系统](#9-技能与扩展子系统)
+10. [IM即时通讯集成子系统](#10-im即时通讯集成子系统)
+11. [数据持久化设计](#11-数据持久化设计)
+12. [安全模型](#12-安全模型)
+13. [构建与部署架构](#13-构建与部署架构)
+14. [附录](#14-附录)
+
+
+1. 系统概述
+1.1 产品定位
+晓软智能体是基于 Electron 构建的桌面 AI Agent 应用。当前定制版的模型调用只经过用户绑定的 AISphere 平台；会话、技能、MCP、编程、定时任务和消息渠道状态由本地应用管理。
+1.2 核心技术栈
+
+1.3 系统边界
+本系统运行于用户本地桌面环境，其核心职责包括：
+1. 接收用户自然语言输入，通过 Agent 引擎执行任务编排与工具调用。
+管理应用内可用的模型绑定和请求生命周期；本地推理相关代码不作为当前定制版的用户模型入口。
+3. 通过 MCP (Model Context Protocol) 协议接入外部工具与数据源。
+通过渠道传输组件接入微信、钉钉、飞书、企业微信、QQ，以及英文界面的 Telegram 和 Discord，使 Agent 可响应外部消息。
+5. 提供技能（Skill）市场与本地技能管理，扩展 Agent 能力边界。
+6. 支持定时任务的创建、管理与调度执行。
+
+
+2. 技术架构总览
+2.1 分层架构
+系统采用经典的多层架构设计，各层职责明确，边界清晰：
+
+
+
+
+2.2 源代码目录结构
+src/
+├── main/                     # Electron 主进程
+│   ├── main.ts               # 入口文件：窗口管理、IPC 处理注册、子系统初始化
+│   ├── preload.ts            # contextBridge 预加载脚本
+│   ├── sqliteStore.ts        # SQLite 数据库封装（KV 存储与会话表）
+│   ├── coworkStore.ts        # Cowork 会话/消息 CRUD 操作
+│   ├── skillManager.ts       # 技能生命周期管理（加载、安装、安全扫描）
+│   ├── skillServices.ts      # 技能运行时服务管理
+│   ├── mcpStore.ts           # MCP 服务配置存储
+│   ├── presetAgents.ts       # 预设 Agent 配置
+│   ├── agentManager.ts       # Agent 实例管理
+│   ├── trayManager.ts        # 系统托盘管理
+│   ├── windowState.ts        # 窗口状态持久化
+│   ├── workspaceUtils.ts     # 工作空间工具函数
+│   ├── logger.ts             # 日志记录器
+│   ├── i18n.ts               # 国际化
+│   ├── ipcHandlers/          # IPC 处理器目录
+│   │   ├── llamacpp.ts       # 本地推理组件 IPC 处理
+│   │   ├── marketplace.ts    # 市场 IPC 处理
+│   │   ├── scheduledTask/    # 定时任务 IPC 处理
+│   │   └── triage.ts         # 模型分诊处理
+│   ├── libs/                 # 核心业务库
+│   │   ├── agentEngine/      # Agent 引擎适配层
+│   │   │   ├── index.ts               # CoworkEngineRouter 路由分发
+│   │   │   ├── types.ts               # CoworkRuntime 接口定义
+│   │   │   ├── openclawRuntimeAdapter.ts  # 渠道与调度运行时 适配器 (240KB)
+│   │   │   └── piRuntimeAdapter.ts        # 统一 Agent 执行内核 进程内适配器 (59KB)
+│   │   ├── openclawEngineManager.ts    # 渠道与调度运行时 运行时管理
+│   │   ├── openclawConfigSync.ts       # 渠道与调度运行时 配置同步
+│   │   ├── llamacppManager.ts          # 本地推理组件 服务管理
+│   │   ├── llamacppBackendManager.ts   # 本地推理组件 后端管理
+│   │   ├── mcpServerManager.ts         # MCP 服务管理器
+│   │   ├── mcpBridgeServer.ts          # MCP 桥接服务
+│   │   ├── claudeSettings.ts           # 模型 API 配置管理
+│   │   ├── coworkOpenAICompatProxy.ts  # OpenAI 兼容代理
+│   │   ├── openclawMemoryFile.ts       # 内存文件管理
+│   │   ├── appUpdateCoordinator.ts     # 应用更新协调器
+│   │   ├── marketplaceService.ts       # 技能市场服务
+│   │   ├── pythonRuntime.ts            # Python 运行时
+│   │   └── ...
+│   ├── im/                   # IM 集成模块
+│   │   ├── imGatewayManager.ts        # IM 网关管理器
+│   │   ├── imCoworkHandler.ts         # IM 消息处理到 Cowork 转发
+│   │   ├── imChatHandler.ts           # IM 聊天处理
+│   │   ├── imStore.ts                 # IM 配置存储
+│   │   ├── imPairingStore.ts          # IM 配对管理
+│   │   ├── types.ts                   # IM 类型定义
+│   │   └── ...
+│   ├── openclawSession/       # 渠道与调度运行时 会话处理
+│   └── openclawSessionPolicy/ # 渠道与调度运行时 会话策略
+├── renderer/                 # Electron 渲染进程
+│   ├── App.tsx               # 根组件
+│   ├── main.tsx              # 渲染进程入口
+│   ├── index.css             # 全局样式
+│   ├── config.ts             # 前端配置管理
+│   ├── components/           # UI 组件
+│   │   ├── cowork/           # Cowork 会话界面
+│   │   ├── localInference/   # 本地推理管理界面
+│   │   ├── skills/           # 技能管理界面
+│   │   ├── mcp/              # MCP 配置界面
+│   │   ├── expert/           # 专家视图
+│   │   ├── scheduledTasks/   # 定时任务界面
+│   │   ├── im/               # IM 配置界面
+│   │   ├── artifacts/        # Artifact 渲染器
+│   │   ├── quick-actions/    # 快速操作
+│   │   ├── update/           # 应用更新界面
+│   │   ├── window/           # 窗口控制组件
+│   │   └── ...
+│   ├── services/             # 业务服务层
+│   │   ├── api.ts            # API 通信
+│   │   ├── cowork.ts         # Cowork 会话服务
+│   │   ├── config.ts         # 配置服务
+│   │   ├── skill.ts          # 技能服务
+│   │   ├── mcp.ts            # MCP 服务
+│   │   ├── im.ts             # IM 服务
+│   │   ├── workspace.ts      # 工作空间服务
+│   │   ├── scheduledTask.ts  # 定时任务服务
+│   │   ├── i18n.ts           # 国际化服务
+│   │   ├── theme.ts          # 主题服务
+│   │   ├── quickAction.ts    # 快速操作服务
+│   │   ├── shortcuts.ts      # 快捷键服务
+│   │   ├── artifactParser.ts # Artifact 解析器
+│   │   ├── availableModels.ts # 可用模型收集
+│   │   ├── encryption.ts     # 加密服务
+│   │   ├── chatChatTransport.ts    # Chat 传输层
+│   │   ├── coworkChatTransport.ts  # Cowork Chat 传输
+│   │   └── ipcChatTransport.ts     # IPC Chat 传输
+│   ├── store/                # Redux 状态管理
+│   │   ├── index.ts          # Store 配置
+│   │   ├── slices/           # Redux Slice
+│   │   │   ├── coworkSlice.ts        # Cowork 会话状态
+│   │   │   ├── modelSlice.ts         # 模型选择状态
+│   │   │   ├── skillSlice.ts         # 技能状态
+│   │   │   ├── mcpSlice.ts           # MCP 配置状态
+│   │   │   ├── imSlice.ts            # IM 配置状态
+│   │   │   ├── agentSlice.ts         # Agent 管理状态
+│   │   │   ├── artifactSlice.ts      # Artifact 展示状态
+│   │   │   ├── scheduledTaskSlice.ts # 定时任务状态
+│   │   │   ├── quickActionSlice.ts   # 快速操作状态
+│   │   │   └── workspaceSlice.ts     # 工作空间状态
+│   │   └── selectors/        # Redux Selector
+│   └── types/                # TypeScript 类型定义
+├── shared/                   # 主进程与渲染进程共享模块
+│   ├── ipc/                  # IPC 通道常量与校验 Schema
+│   │   ├── channels.ts       # IPC 通道名称常量（60+ 通道）
+│   │   ├── schemas.ts        # Zod 校验 Schema
+│   │   └── types.ts          # 共享类型
+│   ├── providers/            # LLM 供应商配置注册表
+│   │   └── constants.ts      # 统一 Provider 定义（18 个供应商）
+│   ├── llamacpp/             # 本地推理组件 共享配置与类型
+│   ├── cowork/               # Cowork 共享常量
+│   ├── components/           # 共享 UI 组件（shadcn/ui）
+│   ├── platform/             # 平台注册表
+│   ├── marketplace/          # 市场相关定义
+│   ├── agent/                # Agent 共享定义
+│   ├── workspace/            # 工作空间定义
+│   └── ...
+├── common/                   # 公共工具模块
+│   ├── coworkError.ts        # Cowork 错误定义与分类
+│   ├── coworkErrorClassify.ts # 错误分类逻辑
+│   └── openclawSession.ts    # 渠道与调度运行时 会话补丁类型
+└── scheduledTask/            # 定时任务公共模块
+
+
+3. 进程模型与IPC通信
+3.1 进程架构
+系统遵循 Electron 双进程模型，严格采用进程隔离策略：
+
+3.2 Preload 桥接层
+渲染进程通过 preload.ts 中的 contextBridge.exposeInMainWorld('electron', api) 暴露安全的 API 接口。该层提供了以下核心命名空间：
+window.electron.store — 键值存储读写
+window.electron.skills — 技能列表、启用/禁用、下载、安装确认
+window.electron.mcp — MCP 服务配置 CRUD、连接测试
+window.electron.cowork — 会话管理、流式消息监听、权限确认
+window.electron.config — API 配置、会话标题生成
+window.electron.window — 窗口最小化/最大化/关闭
+window.electron.im — IM 实例配置、配对管理
+window.electron.log — 日志导出
+window.electron.shell — 外部链接打开、文件浏览
+3.3 IPC 通道分类
+系统定义了 60+ 个 IPC 通道，按功能域组织在 src/shared/ipc/channels.ts 中：
+StoreIpc:        store:get | store:set | store:remove
+SkillsIpc:       skills:list | skills:setEnabled | skills:delete | ...
+McpIpc:          mcp:list | mcp:create | mcp:update | mcp:delete | ...
+CoworkSessionIpc: cowork:session:start | cowork:session:continue | ...
+CoworkStreamIpc: cowork:stream:data | cowork:stream:error | ...
+CoworkPermissionIpc: cowork:permission:request | cowork:permission:respond
+CoworkConfigIpc: cowork:config:get | cowork:config:update
+CoworkMemoryIpc: cowork:memory:list | cowork:memory:add | ...
+渠道与调度运行时EngineIpc: openclaw:engine:getStatus | openclaw:engine:install | ...
+ApiIpc:          api:fetch | api:stream | api:stream:cancel
+CodingAgentIpc:  coding-agent:workspace | coding-agent:session | coding-agent:git | ...
+ImIpc:           im:list | im:create | im:update | im:delete | ...
+3.4 IPC 消息安全策略
+主进程对所有 IPC 入站消息实施以下约束：
+字符串消息最大长度: IPC_MESSAGE_CONTENT_MAX_CHARS = 120,000
+更新内容最大长度: IPC_UPDATE_CONTENT_MAX_CHARS = 120,000
+通用字符串最大长度: IPC_STRING_MAX_CHARS = 4,000
+嵌套对象最大深度: IPC_MAX_DEPTH = 5
+单个对象最大键数: IPC_MAX_KEYS = 80
+数组最大元素数: IPC_MAX_ITEMS = 40
+内联附件最大字节: 25 * 1024 * 1024 (25MB)
+
+
+4. 主进程架构
+4.1 入口文件: main.ts
+main.ts（约 264KB，系统最大单体文件）是主进程的总控中心。它负责：
+1. 应用生命周期管理: 注册 app.whenReady()、app.on('window-all-closed') 等事件。
+2. 窗口创建与管理: 创建 BrowserWindow 实例，配置 contextIsolation、nodeIntegration: false、webSecurity。
+3. IPC Handler 注册: 集中注册所有 IPC invoke/handle 通道（40+ 个处理函数）。
+4. 子系统初始化: 按依赖顺序初始化各核心模块。
+4.2 核心子系统初始化顺序
+基于 main.ts 中 app.whenReady() 回调的代码逻辑，子系统初始化顺序如下：
+1. SqliteStore.create()         -- 数据库初始化（含自动备份恢复）
+2. CoworkStore.create()          -- Cowork 存储初始化
+3. SkillManager.loadSkills()     -- 技能加载与安全扫描
+4. McpStore / McpServerManager   -- MCP 服务管理
+5. 渠道与调度运行时EngineManager         -- 渠道与调度运行时 运行时引擎
+ChannelRuntime               -- 消息渠道与定时任务运行时
+7. IMGatewayManager              -- IM 网关管理
+4.3 关键子模块详细设计
+4.3.1 SqliteStore (sqliteStore.ts)
+SqliteStore 是系统的持久化核心，基于 better-sqlite3 实现。数据表设计如下：
+kv 表 — 通用键值存储：
+CREATE TABLE IF NOT EXISTS kv (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+存储内容包括：API 配置、模型配置、IM 实例配置、MCP 服务配置、定时任务、窗口状态等。
+cowork_sessions 表 — 会话记录：
+CREATE TABLE IF NOT EXISTS cowork_sessions (
+    id              TEXT PRIMARY KEY,
+    title           TEXT,
+    status          TEXT NOT NULL DEFAULT 'active',
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL,
+    workspace_id    TEXT,
+    pinned          INTEGER DEFAULT 0,
+    execution_mode  TEXT DEFAULT 'auto',
+    agent_id        TEXT,
+    expert_ids      TEXT,  -- JSON array
+    model_override  TEXT,
+    ...
+);
+cowork_messages 表 — 会话消息记录：
+CREATE TABLE IF NOT EXISTS cowork_messages (
+    id          TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    role        TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    metadata    TEXT,
+    ...
+);
+支持分页查询：会话列表每页 COWORK_SESSION_PAGE_SIZE 条，消息列表每页 COWORK_MESSAGE_PAGE_SIZE 条。
+数据库启动时执行健康检查，失败时自动从 SQLite 备份恢复。
+4.3.2 CoworkStore (coworkStore.ts)
+CoworkStore 管理 Cowork 会话的完整生命周期：
+会话 CRUD: createSession(), getSession(), listSessions(), updateSession(), deleteSession()
+消息 CRUD: addMessage(), getMessages(), prependMessages(), updateMessageContent()
+内存管理: memoryEnabled, memoryImplicitUpdateEnabled, memoryGuardLevel（strict/standard/relaxed）
+分页支持: listSessions() 支持基于游标的 pageSize 分页
+4.3.3 SkillManager (skillManager.ts)
+SkillManager 管理系统中的技能定义（约 103KB），核心功能：
+1. 技能发现: 扫描 SKILLs/ 目录下的技能定义（SKILL.md）。
+2. 技能安装: 支持从 ModelScope 市场、GitHub 仓库等来源下载安装。
+3. 安全扫描: 安装前对技能目录执行安全扫描（skillSecurity/），生成安全报告。
+4. 配置管理: skills.config.json 控制技能的启用/禁用与加载顺序。
+5. 运行时环境: 解决用户 Shell PATH，确保 Node.js/npm 可用。
+4.3.4 SkillServices (skillServices.ts)
+SkillServiceManager 负责管理技能运行所需的常驻后台服务。当前实现聚焦于 Web Search 桥接服务器的生命周期管理：
+启动 Web Search Bridge Server（检测运行环境、自动修复依赖与编译产物）。
+健康检查：通过 http://127.0.0.1:8923/api/health 端点探测服务状态。
+进程管理：PID 文件持久化，SIGTERM 优雅停机。
+环境构建：buildSkillServiceEnv() 解析用户 Shell PATH，为子进程提供正确的 Node.js 运行时路径。
+通过 getSkillServiceManager() 获取全局单例。
+
+
+5. 渲染进程架构
+5.1 组件树结构
+渲染进程基于 React 19 构建，采用函数式组件 + Hooks 模式。根组件 App.tsx 管理的视图包括：
+App (Root Component)
+├── WindowTitleBar              -- 窗口标题栏
+├── Sidebar                     -- 侧边栏导航
+│   ├── CoworkSessionList       -- 会话列表
+│   ├── Navigation              -- 功能导航
+│   └── Settings/Update Panel   -- 设置与更新面板
+├── Main Content Area
+│   ├── CoworkView              -- Cowork 会话主界面 (默认视图)
+│   │   ├── CoworkSessionDetail -- 消息展示
+│   │   ├── CoworkPromptInput   -- 输入框（含附件、模型选择）
+│   │   ├── CoworkModel统一 Agent 执行内核cker   -- 模型选择器
+│   │   ├── CoworkPermissionModal -- 工具权限确认弹窗
+│   │   ├── CoworkQuestionWizard  -- 问题引导向导
+│   │   ├── EngineStartupOverlay  -- 引擎启动遮罩
+│   │   ├── SessionExpert统一 Agent 执行内核cker   -- 专家选择器
+│   │   ├── TodoQueue             -- 待办队列
+│   │   └── DiffView              -- 差异对比视图
+│   ├── SkillsView              -- 技能管理界面
+│   ├── LocalInferenceView      -- 本地推理管理界面
+│   ├── McpView                 -- MCP 配置界面
+│   ├── ScheduledTasksView      -- 定时任务界面
+│   └── ExpertView              -- 专家管理界面
+├── CoworkPermissionModal       -- 全局权限确认弹窗
+├── Settings                    -- 设置面板（约 222KB，最大的 UI 组件）
+├── Toast                       -- 全局消息提示
+└── ModelSelector               -- 全局模型选择器
+
+
+
+
+
+
+
+5.2 状态管理架构
+系统采用 Redux Toolkit 进行状态管理，Store 结构如下：
+
+
+
+5.3 服务层设计
+服务层位于 src/renderer/services/，封装业务逻辑并与主进程通信：
+
+
+
+6. 共享模块层
+6.1 shared/ 目录设计
+src/shared/ 目录包含主进程与渲染进程均可引用的模块，消除了重复定义：
+6.1.1 IPC 通道定义 (`shared/ipc/`)
+channels.ts — 定义所有 IPC 通道名称常量（60+ 个），采用 as const 模式确保类型安全。
+schemas.ts — 使用 Zod 定义 IPC 消息校验 Schema，如 ApiFetchSchema、ApiStreamSchema、CoworkSessionStartSchema。
+types.ts — IPC 相关 TypeScript 接口定义。
+6.1.2 Provider 注册表 (`shared/providers/`)
+constants.ts — 统一 LLM 供应商配置注册表。定义了 ProviderName（16 个供应商标识符）和 渠道与调度运行时ProviderId（对应 渠道与调度运行时 网关的供应商 ID 映射）。支持的供应商包括：OpenAI、Anthropic、Google Gemini、DeepSeek、Moonshot、Zhipu(GL-4)、MiniMax、Qwen、Qianfan、Xiaomi、StepFun、Volcengine、OpenRouter、本地推理组件、Custom、GitHub Copilot。
+6.1.3 共享 UI 组件 (`shared/components/`)
+ui/ — 基于 Radix UI 的 35 个 shadcn/ui 组件（Button、Dialog、DropdownMenu、Select、Tabs 等）。
+ai-elements/ — AI 专用 UI 组件（PromptInput、Message、CodeBlock、Conversation、Reasoning、Tool、Confirmation 等）。
+6.1.4 本地推理组件 共享定义 (`shared/llamacpp/`)
+constants.ts — 本地推理组件 IPC 通道常量
+types.ts — 本地推理组件 服务配置、模型、启动参数等类型定义
+serviceConfigSchema.ts — 服务配置校验 Schema
+defaults.ts — 默认配置值
+
+
+7. Agent引擎子系统
+7.1 双内核架构
+系统采用双内核（Dual-Kernel）设计，两个引擎按场景分工，通过统一的 CoworkRuntime 接口向渲染进程屏蔽差异：
+// src/main/libs/agentEngine/types.ts
+export type CoworkAgentEngine = 'openclaw' | 'pi';
+ 
+export interface CoworkRuntime {
+  on<U extends keyof CoworkRuntimeEvents>(event: U, listener: ...): this;
+  startSession(sessionId: string, prompt: string, options?: CoworkStartOptions): Promise<void>;
+  continueSession(sessionId: string, prompt: string, options?: CoworkContinueOptions): Promise<void>;
+  stopSession(sessionId: string): void;
+  stopAllSessions(): void;
+  respondToPermission(requestId: string, result: PermissionResult): void;
+  isSessionActive(sessionId: string): boolean;
+  ...
+}
+两个引擎均通过 bindCoworkRuntimeForwarder() 注册到 IPC 事件转发层，渲染进程接收的 cowork:stream:* 消息透明地来自两个内核：
+// src/main/main.ts:1614-1618
+// Dual-kernel: bind both 统一 Agent 执行内核 (Work sessions) and 渠道与调度运行时 (IM sessions).
+// Both feed into the same cowork:stream:* IPC channels so the UI shows
+// messages from both sources.
+forwardRuntimeToRenderer(get统一 Agent 执行内核RuntimeAdapter());       // Work → 统一 Agent 执行内核
+forwardRuntimeToRenderer(get渠道与调度运行时RuntimeAdapter());     // IM → 渠道与调度运行时
+7.2 统一 Agent 执行内核 Runtime Adapter (piRuntimeAdapter.ts)
+统一 Agent 执行内核 负责 Work 会话（用户在工作台 UI 中主动发起的协作对话），约 59KB 实现文件。cowork:session:start IPC 处理器直接调用 get统一 Agent 执行内核RuntimeAdapter() 启动会话（main.ts:3359），无需等待 渠道与调度运行时。
+技术实现：
+运行方式: 直接导入 @earendil-works/pi-coding-agent 和 @earendil-works/pi-ai 包，在 Node.js 主进程中运行，无子进程开销。
+会话创建: 通过 createAgentSession() 创建 AgentSession 实例，session.subscribe() 注册事件监听。
+流式输出: 支持 text_delta / thinking_delta 粒度的增量事件，分别映射到 UI 的回答气泡和思考气泡。
+模型支持: 支持本地 Provider（本地推理组件）和全部云端 Provider。
+会话状态: 维护 Active统一 Agent 执行内核Session 结构，包含 assistantMessageId、thinkingMessageId、answerText、thinkingText 等状态字段。
+工具调用: 完整追踪 tool_execution_start / tool_execution_update / tool_execution_end 事件链。
+权限模型: 支持 modal 模式（弹窗确认）和 text 模式（文本确认）。
+7.3 渠道与调度运行时 Runtime Adapter (openclawRuntimeAdapter.ts)
+渠道与调度运行时 负责 IM 会话（企业微信、飞书、钉钉、微信等平台消息驱动的对话）和 Cron 任务（定时任务调度执行），约 240KB 实现文件。其架构特点：
+运行方式: 渠道与调度运行时 作为独立子进程运行（UtilityProcess），通过 WebSocket 与主进程通信。
+引擎管理: 渠道与调度运行时EngineManager 管理 Gateway 子进程生命周期，状态包括：not_installed -> installing -> ready -> starting -> compiling -> running -> error。
+Gateway 端口: 默认端口 18789，启动时自动扫描可用端口（扫描范围 80 个端口）。
+启动超时: 冷启动 600 秒（含 V8 编译），预热启动 300 秒。
+重启策略: 最多 5 次重试，延迟递增（3s -> 5s -> 10s -> 20s -> 30s）。
+Channel Session: 基于 渠道与调度运行时ChannelSessionSync 的 channel session 机制，通过 buildManagedSessionKey 映射会话标识，实现 IM 平台 ↔ Session 绑定。
+消息流: 通过 Gateway 的 WebSocket 事件流接收 Agent 消息、工具调用、权限请求等。
+权限模型: 支持 modal 模式（弹窗确认）和 text 模式（文本确认）。
+渠道与调度运行时 插件体系（配置于 package.json 中）：
+@dingtalk-real-ai/dingtalk-connector v0.8.16 — 钉钉连接器
+@larksuite/openclaw-lark v2026.4.8 — 飞书连接器
+@wecom/wecom-openclaw-plugin v2026.4.22 — 企业微信连接器
+@tencent-weixin/openclaw-weixin v2.4.3 — 微信连接器
+7.4 引擎事件流
+CoworkRuntime 定义的事件接口：
+
+
+
+8. 本地推理子系统
+8.1 本地推理组件 集成架构
+本地推理子系统基于 本地推理组件 的 llama-server 可执行文件，通过以下模块协同工作：
+LlamaCppManager (llamacppManager.ts)
+├── LlamaCppBackendManager (llamacppBackendManager.ts)
+│   ├── Backend 安装/卸载/检查
+│   └── Backend 兼容性验证
+├── LlamaCppClient (llamacppClient.ts)
+│   └── HTTP 客户端（与 llama-server 通信）
+├── LlamaCppServe (llamacppServe.ts)
+│   ├── llama-server 子进程管理
+│   ├── 启动参数构建
+│   └── 健康检查与重启
+├── LlamaCppRuntimeInstaller (llamacppRuntimeInstaller.ts)
+│   └── 本地推理组件 运行时下载与安装
+├── LlamaCppModelInstallation (llamacppModelInstallation.ts)
+│   └── GGUF 模型文件下载与管理
+├── LlamaCppModelCatalog (llamacppModelCatalog.ts)
+│   └── 本地模型扫描与目录管理
+└── LlamaCppModelGpuPlacement (llamacppModelGpuPlacement.ts)
+    └── GPU 层分配策略
+8.2 运行时管理
+本地推理组件 运行时配置（package.json 中定义）：
+
+当前运行时版本: b9244
+8.3 模型生命周期
+1. 模型发现: 扫描用户模型目录，识别 .gguf 文件。
+2. 模型安装: 支持从 HuggingFace/ModelScope 等市场下载模型。
+3. 模型启动: 构建 llama-server 启动参数（上下文窗口、GPU 层数、线程数等），启动子进程。
+4. 健康监控: 定期检查 llama-server 的 /health 端点。
+5. 自动重试: 模型加载失败时自动重试，支持指数退避。
+6. GPU 检测: 通过 nvidia-smi 获取 GPU 信息，用于设备选择和 CUDA 后端验证。
+8.4 渠道与调度运行时 集成
+本地推理组件 模型可作为 渠道与调度运行时 的 Provider 接入：
+通过 LlamaCpp渠道与调度运行时Binding 评估模型是否满足 渠道与调度运行时 最低上下文窗口要求（LLAMACPP_OPENCLAW_MIN_CONTEXT_WINDOW）。
+自动将运行中的 本地推理组件 模型注册为 渠道与调度运行时 的 llamacpp Provider。
+
+
+9. 技能与扩展子系统
+9.1 技能体系架构
+技能（Skills）是扩展 Agent 能力边界的核心机制。每个技能是一个独立的扩展包，包含：
+SKILL.md — 技能定义文件（名称、描述、触发条件、提示词指令）。
+可执行代码 — 根据技能类型可能包含 Node.js/Python 脚本。
+9.2 技能目录结构
+SKILLs/
+├── skills.config.json         # 全局技能配置（启用/禁用、排序）
+├── docx/                      # Word 文档技能
+├── xlsx/                      # Excel 技能
+├── pptx/                      # PowerPoint 技能
+├── imap-smtp-email/           # 邮件技能
+├── web-search/                # Web 搜索技能
+├── tech-news/                 # 技术新闻技能
+└── ...
+9.3 技能生命周期管理
+[发现] -> [加载] -> [安全扫描] -> [启用/禁用] -> [运行时路由]
+  |         |           |              |               |
+  v         v           v              v               v
+SKILLs/  解析        安全检查      配置控制       Agent 自动
+目录     SKILL.md    (skill-       (skills.      选择匹配
+                     Security/)    config.json)   技能
+9.4 技能安全扫描 (skillSecurity/)
+安装技能前执行多维度安全扫描：
+代码模式检测：检查危险命令、文件操作、网络请求等模式。
+依赖分析：扫描 package.json 依赖是否有已知漏洞。
+权限评估：评估技能需要的系统权限等级。
+安全报告：生成 SkillSecurityReport，包含 SecurityReportAction 建议。
+9.5 MCP 协议集成
+MCP (Model Context Protocol) 支持 Agent 接入外部工具与数据源：
+McpServerManager: 管理 MCP 服务配置与连接。
+McpBridgeServer: 实现 MCP 桥接，将本地 MCP 服务暴露给 渠道与调度运行时。
+mcpConnectionProbe: 探测 MCP 服务器连接可用性。
+mcpCommandValidation: 验证 MCP 服务命令配置的有效性。
+MCP 市场: 从远程市场获取可用的 MCP 服务模板。
+
+
+10. IM即时通讯集成子系统
+IM 子系统位于 src/main/im/，在前端中不设独立主导航视图，仅通过 Settings 面板中的 "IM" 标签页进行配置管理。
+10.1 网关架构
+IM 子系统位于 src/main/im/，通过统一的网关管理器协调多渠道消息处理：
+IMGatewayManager (imGatewayManager.ts，约 87KB)
+├── IM 实例生命周期管理
+├── 消息接收与分发
+├── 消息回复与重试
+├── 配对认证流程
+├── 媒体文件处理
+└── 定时任务处理器
+    │
+    ├── DingTalk (钉钉)      -- @dingtalk-real-ai/dingtalk-connector
+    ├── Feishu/Lark (飞书)   -- @larksuite/openclaw-lark
+    ├── WeCom (企业微信)     -- @wecom/wecom-openclaw-plugin
+    ├── WeChat (微信)        -- @tencent-weixin/openclaw-weixin
+    └── QQ (腾讯QQ)          -- 内置实现
+10.2 IM消息处理流程
+外部消息 -> IM SDK -> IMGatewayManager -> imCoworkHandler -> CoworkRuntime -> Agent 处理
+                                                                      |
+                                                                      v
+用户接收 <- IM SDK <- IMGatewayManager <- imCoworkHandler <- Agent 响应
+10.3 核心模块
+
+10.4 支持的 IM 平台
+前端 IM 配置界面通过 getVisibleIMPlatforms() 根据语言环境过滤可见平台。中文环境下，仅展示 region: 'china' 平台；英文环境下展示全部平台。当前中文环境可见平台如下：
+
+
+
+11. 数据持久化设计
+11.1 存储架构
+系统采用混合存储策略：
+
+11.2 SQLite 数据库表结构
+数据库文件: <userData>/xiaoruan.sqlite
+ 
+表:
+  kv               -- 通用键值存储
+  cowork_sessions  -- 会话记录
+  cowork_messages  -- 消息记录
+11.3 数据库备份与恢复
+SqliteBackupManager 提供自动备份机制：
+启动健康检查：应用启动时检查数据库完整性。
+自动备份：定期创建数据库快照。
+故障恢复：数据库损坏时自动从最新快照恢复。
+备份保存位置：<userData>/backups/
+11.4 文件系统存储
+渠道与调度运行时 工作目录下的内存文件系统：
+<agent_workspace>/
+├── MEMORY.md          -- 长期记忆（偏好、决策、事实）
+├── USER.md            -- 用户档案
+├── SOUL.md            -- Agent 人格定义
+├── memory/
+│   ├── YYYY-MM-DD.md  -- 每日工作日志
+│   └── MEMORY.md      -- 策展的长期项目笔记
+└── skills.config.json -- 技能配置
+渠道与调度运行时MemoryFile 模块管理这些文件的读写，包括：
+addMemoryEntry() — 添加记忆条目
+readMemoryEntries() — 读取记忆条目
+searchMemoryEntries() — 搜索记忆
+updateMemoryEntry() — 更新记忆
+deleteMemoryEntry() — 删除记忆
+migrateSqliteToMemoryMd() — 从 SQLite 迁移记忆到 MD 文件
+
+
+12. 安全模型
+12.1 进程隔离
+
+12.2 IPC 安全
+所有 IPC 消息通过 Zod Schema 校验（schemas.ts）。
+消息大小与嵌套深度受严格限制。
+contextBridge 仅暴露最小必要 API 子集。
+12.3 技能安全
+安装前自动执行安全扫描（skillSecurity/）。
+指令级危险级别评估（commandSafety.ts）。
+删除命令检测（isDeleteCommand()）。
+12.4 API 通信安全
+HTTP 代理通过 coworkOpenAICompatProxy.ts 实现，提供 OpenAI 兼容的 API 端点。
+令牌代理通过 openclawTokenProxy.ts 实现，管理 API 密钥的安全传递。
+系统代理支持（systemProxy.ts），可配置系统级 HTTP/HTTPS 代理。
+
+
+13. 构建与部署架构
+13.1 构建流程
+[源代码] --(TypeScript 编译)--> [编译产物]
+    |                               |
+    v                               v
+[Preload 编译]                 [Vite 打包]
+(electron-tsconfig.json)      (vite.config.ts)
+    |                               |
+    v                               v
+[Electron Main 代码] --+
+                        +--> [electron-builder]
+[Vite Renderer 产物] --+       |
+                                v
+                        [平台安装包]
+                        .dmg / .exe / .AppImage
+13.2 关键构建步骤
+1. TypeScript 编译 (compile:electron): 编译 Electron 主进程代码，输出到 dist-electron/。
+2. Vite 打包 (build:vite): 打包渲染进程代码，输出到 dist/。
+3. 技能构建 (build:skills): 编译技能 TypeScript 代码，安装技能依赖。
+4. 渠道与调度运行时 运行时构建 (openclaw:runtime:*): 从 GitHub 仓库克隆、编译 渠道与调度运行时。
+5. 本地推理组件 运行时准备 (llamacpp:runtime:*): 下载或编译对应平台的 本地推理组件 运行时。
+6. Python 运行时准备 (setup:python-runtime): 准备嵌入的 Python 运行时。
+7. electron-builder 打包: 组装最终安装包。
+13.3 平台构建产物
+
+13.4 渠道与调度运行时 构建管道
+渠道与调度运行时 运行时构建是一个多步骤管道：
+1. ensure-openclaw-version   -- 检查/检出指定版本
+2. apply-openclaw-patches    -- 应用补丁文件
+3. run-build-openclaw-runtime -- 编译特定平台运行时
+4. sync-openclaw-runtime      -- 同步到项目资源目录
+5. bundle-openclaw-gateway    -- 打包 Gateway 代码
+6. ensure-openclaw-plugins    -- 安装/更新插件
+7. sync-local-extensions      -- 同步本地扩展
+8. precompile-extensions      -- 预编译扩展
+9. install-channel-deps       -- 安装渠道依赖
+10. prune-runtime             -- 清理冗余文件
+
+
+14. 附录
+14.1 关键配置常量
+
+14.2 依赖关系图（核心模块）
+main.ts
+├── SqliteStore
+├── CoworkStore ──────────> SqliteStore
+├── SkillManager ────────> SqliteStore, skillSecurity
+├── SkillServices
+├── McpStore ────────────> SqliteStore
+├── McpServerManager ────> McpBridgeServer, mcpConnectionProbe
+├── 渠道与调度运行时EngineManager > gatewayLogRotation, openclawLocalExtensions
+├── 渠道与调度运行时ConfigSync ───> claudeSettings, openclawAgentModels
+├── LlamaCppManager ──────> llamacppBackendManager, LlamaCppClient,
+│                          llamacppModelInstallation, llamacppServe
+├── IMGatewayManager ─────> imCoworkHandler, imChatHandler, imStore
+└── CoworkEngineRouter ───> 渠道与调度运行时RuntimeAdapter, 统一 Agent 执行内核RuntimeAdapter
+14.3 文件规模统计
+基于实际源码扫描的主要文件规模：
+
+
+
+
+15. 当前定制版边界与编程工作台
+模型配置由 AISphereService 统一管理。连接时先校验平台身份和模型目录，只收录运行中的平台模型；切换平台地址前必须停止运行中的任务。
+统一 Agent 执行内核处理 Work、Chat、Channel 和 Cron。渠道与定时任务组件只负责传输、触发、投递、并发控制和活动记录，不重复实现 Agent 会话状态。
+编程工作台通过 codingAgent 模块管理工作区、任务、泳道、外部 Agent Profile、权限、交接和 Git 操作。内置 Agent 使用应用模型配置；外部 Agent 通过 ACP 适配器运行，账号、模型和配置不跨边界注入。
+应用数据目录使用 XiaoruanAgent，SQLite 文件名为 xiaoruan.sqlite；旧产品目录和数据库不迁移、不读取。
+层级
+技术选型
+版本要求
+桌面框架
+Electron
+>= 40.2.1
+前端框架
+React + TypeScript
+React 19.2.x, TypeScript 5.7.x
+状态管理
+Redux Toolkit
+2.2.x
+UI 组件库
+shadcn/ui (Radix UI) + Tailwind CSS
+Tailwind 3.4.x
+数据库
+better-sqlite3
+12.8.0
+构建工具
+Vite + electron-builder
+Vite 5.1.x
+本地推理
+本地推理组件
+b9244 release
+Agent 引擎
+渠道与调度运行时 + 统一 Agent 执行内核 (in-process)
+渠道与调度运行时 v2026.4.14
+运行环境
+Node.js
+>= 24, < 25
+进程
+职责
+Node.js 集成
+隔离策略
+**Main Process**
+统一 Agent 执行内核
+是
+操作系统进程边界
+**Renderer Process**
+UI 渲染、用户交互、业务逻辑、通过 IPC 与主进程通信
+否（通过 preload 桥接）
+contextIsolation + nodeIntegration: false
+Slice
+职责
+关键状态
+coworkSlice
+Cowork 会话与消息流
+sessions, messages, streaming, pendingPermissions, config
+modelSlice
+模型选择与可用模型列表
+availableModels, defaultSelectedModel
+skillSlice
+技能启用状态
+skills, activeSkillIds, marketplaceItems
+mcpSlice
+MCP 配置状态
+servers
+imSlice
+IM 集成配置
+instances
+agentSlice
+Agent 实例管理
+currentAgentId, agents
+artifactSlice
+Artifact 渲染状态
+artifacts
+scheduledTaskSlice
+定时任务管理
+tasks
+quickActionSlice
+快速操作
+selection
+workspaceSlice
+工作空间管理
+workspaces, currentWorkspaceId
+服务
+核心职责
+CoworkService
+会话启动/继续/停止、消息流监听、权限请求处理
+ApiService
+HTTP 请求代理
+SkillService
+技能列表、启用/禁用、安装、市场获取
+McpService
+MCP 服务器 CRUD、连接测试
+ImService
+IM 实例配置管理
+WorkspaceService
+工作空间加载与切换
+ScheduledTaskService
+定时任务 CRUD
+ConfigService
+应用配置读写
+I18nService
+多语言支持
+ThemeService
+主题切换
+ArtifactDetectionService
+Artifact 内容检测与解析
+事件
+触发时机
+数据载荷
+message
+Agent 生成新消息时
+sessionId, CoworkMessage
+messageUpdate
+消息内容增量更新时
+sessionId, messageId, content, metadata
+permissionRequest
+Agent 请求工具执行权限时
+sessionId, PermissionRequest
+complete
+会话回合完成时
+sessionId, claudeSessionId
+error
+发生错误时
+sessionId, CoworkError
+sessionStopped
+会话被停止时
+sessionId
+平台
+资产文件名
+macOS ARM64
+llama-{tag}-bin-macos-arm64.tar.gz
+macOS x64
+llama-{tag}-bin-macos-x64.tar.gz
+Windows x64
+llama-{tag}-bin-win-cpu-x64.zip
+Windows x64 CUDA
+llama-{tag}-bin-win-cuda-12.4-x64.zip
+Windows ARM64
+llama-{tag}-bin-win-cpu-arm64.zip
+Linux x64
+llama-{tag}-bin-ubuntu-x64.tar.gz
+Linux ARM64
+llama-{tag}-bin-ubuntu-arm64.tar.gz
+模块
+文件
+职责
+IMGatewayManager
+imGatewayManager.ts
+网关总控，统一管理所有 IM 渠道
+IMCoworkHandler
+imCoworkHandler.ts
+IM 消息到 Cowork 会话的转换与路由
+IMChatHandler
+imChatHandler.ts
+简单聊天模式处理
+IMStore
+imStore.ts
+IM 实例配置的持久化存储
+IMPairingStore
+imPairingStore.ts
+IM 配对认证流程管理
+IMReplyGuard
+imReplyGuard.ts
+防止重复回复的保护机制
+IMMediaInstruction
+imMediaInstruction.ts
+媒体文件处理指令
+IMScheduledTaskHandler
+imScheduledTaskHandler.ts
+IM 渠道的定时任务处理
+平台
+插件包
+实现方式
+企业微信 (WeCom)
+@wecom/wecom-openclaw-plugin
+渠道与调度运行时 插件
+飞书 (Feishu/Lark)
+@larksuite/openclaw-lark
+渠道与调度运行时 插件
+钉钉 (DingTalk)
+@dingtalk-real-ai/dingtalk-connector
+渠道与调度运行时 插件
+微信 (WeChat)
+@tencent-weixin/openclaw-weixin
+渠道与调度运行时 插件
+QQ
+内置实现
+主进程直接集成
+存储类型
+技术方案
+用途
+SQLite 数据库
+better-sqlite3 (同步 API)
+KV 键值对、Cowork 会话与消息、IM 实例配置
+文件系统
+Node.js fs 模块
+渠道与调度运行时 工作目录、技能文件、模型文件、内存文件
+内存缓存
+进程内对象
+Redux Store、运行时状态、连接池
+安全措施
+实现
+Context Isolation
+contextIsolation: true，渲染进程无法直接访问 Node.js API
+Node.js Integration
+渲染进程禁用 (nodeIntegration: false)
+Web Security
+webSecurity: true，同源策略生效
+Chromium Sandbox
+Windows 下显式禁用 (--no-sandbox)，因管理员运行时无法降权会导致 GPU 进程启动失败
+内容安全策略
+通过 HTTP Headers 配置
+远程内容
+仅加载本地资源
+平台
+命令
+产物格式
+macOS
+dist:mac
+.dmg
+Windows x64 (Lite)
+dist:win:lite
+.exe (NSIS)
+Windows x64 (Full)
+dist:win:full
+.exe (NSIS，含 CUDA 后端)
+Linux
+dist:linux
+.AppImage
+常量
+值
+说明
+APP_NAME
+晓软智能体
+应用名称
+DB_FILENAME
+xiaoruan.sqlite
+数据库文件名
+DEFAULT_GATEWAY_PORT
+18789
+渠道与调度运行时 默认端口
+GATEWAY_PORT_SCAN_LIMIT
+80
+端口扫描范围
+GATEWAY_BOOT_TIMEOUT_MS_COLD
+600,000ms
+冷启动超时
+GATEWAY_BOOT_TIMEOUT_MS_WARM
+300,000ms
+预热启动超时
+GATEWAY_MAX_RESTART_ATTEMPTS
+5
+最大重启次数
+COWORK_SESSION_PAGE_SIZE
+(imported)
+会话列表分页大小
+COWORK_MESSAGE_PAGE_SIZE
+(imported)
+消息列表分页大小
+MIN_APP_WINDOW_WIDTH
+(imported)
+最小窗口宽度
+MIN_APP_WINDOW_HEIGHT
+(imported)
+最小窗口高度
+BRIDGE_MAX_MESSAGES
+20
+桥接最大消息数
+BRIDGE_MAX_MESSAGE_CHARS
+1200
+桥接消息最大字符数
+文件
+大小
+角色
+main/main.ts
+264KB
+主进程入口
+main/libs/agentEngine/openclawRuntimeAdapter.ts
+240KB
+渠道与调度运行时 运行时适配器
+renderer/components/Settings.tsx
+222KB
+设置面板 UI
+main/skillManager.ts
+103KB
+技能管理器
+main/libs/coworkOpenAICompatProxy.ts
+92KB
+OpenAI 兼容代理
+main/libs/openclawEngineManager.ts
+87KB
+渠道与调度运行时 引擎管理
+main/im/imGatewayManager.ts
+87KB
+IM 网关管理器
+main/coworkStore.ts
+76KB
+Cowork 存储
+main/libs/openclawConfigSync.ts
+112KB
+渠道与调度运行时 配置同步
+main/libs/agentEngine/piRuntimeAdapter.ts
+59KB
+统一 Agent 执行内核 运行时适配器
+main/libs/llamacppManager.ts
+54KB
+本地推理组件 管理器
+main/libs/llamacppBackendManager.ts
+56KB
+本地推理组件 后端管理
+main/im/imStore.ts
+57KB
+IM 存储
+renderer/components/cowork/CoworkSessionDetail.tsx
+54KB
+会话详情 UI
+renderer/components/cowork/CoworkView.tsx
+37KB
+Cowork 主视图
+renderer/services/api.ts
+36KB
+API 服务
+renderer/services/cowork.ts
+34KB
+Cowork 服务
+renderer/services/i18n.ts
+265KB
+国际化资源
+main/i18n.ts
+41KB
+主进程国际化
