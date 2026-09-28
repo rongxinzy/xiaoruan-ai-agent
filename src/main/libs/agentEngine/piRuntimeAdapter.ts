@@ -966,12 +966,24 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             const runId = this.activeSessions.get(sessionId)?.workbenchRunId ?? workbenchRunId;
             if (!runId || !this.workbenchTaskService)
               throw new Error('No active workbench run is available.');
-            setWorkbenchOutputRequirements(
-              this.workbenchTaskService.repository,
-              sessionId,
-              runId,
-              requirements,
-            );
+            try {
+              setWorkbenchOutputRequirements(
+                this.workbenchTaskService.repository,
+                sessionId,
+                runId,
+                requirements,
+              );
+            } catch (error) {
+              // The gate keeps denying every tool call while no contract is
+              // committed, so the failure has to be remembered: otherwise the
+              // next denial repeats "commit the contract" with no hint that the
+              // previous attempt was rejected (issue #116).
+              this.workbenchTaskService.recordOutputContractFailure(
+                runId,
+                error instanceof Error ? error.message : String(error),
+              );
+              throw error;
+            }
           }),
         );
       }

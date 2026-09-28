@@ -77,12 +77,18 @@ const MAX_RESULT_NODES = 500;
 const MAX_RESULT_COLLECTION_ENTRIES = 50;
 const MAX_RESULT_STRING_LENGTH = 4_000;
 const MAX_RESULT_SERIALIZED_LENGTH = 64_000;
+/** Consecutive output-contract denials before a run is stopped instead of spinning. */
+const MAX_OUTPUT_CONTRACT_DENIALS = 4;
 
 export class WorkbenchTaskService extends EventEmitter {
   readonly repository: WorkbenchTaskRepository;
   readonly measurement: HarnessMeasurementService;
   readonly productionLoop: ProductionLoopService;
   private readonly pendingApprovals = new Map<string, PendingApproval>();
+  /** Last set_task_output failure per run, so the gate can explain what to fix. */
+  private readonly lastOutputContractErrors = new Map<string, string>();
+  /** Consecutive output-contract denials per run, so a stuck run can be stopped. */
+  private readonly outputContractDenials = new Map<string, number>();
 
   constructor(
     db: Database.Database,
@@ -414,6 +420,7 @@ export class WorkbenchTaskService extends EventEmitter {
       }
     }
     this.emitChanged(detail.task);
+    this.forgetRunScopedState(run.id);
     return detail;
   }
 
@@ -510,6 +517,7 @@ export class WorkbenchTaskService extends EventEmitter {
     });
     this.resolvePendingApprovals(expiredApprovals, reason);
     this.emitChanged(this.requireTask(task.id));
+    this.forgetRunScopedState(run.id);
   }
 
   failRun(sessionId: string, failure: WorkbenchJsonObject): void {
@@ -529,6 +537,7 @@ export class WorkbenchTaskService extends EventEmitter {
       });
     });
     this.emitChanged(this.requireTask(task.id));
+    this.forgetRunScopedState(run.id);
   }
 
   cancelRun(sessionId: string, runId: string): void {
@@ -543,6 +552,37 @@ export class WorkbenchTaskService extends EventEmitter {
       });
     });
     this.emitChanged(this.requireTask(task.id));
+    this.forgetRunScopedState(run.id);
+  }
+
+  /**
+   * Records why the last set_task_output call failed for a run. The gate below
+   * reports this back, so a model that already tried to commit the contract
+   * learns what to fix instead of retrying other tools forever.
+   */
+  recordOutputContractFailure(runId: string, message: string): void {
+    const trimmed = message.trim();
+    if (trimmed) this.lastOutputContractErrors.set(runId, trimmed);
+  }
+
+  private forgetRunScopedState(runId: string): void {
+    this.lastOutputContractErrors.delete(runId);
+    this.outputContractDenials.delete(runId);
+  }
+
+  /**
+   * Counts one output-contract denial and returns the reason for it: the exact
+   * failure of the previous commit attempt when there was one, otherwise the
+   * instruction with a copyable example.
+   */
+  private recordOutputContractDenial(runId: string): string {
+    const denials = (this.outputContractDenials.get(runId) ?? 0) + 1;
+    this.outputContractDenials.set(runId, denials);
+    const example = '{"requirements":[{"mode":"text","formats":[]}]}';
+    const lastError = this.lastOutputContractErrors.get(runId);
+    return lastError
+      ? `The output contract is not committed: the previous set_task_output call failed with "${lastError}". Fix that call, then continue — for example ${example} for a written answer.`
+      : `Before executing tools, call set_task_output to declare what this task must deliver — for example ${example} for a written answer.`;
   }
 
   async authorizeToolCall(input: {
@@ -567,7 +607,16 @@ export class WorkbenchTaskService extends EventEmitter {
       !task.contract.outputRequirements?.length &&
       riskLevel !== WorkbenchApprovalRiskLevel.ReadOnly
     ) {
-      return { allow: false, reason: 'Commit the requested outputs with set_task_output before executing this task.' };
+      const reason = this.recordOutputContractDenial(run.id);
+      if ((this.outputContractDenials.get(run.id) ?? 0) >= MAX_OUTPUT_CONTRACT_DENIALS) {
+        this.failRun(input.sessionId, {
+          code: 'output_contract_uncommitted',
+          stage: 'contract',
+          message:
+            'Stopped the run: the output contract was never committed, so no tool call could execute.',
+        });
+      }
+      return { allow: false, reason };
     }
     if (riskLevel === WorkbenchApprovalRiskLevel.ReadOnly) {
       this.repository.appendRunEvent(run.id, WorkbenchRunEventType.ToolRead, {

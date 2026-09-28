@@ -15,8 +15,11 @@ const internalControlTools = new Set([
 const reversibleTools = new Set(['write', 'edit']);
 const irreversibleShellPattern =
   /(?:\brm\b|\brmdir\b|\bdel\b|\bremove-item\b|\bformat\b|\bshutdown\b|\bgit\s+push\b|\bgit\s+reset\s+--hard\b|\bdrop\s+(?:table|database)\b)/i;
+// Read-only commands, optionally piped into read-only filters, so
+// `ls -lt | head -20` qualifies. Redirection, command substitution and
+// chaining stay excluded.
 const safeShellCommandPattern =
-  /^(?:\s*(?:cd\s+[^;&|]+\s*&&\s*)?(?:pwd|ls(?:\s+[-\w./]+)?|find\s+[-\w./'"\s]+|grep\s+[-\w./'"\s]+|rg\s+[-\w./'"\s]+|python(?:3)?\s+--version|node\s+--version)\s*)$/i;
+  /^(?:\s*(?:cd\s+[^;&|<>]+\s*&&\s*)?(?:pwd|ls(?:\s+[-\w./]+)?|find\s+[-\w./'"\s]+|grep\s+[-\w./'"\s]+|rg\s+[-\w./'"\s]+|python(?:3)?\s+--version|node\s+--version))(?:\s*\|\s*(?:head|tail|wc|sort|uniq|cat|nl|cut)\b[-\w./\s]*)*\s*$/i;
 
 const stableValue = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(stableValue);
@@ -44,6 +47,7 @@ export function classifyWorkbenchToolRisk(
   if (reversibleTools.has(normalizedName)) return WorkbenchApprovalRiskLevel.Reversible;
   if (normalizedName === 'bash' || normalizedName === 'shell') {
     const command = typeof input.command === 'string' ? input.command : JSON.stringify(input);
+    if (isSafeShellCommand(command)) return WorkbenchApprovalRiskLevel.ReadOnly;
     return irreversibleShellPattern.test(command)
       ? WorkbenchApprovalRiskLevel.Irreversible
       : WorkbenchApprovalRiskLevel.Unknown;
