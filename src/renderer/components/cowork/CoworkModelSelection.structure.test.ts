@@ -18,7 +18,7 @@ test('validates selection before either starting or continuing a session', () =>
   expect(
     view.match(/if \(!validateModelSelection\(\) \|\| !directChatModel\) return false;/g),
   ).toHaveLength(2);
-  const submit = input.slice(input.indexOf('const handleSubmit ='));
+  const submit = input.slice(input.indexOf('const submitPrompt ='));
   expect(submit.indexOf('isPatchingModel')).toBeLessThan(
     submit.indexOf('validateModelSelection()'),
   );

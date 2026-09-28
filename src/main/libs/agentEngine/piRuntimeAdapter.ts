@@ -38,6 +38,10 @@ import {
 } from '../../../shared/cowork/pendingMessageQueue';
 import { CoworkSessionMode } from '../../../shared/cowork/constants';
 import {
+  assertCoworkSubmissionContent,
+  hasVisiblePromptContent,
+} from '../../../shared/cowork/submissionContent';
+import {
   CoworkInterruptionCause,
   type CoworkSessionInterruption,
 } from '../../../shared/cowork/interruption';
@@ -746,11 +750,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     prompt: string,
     options: PiStartOptions = {},
   ): Promise<void> {
-    const hasContent =
-      prompt.trim() || (options.imageAttachments && options.imageAttachments.length > 0);
-    if (!hasContent) {
-      throw new Error('Prompt is required.');
-    }
+    assertCoworkSubmissionContent({ prompt, imageAttachments: options.imageAttachments });
     const expertIds = normalizeSingleExpertIds(options.expertIds);
 
     if (this.activeSessions.has(sessionId) || this.initializingSessions.has(sessionId)) {
@@ -1482,6 +1482,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     prompt: string,
     options: PiContinueOptions = {},
   ): Promise<void> {
+    assertCoworkSubmissionContent({ prompt, imageAttachments: options.imageAttachments });
     const explicitExpertIds = normalizeSingleExpertIds(options.expertIds);
     const nextUnattended = options.unattended === true;
     const active = this.activeSessions.get(sessionId);
@@ -2134,7 +2135,8 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       return { success: false, error: 'The Work session is not running.' };
     }
     const normalizedText = text.trim();
-    if (!normalizedText) return { success: false, error: 'Message text is required.' };
+    if (!hasVisiblePromptContent(normalizedText))
+      return { success: false, error: 'Message text is required.' };
     // IPC enqueue already persists; IM/internal callers still pass base64 here.
     const storedImages = this.persistImageAttachments(sessionId, imageAttachments);
     const item = this.pendingMessageQueue.enqueue(
@@ -2159,7 +2161,8 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       return { success: false, error: 'Pending message queue is only available in Work sessions.' };
     }
     const normalizedText = text.trim();
-    if (!normalizedText) return { success: false, error: 'Message text is required.' };
+    if (!hasVisiblePromptContent(normalizedText))
+      return { success: false, error: 'Message text is required.' };
     const item = this.pendingMessageQueue.update(sessionId, itemId, normalizedText);
     if (!item) return { success: false, error: 'Pending message was not found.' };
     this.emitQueueUpdated(sessionId);

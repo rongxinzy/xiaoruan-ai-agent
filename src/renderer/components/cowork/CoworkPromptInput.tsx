@@ -18,6 +18,10 @@ import { useDispatch, useSelector } from 'react-redux';
 
 import { CoworkPermissionMode, CoworkSessionMode } from '../../../shared/cowork/constants';
 import {
+  hasCoworkSubmissionContent,
+  hasVisiblePromptContent,
+} from '../../../shared/cowork/submissionContent';
+import {
   ProductionLoopMode,
   type ProductionLoopMode as ProductionLoopModeValue,
 } from '../../../shared/productionLoop';
@@ -52,6 +56,7 @@ import PromptPlusMenu from './PromptPlusMenu';
 import { ResumeTaskContextBadge } from './ResumeTaskContextBadge';
 import { resolveInitialSelectedExpertIds } from './resolveInitialSelectedExpertIds';
 import { useCoworkModelSelection } from './useCoworkModelSelection';
+import { usePromptSubmissionLock } from './usePromptSubmissionLock';
 
 // CoworkAttachment is aliased from the Redux-persisted DraftAttachment type
 // so that attachment state survives view switches (cowork ↔ skills, etc.)
@@ -443,7 +448,7 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
       }
     }, [value, draftPrompt, dispatch, draftKey]);
 
-    const handleSubmit = useCallback(async () => {
+    const submitPrompt = useCallback(async () => {
       if (showFolderSelector && !workingDirectory?.trim()) {
         setShowFolderRequiredWarning(true);
         if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
@@ -454,7 +459,7 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
         return;
       }
 
-      const trimmedValue = value.trim();
+      const trimmedValue = hasVisiblePromptContent(value) ? value.trim() : '';
       if (
         (!trimmedValue && attachments.length === 0 && !resumeTaskActive) ||
         (isStreaming && !canQueueWhileStreaming) ||
@@ -559,6 +564,7 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
       const attachmentLines = attachments
         .filter(
           a =>
+            hasVisiblePromptContent(a.path) &&
             !a.path.startsWith('inline:') &&
             !(a.isImage && (Boolean(a.dataUrl) || visionImageNames.has(a.name))),
         )
@@ -569,6 +575,25 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
           ? `${attachmentLines}\n\n${trimmedValue}`
           : trimmedValue
         : attachmentLines;
+
+      if (
+        !resumeTaskActive &&
+        !hasCoworkSubmissionContent({ prompt: finalPrompt, imageAttachments: imageAtts })
+      ) {
+        // 2026/09/28 之前这里是静默 return：按钮看起来可用，点下去却什么都不发生。
+        const unusableImage = attachments.some(a => a.isImage || isImagePath(a.path));
+        window.dispatchEvent(
+          new CustomEvent('app:showToast', {
+            detail: {
+              message: i18nService.t(
+                unusableImage ? 'imageReadError' : 'coworkSubmitEmptyContent',
+              ),
+              isError: true,
+            },
+          }),
+        );
+        return;
+      }
 
       if (imageAtts.length > 0) {
         console.log('[CoworkPromptInput] handleSubmit: passing imageAtts to onSubmit', {
@@ -638,6 +663,8 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
       canQueueWhileStreaming,
       resumeTaskActive,
     ]);
+
+    const handleSubmit = usePromptSubmissionLock(submitPrompt);
 
     const handleManageSkills = useCallback(() => {
       if (onManageSkills) {
@@ -1034,7 +1061,8 @@ const CoworkPromptInputInner = React.forwardRef<CoworkPromptInputRef, CoworkProm
     const isPlusToolbar = !remoteManaged;
     const isWorkVariant = showFolderSelector || showPermissionModeSelector;
     // 2026/09/15 lixiang  Empty prompt: dim submit, not-allowed cursor, and ask-user tip
-    const isSubmitEmpty = !value.trim() && attachments.length === 0 && !resumeTaskActive;
+    const isSubmitEmpty =
+      !hasVisiblePromptContent(value) && attachments.length === 0 && !resumeTaskActive;
     const showEmptySubmitHint = isSubmitEmpty && !isStreaming;
     return (
       <div ref={promptRootRef} className="relative">
