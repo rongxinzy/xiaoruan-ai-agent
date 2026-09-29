@@ -1,9 +1,13 @@
 import { Button } from '@shared/components/ui/button';
 import { ExternalLink, LoaderCircle } from 'lucide-react';
-import React from 'react';
+import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { toast } from 'sonner';
 
+import { isArtifactFileAvailable } from '@/services/artifactAvailability';
+import { resolveFilePath } from '@/services/artifactFileLoader';
 import { i18nService } from '@/services/i18n';
+import { selectCurrentSession } from '@/store/selectors/coworkSelectors';
 import {
   closePanel,
   selectArtifact,
@@ -176,30 +180,49 @@ interface ArtifactPreviewCardProps {
   isLoading?: boolean;
 }
 
-const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact, isLoading = false }) => {
+const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({
+  artifact,
+  isLoading = false,
+}) => {
   const dispatch = useDispatch();
   const isPanelOpen = useSelector(selectIsPanelOpen);
   const selectedArtifact = useSelector(selectSelectedArtifact);
+  const currentSession = useSelector(selectCurrentSession);
+  const cwd = currentSession?.id === artifact.sessionId ? currentSession.cwd : undefined;
+  const [checking, setChecking] = useState(false);
+  const busy = isLoading || checking;
 
   // 2026/09/20 lixiang  右侧预览面板 toggle：同文件已打开则关闭，否则打开/切换（issue #805）
-  const handleOpenPreview = () => {
+  const handleOpenPreview = async () => {
+    if (busy) return;
     if (isPanelOpen && selectedArtifact?.id === artifact.id) {
       dispatch(closePanel());
       return;
     }
-    dispatch(selectArtifact(artifact.id));
+    setChecking(true);
+    try {
+      if (!(await isArtifactFileAvailable(artifact, cwd))) {
+        toast.error(t('fileNotFound'));
+        return;
+      }
+      dispatch(selectArtifact(artifact.id));
+    } finally {
+      setChecking(false);
+    }
   };
 
   // 2026/09/20 lixiang  仅文件名打开所在文件夹；阻止冒泡，避免触发整卡预览 toggle（issue #805）
-  const handleOpenLocalFolder = async (
-    event: React.MouseEvent | React.KeyboardEvent,
-  ) => {
+  const handleOpenLocalFolder = async (event: React.MouseEvent | React.KeyboardEvent) => {
     const path = artifact.filePath?.trim();
     if (!path) return;
     event.preventDefault();
     event.stopPropagation();
     try {
-      const result = await window.electron.shell.showItemInFolder(path);
+      if (!(await isArtifactFileAvailable(artifact, cwd))) {
+        toast.error(t('fileNotFound'));
+        return;
+      }
+      const result = await window.electron.shell.showItemInFolder(resolveFilePath(path, cwd));
       if (!result?.success) {
         console.error('[Artifact] Failed to show item in folder:', path, result?.error);
       }
@@ -220,8 +243,8 @@ const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact, isL
         type="button"
         variant="ghost"
         onClick={handleOpenPreview}
-        disabled={isLoading}
-        aria-busy={isLoading}
+        disabled={busy}
+        aria-busy={busy}
         className="flex min-w-0 flex-1 items-center justify-start gap-3 px-0 hover:bg-transparent"
       >
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -229,7 +252,7 @@ const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact, isL
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col items-start text-left">
-          {canOpenLocal && !isLoading ? (
+          {canOpenLocal && !busy ? (
             // 文件名独立命中：阻止冒泡到整卡 toggle，只打开本地文件夹
             <span
               role="link"
@@ -256,7 +279,7 @@ const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact, isL
         </div>
 
         <div className="flex shrink-0 items-center gap-1 text-sm font-medium text-primary">
-          {isLoading ? (
+          {busy ? (
             <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <>
