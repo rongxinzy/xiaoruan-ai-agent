@@ -4,7 +4,7 @@ import { DestructiveConfirmDialog } from '@shared/components/ui/destructive-conf
 import { Input } from '@shared/components/ui/input';
 import { Label } from '@shared/components/ui/label';
 import { useReducedMotion } from 'motion/react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -12,6 +12,10 @@ import { coworkService } from '../../services/cowork';
 import { i18nService } from '../../services/i18n';
 import { workspaceService } from '../../services/workspace';
 import { store, type RootState } from '../../store';
+import {
+  selectCoworkSessions,
+  selectCurrentSessionId,
+} from '../../store/selectors/coworkSelectors';
 import {
   clearLoadingSessionId,
   setCurrentSession,
@@ -25,6 +29,7 @@ import {
   type AnimatedFolderPlusIconHandle,
 } from '../icons/AnimatedFolderPlusIcon';
 import type { AgentSidebarTaskNode, WorkspaceSidebarNode } from './types';
+import { isProjectWorkspaceActive, isSectionWorkspaceActive } from './activeWorkspace';
 import { useWorkspaceSidebarState } from './useWorkspaceSidebarState';
 import WorkspaceTreeNode from './WorkspaceTreeNode';
 
@@ -37,6 +42,7 @@ interface MyAgentSidebarTreeProps {
   onEnterBatchMode: (sessionId: string) => void;
   onVisibleSessionsChange?: (ids: string[]) => void;
   onDismissSearch?: () => void;
+  onCreateScheduledTask?: (workspace: WorkspaceSidebarNode) => void;
   workMode?: 'work' | 'chat';
   searchQuery?: string;
   searchCorpus?: CoworkSessionSummary[];
@@ -51,12 +57,19 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
   onEnterBatchMode,
   onVisibleSessionsChange,
   onDismissSearch,
+  onCreateScheduledTask,
   workMode = 'work',
   searchQuery = '',
   searchCorpus = [],
 }) => {
   const dispatch = useDispatch();
   const currentWorkspaceId = useSelector((state: RootState) => state.workspace.currentWorkspaceId);
+  const currentSessionId = useSelector(selectCurrentSessionId);
+  const sessions = useSelector(selectCoworkSessions);
+  const currentSession = useMemo(
+    () => sessions.find(session => session.id === currentSessionId) ?? null,
+    [sessions, currentSessionId],
+  );
   const {
     workspaceNodes,
     scheduledWorkspaceNodes,
@@ -202,7 +215,8 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
   };
 
   const handleRenameTask = async (task: AgentSidebarTaskNode, title: string) => {
-    if (await coworkService.renameSession(task.id, title)) patchTaskPreview(task.id, { title });
+    const renamedTitle = await coworkService.renameSession(task.id, title);
+    if (renamedTitle) patchTaskPreview(task.id, { title: renamedTitle });
   };
 
   const handleShareTask = async (task: AgentSidebarTaskNode) => {
@@ -303,7 +317,11 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
               workspace={workspace}
               isBatchMode={isBatchMode}
               selectedIds={selectedIds}
-              isActiveWorkspace={workspace.id === currentWorkspaceId}
+              isActiveWorkspace={isProjectWorkspaceActive(
+                currentSession,
+                workspace.id,
+                currentWorkspaceId,
+              )}
               onToggleExpanded={toggleExpanded}
               onSelectWorkspace={selectedWorkspace => void handleSelectWorkspace(selectedWorkspace)}
               onCreateTask={selectedWorkspace => void handleCreateTask(selectedWorkspace)}
@@ -343,10 +361,11 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
                 <WorkspaceTreeNode
                   key={`scheduled-${workspace.id}`}
                   workspace={workspace}
+                  isActiveWorkspace={isSectionWorkspaceActive(currentSession, workspace.id, true)}
                   isBatchMode={isBatchMode}
                   selectedIds={selectedIds}
                   onToggleExpanded={toggleScheduledExpanded}
-                  onCreateTask={() => undefined}
+                  onCreateTask={selectedWorkspace => onCreateScheduledTask?.(selectedWorkspace)}
                   onRemoveWorkspace={selectedWorkspace =>
                     setWorkspacePendingRemoval(selectedWorkspace)
                   }
@@ -360,7 +379,7 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
                   onRenameTask={handleRenameTask}
                   onToggleSelection={onToggleSelection}
                   onEnterBatchMode={task => onEnterBatchMode(task.id)}
-                  showCreateTask={false}
+                  showCreateTask={Boolean(onCreateScheduledTask)}
                 />
               ))}
             </div>

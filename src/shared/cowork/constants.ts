@@ -43,6 +43,21 @@ export const CoworkScheduledSessionTitlePrefix = {
   Legacy: 'Scheduled: ',
 } as const;
 
+/** Canonical stored title; the renderer localizes its prefix for display. */
+export const buildScheduledSessionTitle = (name: string): string =>
+  `${CoworkScheduledSessionTitlePrefix.Chinese}${name}`;
+
+export const stripScheduledSessionTitlePrefix = (title: string): string => {
+  const trimmed = title.trim();
+  const prefix = Object.values(CoworkScheduledSessionTitlePrefix).find(
+    candidate => trimmed.startsWith(candidate) || trimmed === candidate.trimEnd(),
+  );
+  return prefix ? trimmed.slice(prefix.length).trimStart() : trimmed;
+};
+
+export const normalizeRenamedSessionTitle = (title: string, isScheduled: boolean): string =>
+  isScheduled ? buildScheduledSessionTitle(stripScheduledSessionTitlePrefix(title)) : title;
+
 /**
  * Desktop permission mode for cowork sessions.
  * Ask: the agent requests authorization before acting (current behavior).
