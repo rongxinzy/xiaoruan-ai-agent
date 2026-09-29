@@ -10,7 +10,7 @@ import {
 import { Textarea } from '@shared/components/ui/textarea';
 import { cn } from '@shared/lib/utils';
 import { CalendarDays, Check, ListChecks, Plus, Star, Trash2 } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { TodoStatus, type Todo, type TodoList } from '../../../shared/todo';
 import { i18nService } from '../../services/i18n';
@@ -65,7 +65,9 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [dueError, setDueError] = useState('');
   const [remindError, setRemindError] = useState('');
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
 
+  // Background refreshes can replace the object without changing any saved detail.
   useEffect(() => {
     setTitle(todo.title);
     setNote(todo.note);
@@ -74,7 +76,7 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
     setListId(todo.listId ?? NO_LIST_VALUE);
     setDueError('');
     setRemindError('');
-  }, [todo]);
+  }, [todo.id, todo.title, todo.note, todo.dueAt, todo.remindAt, todo.listId]);
 
   const titleEmpty = !title.trim();
   const stepEmpty = !stepDraft.trim();
@@ -191,7 +193,9 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
           <Input
             value={title}
             onChange={event => setTitle(event.target.value)}
-            onBlur={() => {
+            onBlur={event => {
+              // Let the Save click submit once before its busy state disables the button.
+              if (event.relatedTarget === saveButtonRef.current) return;
               if (!titleEmpty) void saveDetails();
             }}
             aria-label={i18nService.t('todoTitleLabel')}
@@ -327,7 +331,8 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
             id="todo-note"
             value={note}
             onChange={event => setNote(event.target.value)}
-            onBlur={() => {
+            onBlur={event => {
+              if (event.relatedTarget === saveButtonRef.current) return;
               if (!titleEmpty) void saveDetails();
             }}
             placeholder={i18nService.t('todoNotePlaceholder')}
@@ -411,7 +416,9 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
                 disabled={stepEmpty}
                 onClick={() => void addStep()}
                 aria-label={i18nService.t('todoAddStep')}
-                title={stepEmpty ? i18nService.t('todoStepPlaceholder') : i18nService.t('todoAddStep')}
+                title={
+                  stepEmpty ? i18nService.t('todoStepPlaceholder') : i18nService.t('todoAddStep')
+                }
               >
                 <Plus />
               </Button>
@@ -449,8 +456,15 @@ const TodoTaskDetail: React.FC<TodoTaskDetailProps> = ({
             </Button>
           )}
           <Button
+            ref={saveButtonRef}
             type="button"
             onClick={() => void saveDetails(true)}
+            onBlur={() => {
+              // Keep autosave when keyboard navigation passes Save without activating it.
+              if (!isSaving && !titleEmpty && (title !== todo.title || note !== todo.note)) {
+                void saveDetails();
+              }
+            }}
             disabled={isSaving || titleEmpty}
             title={titleEmpty ? i18nService.t('todoTitleRequired') : undefined}
           >
