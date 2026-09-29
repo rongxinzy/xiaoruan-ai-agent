@@ -15,6 +15,7 @@ import { CodingActivity } from './CodingActivityView';
 import { CodingAgentWorkingIndicator } from './CodingAgentWorkingIndicator';
 import { CodingConversationTurnStatus } from './constants';
 import { type CodingConversationTurn as CodingConversationTurnModel } from './codingEventProjection';
+import { replaceLocalFileLinksWithLabels } from './codingMessageContent';
 
 interface CodingConversationTurnProps {
   isStreaming: boolean;
@@ -24,6 +25,8 @@ interface CodingConversationTurnProps {
   artifactsByMessageId?: ReadonlyMap<string, Artifact[]>;
   /** File artifacts keyed by the tool call that produced them. */
   artifactsByToolCallId?: ReadonlyMap<string, Artifact[]>;
+  /** Path-backed artifacts that are still being read from disk. */
+  loadingArtifactIds?: ReadonlySet<string>;
 }
 
 const TurnStatus = ({ turn }: { turn: CodingConversationTurnModel }) => {
@@ -58,6 +61,7 @@ const CodingConversationTurnComponent = ({
   turn,
   artifactsByMessageId,
   artifactsByToolCallId,
+  loadingArtifactIds,
 }: CodingConversationTurnProps) => (
   <section
     className="flex flex-col gap-3"
@@ -99,6 +103,7 @@ const CodingConversationTurnComponent = ({
             key={activity.id}
             activity={activity}
             artifacts={toolCallId ? artifactsByToolCallId?.get(toolCallId) : undefined}
+            loadingArtifactIds={loadingArtifactIds}
           />
         );
       })}
@@ -108,11 +113,17 @@ const CodingConversationTurnComponent = ({
         return (
           <Message key={message.id} from="assistant" className="animate-message-in">
             <MessageContent>
-              <MessageResponse isAnimating={isStreaming}>{message.content}</MessageResponse>
+              <MessageResponse isAnimating={isStreaming}>
+                {replaceLocalFileLinksWithLabels(message.content)}
+              </MessageResponse>
               {artifacts.length > 0 && (
                 <div className="flex flex-wrap gap-2 pt-2">
                   {artifacts.map(artifact => (
-                    <ArtifactPreviewCard key={artifact.id} artifact={artifact} />
+                    <ArtifactPreviewCard
+                      key={artifact.id}
+                      artifact={artifact}
+                      isLoading={loadingArtifactIds?.has(artifact.id) ?? false}
+                    />
                   ))}
                 </div>
               )}
@@ -128,10 +139,10 @@ const CodingConversationTurnComponent = ({
 
 const messageContentsEqual = (
   a:
-    | { id: string; content: string; createdAt: number; role: string }
+    | { id: string; content: string; createdAt: number; role: string; isFinalAnswer: boolean }
     | null,
   b:
-    | { id: string; content: string; createdAt: number; role: string }
+    | { id: string; content: string; createdAt: number; role: string; isFinalAnswer: boolean }
     | null,
 ): boolean =>
   a === b ||
@@ -140,7 +151,8 @@ const messageContentsEqual = (
     a.id === b.id &&
     a.content === b.content &&
     a.createdAt === b.createdAt &&
-    a.role === b.role);
+    a.role === b.role &&
+    a.isFinalAnswer === b.isFinalAnswer);
 
 const reasoningContentsEqual = (
   a: { id: string; content: string; createdAt: number } | null,
@@ -186,6 +198,7 @@ const conversationTurnPropsEqual = (
   prev.showWaitingIndicator === next.showWaitingIndicator &&
   prev.artifactsByMessageId === next.artifactsByMessageId &&
   prev.artifactsByToolCallId === next.artifactsByToolCallId &&
+  prev.loadingArtifactIds === next.loadingArtifactIds &&
   turnContentsEqual(prev.turn, next.turn);
 
 export const CodingConversationTurn = memo(
