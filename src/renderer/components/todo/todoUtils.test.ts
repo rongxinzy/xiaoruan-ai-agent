@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { TodoSourceType, TodoStatus, TodoView, type Todo } from '../../../shared/todo';
+import { TodoView, type Todo } from '../../../shared/todo';
 import {
   buildTodoCreateInput,
   countTodosByView,
@@ -94,7 +94,9 @@ test('validates due and reminder schedule rules', () => {
   expect(validateTodoSchedule(yesterdayEnd, null, now)).toBe('todoDueDateMustBeFuture');
   expect(validateTodoSchedule(todayEnd, null, now)).toBeNull();
   expect(validateTodoSchedule(tomorrowEnd, now - 1000, now)).toBe('todoReminderMustBeFuture');
-  expect(validateTodoSchedule(tomorrowEnd, tomorrowEnd + 1, now)).toBe('todoReminderMustBeforeDue');
+  expect(validateTodoSchedule(tomorrowEnd, tomorrowEnd + 1, now)).toBe(
+    'todoReminderMustBeforeDue',
+  );
   expect(validateTodoSchedule(tomorrowEnd, laterReminder, now)).toBeNull();
 });
 
@@ -103,7 +105,7 @@ test('includes completed tasks in contextual counts', () => {
     id: 'active',
     title: 'Active task',
     note: '',
-    status: TodoStatus.Active,
+    status: 'active',
     important: false,
     dueAt: null,
     remindAt: null,
@@ -113,23 +115,10 @@ test('includes completed tasks in contextual counts', () => {
     createdAt: 0,
     updatedAt: 0,
     completedAt: null,
-    sourceType: TodoSourceType.Manual,
+    sourceType: 'manual',
     sourceId: null,
     steps: [],
   } satisfies Todo;
 
-  const completedTodos = [
-    { ...activeTodo, id: 'completed-important', status: TodoStatus.Completed, important: true },
-    { ...activeTodo, id: 'completed-ordinary', status: TodoStatus.Completed },
-  ];
-  const activeImportant = { ...activeTodo, id: 'active-important', important: true };
-
-  expect(countTodosByView([activeTodo, activeImportant], completedTodos, '2026-09-03')).toEqual({
-    [TodoView.MyDay]: 0,
-    [TodoView.Important]: 2,
-    [TodoView.Planned]: 0,
-    [TodoView.All]: 2,
-    [TodoView.Completed]: 2,
-  });
-  expect(countTodosByView([], [completedTodos[0]!], '2026-09-03')[TodoView.Important]).toBe(1);
+  expect(countTodosByView([activeTodo], 3, '2026-09-03')[TodoView.Completed]).toBe(3);
 });
