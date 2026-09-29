@@ -46,6 +46,14 @@ export const CodingConversationActivityKind = {
 export type CodingConversationActivityKind =
   (typeof CodingConversationActivityKind)[keyof typeof CodingConversationActivityKind];
 
+export const CodingConversationTimelineItemKind = {
+  Reasoning: 'reasoning',
+  Activity: 'activity',
+  AssistantMessage: 'assistant-message',
+} as const;
+export type CodingConversationTimelineItemKind =
+  (typeof CodingConversationTimelineItemKind)[keyof typeof CodingConversationTimelineItemKind];
+
 export const CodingConversationTurnStatus = {
   Complete: 'complete',
   Cancelled: 'cancelled',

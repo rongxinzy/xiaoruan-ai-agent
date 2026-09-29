@@ -55,6 +55,8 @@ export const useReasoning = () => {
 
 export type ReasoningProps = ComponentProps<typeof Collapsible> & {
   isStreaming?: boolean;
+  /** Whether a new stream may automatically reopen a previously closed panel. */
+  autoOpenOnStreaming?: boolean;
   autoClose?: boolean;
   showConnector?: boolean;
   open?: boolean;
@@ -70,6 +72,7 @@ export const Reasoning = memo(
   ({
     className,
     isStreaming = false,
+    autoOpenOnStreaming = true,
     autoClose = true,
     showConnector = false,
     open,
@@ -110,12 +113,12 @@ export const Reasoning = memo(
       }
     }, [isStreaming, setDuration]);
 
-    // Auto-open when streaming starts (unless explicitly closed)
+    // Auto-open when streaming starts (unless the caller preserves a manual close).
     useEffect(() => {
-      if (isStreaming && !isOpen && !isExplicitlyClosed) {
+      if (autoOpenOnStreaming && isStreaming && !isOpen && !isExplicitlyClosed) {
         setIsOpen(true);
       }
-    }, [isStreaming, isOpen, setIsOpen, isExplicitlyClosed]);
+    }, [autoOpenOnStreaming, isStreaming, isOpen, setIsOpen, isExplicitlyClosed]);
 
     // Auto-close when streaming ends (once only, and only if it ever streamed)
     useEffect(() => {
@@ -205,7 +208,9 @@ export const ReasoningTrigger = memo(
 );
 
 export type ReasoningContentProps = ComponentProps<typeof CollapsibleContent> & {
-  children: string;
+  children: ReactNode;
+  /** Layout classes for the bounded scroll container inside the panel. */
+  contentClassName?: string;
 };
 
 const basePlugins = { cjk };
@@ -219,53 +224,65 @@ const linkSafety: StreamdownProps['linkSafety'] = {
 // Fenced code, math or mermaid content needs the rich plugin pipeline.
 const RICH_CONTENT_PATTERN = /```|~~~|\$\$|\\\(|\\\[|\$[^$\n]+?\$|(?:^|\n)(?: {4,}|\t+)\S/;
 
-export const ReasoningContent = memo(({ className, children, ...props }: ReasoningContentProps) => {
-  const { isStreaming, showConnector } = useReasoning();
+export const ReasoningContent = memo(
+  ({ className, contentClassName, children, ...props }: ReasoningContentProps) => {
+    const { isStreaming, showConnector } = useReasoning();
 
-  const text = typeof children === 'string' ? children : '';
-  const { committed, tail } = useStreamingTextSegments(text, isStreaming);
-  const shouldAnimateTail = isStreaming && Boolean(tail) && isPlainTextStreamingTail(tail);
-  const revealedTail = useAdaptiveTextReveal(tail, shouldAnimateTail);
-  const base = (
-    <Streamdown plugins={basePlugins} linkSafety={linkSafety} controls={streamdownChatControls}>
-      {text}
-    </Streamdown>
-  );
-  const streamingContent = (
-    <>
-      {committed && (
-        <Streamdown plugins={basePlugins} linkSafety={linkSafety} controls={streamdownChatControls}>
-          {committed}
-        </Streamdown>
-      )}
-      {revealedTail && <div className="whitespace-pre-wrap wrap-break-word">{revealedTail}</div>}
-    </>
-  );
-  const content = isStreaming ? (
-    streamingContent
-  ) : RICH_CONTENT_PATTERN.test(text) ? (
-    <React.Suspense fallback={base}>
-      <RichMessageResponse>{text}</RichMessageResponse>
-    </React.Suspense>
-  ) : (
-    base
-  );
+    const text = typeof children === 'string' ? children : '';
+    const { committed, tail } = useStreamingTextSegments(text, isStreaming);
+    const shouldAnimateTail = isStreaming && Boolean(tail) && isPlainTextStreamingTail(tail);
+    const revealedTail = useAdaptiveTextReveal(tail, shouldAnimateTail);
+    const base = (
+      <Streamdown plugins={basePlugins} linkSafety={linkSafety} controls={streamdownChatControls}>
+        {text}
+      </Streamdown>
+    );
+    const streamingContent = (
+      <>
+        {committed && (
+          <Streamdown plugins={basePlugins} linkSafety={linkSafety} controls={streamdownChatControls}>
+            {committed}
+          </Streamdown>
+        )}
+        {revealedTail && <div className="whitespace-pre-wrap wrap-break-word">{revealedTail}</div>}
+      </>
+    );
+    const content =
+      typeof children !== 'string' ? (
+        children
+      ) : isStreaming ? (
+        streamingContent
+      ) : RICH_CONTENT_PATTERN.test(text) ? (
+        <React.Suspense fallback={base}>
+          <RichMessageResponse>{text}</RichMessageResponse>
+        </React.Suspense>
+      ) : (
+        base
+      );
 
-  return (
-    <CollapsibleContent
-      className={cn(
-        'theme-reasoning-panel mt-4',
-        showConnector && 'theme-reasoning-panel-indented',
-        className,
-      )}
-      {...props}
-    >
-      <div className="min-w-0 max-h-64 overflow-y-auto overscroll-contain scrollbar-gutter-stable [overflow-anchor:none]">
-        {content}
-      </div>
-    </CollapsibleContent>
-  );
-});
+    return (
+      <CollapsibleContent
+        data-slot="reasoning-content"
+        className={cn(
+          'theme-reasoning-panel mt-4',
+          showConnector && 'theme-reasoning-panel-indented',
+          className,
+        )}
+        {...props}
+      >
+        <div
+          data-slot="reasoning-scroll-container"
+          className={cn(
+            'min-w-0 max-h-64 overflow-y-auto overscroll-contain scrollbar-gutter-stable [overflow-anchor:none]',
+            contentClassName,
+          )}
+        >
+          {content}
+        </div>
+      </CollapsibleContent>
+    );
+  },
+);
 
 Reasoning.displayName = 'Reasoning';
 ReasoningTrigger.displayName = 'ReasoningTrigger';

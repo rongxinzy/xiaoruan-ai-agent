@@ -91,17 +91,27 @@ export const ToolHeader = ({
 
   return (
     <CollapsibleTrigger
-      className={cn('flex w-full items-center justify-between gap-4 p-3', className)}
+      className={cn(
+        'grid w-full grid-cols-[1rem_minmax(0,1fr)_auto_1rem] items-center gap-2 p-3 text-left',
+        className,
+      )}
       {...props}
     >
-      <div className="flex items-center gap-2">
-        {icon ?? <WrenchIcon className="size-4 text-muted-foreground" />}
-        <span className="font-medium text-sm">{title ?? derivedName}</span>
+      <span
+        data-slot="tool-icon"
+        className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
+      >
+        {icon ?? <WrenchIcon className="text-muted-foreground" />}
+      </span>
+      <span data-slot="tool-title" className="min-w-0 break-words text-left font-medium text-sm">
+        {title ?? derivedName}
+      </span>
+      <span data-slot="tool-status" className="shrink-0 justify-self-end">
         {getStatusBadge(state, statusLabel)}
-      </div>
+      </span>
       <ChevronDownIcon
         className={cn(
-          'size-4 text-muted-foreground transition-transform duration-200 ease-out motion-reduce:transition-none',
+          'size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out motion-reduce:transition-none',
           isOpen === undefined
             ? 'group-data-[state=open]:rotate-180'
             : isOpen
