@@ -24,6 +24,7 @@ import path from 'path';
 import {
   classifyCoworkError,
   CoworkErrorKind,
+  isTransient,
   makeCoworkError,
   type CoworkError,
 } from '../../../common/coworkError';
@@ -305,6 +306,16 @@ interface ActivePiSession {
   /** Latest completed answer message, promoted to final only when the agent run ends. */
   lastCompletedAnswerMessageId: string | null;
   lastCompletedAnswerText: string;
+  /**
+   * Set once the turn's error was already shown to the user. Pi emits further
+   * retry/settle events after the runtime ends a non-retryable turn, and those
+   * must not surface the same failure twice.
+   */
+  errorSurfaced: boolean;
+  /** One retry notice per turn: the user learns the model answered with an error. */
+  retryNoticeEmitted: boolean;
+  /** Retry attempts Pi reported in the current turn. */
+  retryAttempts: number;
   completionPending?: Promise<void>;
   requestStartedAt: number | null;
   firstVisibleTextAt: number | null;
@@ -1358,6 +1369,9 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         }),
         stallWatchdog: null,
         pendingError: null,
+        errorSurfaced: false,
+        retryNoticeEmitted: false,
+        retryAttempts: 0,
         workbenchRunId,
         workbenchContract,
         workspaceRoot,
@@ -1587,6 +1601,9 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     }
     active.isRunning = true;
     active.turnFailed = false;
+    active.errorSurfaced = false;
+    active.retryNoticeEmitted = false;
+    active.retryAttempts = 0;
 
     const nextSystemPrompt = requestedSystemPrompt ?? active.requestedSystemPrompt;
     const promptChanged = nextSystemPrompt !== active.requestedSystemPrompt;
@@ -1701,6 +1718,9 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     active.writeTokenLimitRecovery.reset();
     active.pendingError = null;
     active.turnFailed = false;
+    active.errorSurfaced = false;
+    active.retryNoticeEmitted = false;
+    active.retryAttempts = 0;
     active.turnExperts = (this.store?.getSession(sessionId)?.experts ?? [])
       .filter(expert => active.requestedExpertIds.includes(expert.expertId))
       .map(expert => ({
@@ -2771,6 +2791,8 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         if (event.message?.role === 'assistant') {
           active.writeTokenLimitRecovery.queueIfNeeded(event.message, active.piSession);
           if (event.message.stopReason === 'error') {
+            // The turn was already reported as failed (non-retryable error).
+            if (active.errorSurfaced) return;
             const { text, thinking } = active.streamAccumulator.reconcile(event.message);
             if (thinking && thinking !== active.thinkingText) {
               active.thinkingText = thinking;
@@ -2801,14 +2823,34 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
             // A failed turn leaves its bubble behind too; a retry streams into the
             // same id and flips the flag back on by itself.
             this.closeIdlePlaceholders(sessionId, active);
+            if (
+              !active.errorSurfaced &&
+              active.pendingError.classified.kind !== CoworkErrorKind.Unknown &&
+              !isTransient(active.pendingError.classified.kind)
+            ) {
+              // Pi retries a failed turn on its own schedule (2s/4s/8s backoff
+              // measured). An error that cannot succeed — a rejected API key, an
+              // exhausted budget, an unknown model — only delays the answer, so
+              // the run ends now instead of after the whole retry cycle.
+              console.warn(
+                `[PiRuntime] session ${sessionId} reported ${active.pendingError.classified.kind}, which cannot recover by retrying; ending the turn.`,
+              );
+              // Pi owns its retry timer and does not cancel it on abort(), so
+              // the turn is reported here and the remaining retry events are
+              // ignored (see errorSurfaced) — the session itself stays usable
+              // for the next message.
+              this.flushPendingError(sessionId, active);
+            }
             return;
           }
 
           // A successful assistant message after failed attempts means the retry
-          // recovered — drop the deferred error so it is never surfaced. Errors
-          // the runtime recorded itself are sticky: Pi reports those turns as a
-          // plain aborted or truncated turn, which must not erase them.
+          // recovered — drop the deferred error so it is never surfaced, and
+          // clear the flag so agent_end still finalizes and completes the turn.
+          // Errors the runtime recorded itself are sticky: Pi reports those
+          // turns as a plain aborted or truncated turn, which must not erase them.
           if (!active.pendingError?.sticky) {
+            active.errorSurfaced = false;
             active.pendingError = null;
             active.turnFailed = false;
           }
@@ -3019,7 +3061,9 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         // Failed attempt (deferred error pending): do not continue the agent
         // loop, mark completed, or emit complete. flushPendingError surfaces
         // the error when the run settles (auto_retry_end / agent_settled).
-        if (active.pendingError) break;
+        // A non-retryable error is flushed the moment it is seen, so the turn
+        // is already reported as failed by the time agent_end arrives.
+        if (active.pendingError || active.errorSurfaced) break;
         if (
           active.workbenchRunId &&
           this.workbenchTaskService &&
@@ -3057,6 +3101,9 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
           active.thinkingLifecycle.reset();
           active.lastCompletedAnswerMessageId = null;
           active.lastCompletedAnswerText = '';
+          active.errorSurfaced = false;
+          active.retryNoticeEmitted = false;
+          active.retryAttempts = 0;
           active.toolResultMessageIdByCallId.clear();
           active.toolStartedAtByCallId.clear();
           active.piSession
@@ -3154,10 +3201,25 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       }
 
       case 'auto_retry_start':
-        // Pi is retrying after an error — silently wait
+        // Pi is retrying after an error. Retrying is invisible otherwise — the
+        // failed attempt is deferred until the run settles — so the user is told
+        // once per turn that the model answered with an error.
+        active.retryAttempts += 1;
+        if (!active.retryNoticeEmitted && active.pendingError) {
+          active.retryNoticeEmitted = true;
+          this.emit('retryNotice', sessionId, {
+            sessionId,
+            kind: active.pendingError.classified.kind,
+            message: active.pendingError.classified.message,
+            attempt: typeof event.attempt === 'number' ? event.attempt : active.retryAttempts,
+          });
+        }
         break;
 
       case 'auto_retry_end':
+        // The runtime already ended and reported this turn: retry bookkeeping
+        // must not reopen the error.
+        if (active.errorSurfaced) break;
         // Pi reports both recovered retries and final exhaustion here.
         if (event.success === true) {
           active.pendingError = null;
@@ -3204,6 +3266,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     const pending = active.pendingError;
     if (!pending) return;
     active.pendingError = null;
+    active.errorSurfaced = true;
     active.turnFailed = true;
     active.isRunning = false;
     if (active.answerText.trim()) {

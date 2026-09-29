@@ -70,11 +70,13 @@ import {
   McpIpc,
   ManagedProviderIpc,
   ProjectIpc,
+  RuntimeNoticeIpc,
   ShellIpc,
   SkillsIpc,
   WeixinInstallIpc,
   WindowIpc,
 } from '../shared/ipc/channels';
+import type { RuntimeRetryNotice } from '../common/runtimeNotice';
 import { EnterpriseSessionIpc } from '../shared/enterpriseSession';
 import { EnterpriseRendererIpc } from '../shared/enterpriseRenderer';
 import {
@@ -1261,6 +1263,15 @@ const getCodingRoomService = (): CodingRoomService => {
     });
     runtime.on('error', (sessionId: string, error: unknown) => {
       codingRoomService?.recordBuiltinEvent(sessionId, CodingEventKind.TurnFailed, { error });
+    });
+    runtime.on('retryNotice', (sessionId: string, notice: Omit<RuntimeRetryNotice, 'sessionId'>) => {
+      // Transient status: the shared prompt tells the user the model answered
+      // with an error while Pi keeps retrying, instead of leaving the turn
+      // looking frozen until the retry cycle settles.
+      const payload: RuntimeRetryNotice = { sessionId, ...notice };
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send(RuntimeNoticeIpc.Notice, payload);
+      }
     });
     runtime.on('sessionInterrupted', interruption => {
       if (interruption.cause !== CoworkInterruptionCause.UserStop) {

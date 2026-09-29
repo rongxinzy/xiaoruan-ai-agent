@@ -1,4 +1,5 @@
 import type { CoworkError } from '../../../common/coworkError';
+import type { RuntimeRetryNotice } from '../../../common/runtimeNotice';
 import type { CoworkToolActivityEvent } from '../../../shared/cowork/toolActivity';
 import type { CoworkMessage } from '../../coworkStore';
 import type { CoworkPendingMessage } from '../../../shared/cowork/pendingMessageQueue';
@@ -49,6 +50,11 @@ export interface PiRuntimeEvents {
   permissionDismiss: (requestId: string) => void;
   complete: (sessionId: string, claudeSessionId: string | null) => void;
   error: (sessionId: string, error: CoworkError) => void;
+  /**
+   * Pi is retrying a failed attempt. Transient by nature: the renderer shows it
+   * as a shared prompt and never persists it.
+   */
+  retryNotice: (sessionId: string, notice: Omit<RuntimeRetryNotice, 'sessionId'>) => void;
   sessionStopped: (sessionId: string) => void;
   sessionInterrupted: (event: CoworkSessionInterruption) => void;
   queueUpdated: (sessionId: string, items: CoworkPendingMessage[]) => void;

@@ -4,6 +4,8 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 
 import {
+  CodingErrorDetailMessage,
+  CodingErrorMessage,
   CodingEventKind,
   CodingPermissionOutcome,
   CodingStreamUpdateMode,
@@ -72,6 +74,18 @@ const DEFAULT_CAPABILITIES: CodingAgentCapabilities = {
 // models. Keep the short transport timeout for ordinary ACP control requests,
 // but give lifecycle requests enough time to complete on a cold start.
 const ACP_SESSION_LIFECYCLE_TIMEOUT_MS = 60_000;
+
+/**
+ * How long a prompt may stay completely silent before the turn is failed.
+ *
+ * An ACP agent that cannot run the prompt — no signed-in account, missing or
+ * invalid API key, unreachable model endpoint — does not report an error: Kimi
+ * Code answers such a prompt with a bare `end_turn` after ~100s and writes
+ * nothing to stderr, so the user would otherwise stare at a spinner until the
+ * five-minute request cap. Any first event (thought, tool call, message) clears
+ * the watchdog, so only a totally silent agent is cut short.
+ */
+const ACP_FIRST_OUTPUT_TIMEOUT_MS = 90_000;
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -182,13 +196,15 @@ const promptAttachmentBlocks = async (
   capabilities: CodingAgentCapabilities,
 ): Promise<Record<string, unknown>[]> => {
   if (!attachments?.length) return [];
-  if (attachments.length > 8) throw new Error('At most 8 attachments can be sent in one prompt.');
+  if (attachments.length > 8) throw new Error(CodingErrorMessage.AttachmentLimit);
   const blocks: Record<string, unknown>[] = [];
   for (const attachment of attachments) {
-    if (!path.isAbsolute(attachment.path)) throw new Error('Attached file path must be absolute.');
+    if (!path.isAbsolute(attachment.path)) {
+      throw new Error(CodingErrorMessage.AttachmentPathAbsolute);
+    }
     const filePath = path.resolve(attachment.path);
     const fileInfo = await stat(filePath);
-    if (!fileInfo.isFile()) throw new Error('Attached path is not a regular file.');
+    if (!fileInfo.isFile()) throw new Error(CodingErrorMessage.AttachmentNotFile);
     const extension = path.extname(filePath).toLowerCase();
     const name = path.basename(filePath);
     const uri = pathToFileURL(filePath).toString();
@@ -196,7 +212,7 @@ const promptAttachmentBlocks = async (
     if (imageMimeType && capabilities.supportsPromptImages) {
       const data = await readFile(filePath);
       if (data.byteLength > MAX_PROMPT_IMAGE_BYTES) {
-        throw new Error('Attached image exceeds the 10 MB limit.');
+        throw new Error(CodingErrorMessage.AttachmentImageTooLarge);
       }
       blocks.push({ type: 'image', uri, mimeType: imageMimeType, data: data.toString('base64') });
       continue;
@@ -295,6 +311,9 @@ export class AcpCodingDriver implements CodingAgentDriver {
   private readonly sessionTitleListeners = new Set<(sessionId: string, title: string) => void>();
   private readonly permissions = new Map<string, PendingPermission>();
   private readonly fallbackMessageIds = new Map<string, string>();
+  /** Per-turn bookkeeping: a prompt that yields nothing is a credential problem, not a slow model. */
+  private readonly turns = new Map<string, { hasOutput: boolean }>();
+  private readonly firstOutputTimers = new Map<string, NodeJS.Timeout>();
   private capabilities = DEFAULT_CAPABILITIES;
   private readonly authMethods = new Map<string, AcpAuthMethod>();
   private initialized = false;
@@ -334,9 +353,9 @@ export class AcpCodingDriver implements CodingAgentDriver {
   async authenticate(request: CodingAgentAuthRequest): Promise<void> {
     await this.ensureConnected(request.workspaceRoot);
     const method = this.authMethods.get(request.methodId);
-    if (!method) throw new Error('The requested ACP authentication method is unavailable.');
+    if (!method) throw new Error(CodingErrorMessage.AcpAuthMethodUnavailable);
     if (method.type === 'terminal') {
-      throw new Error('This ACP agent requires interactive terminal authentication.');
+      throw new Error(CodingErrorMessage.AcpTerminalAuthRequired);
     }
     await this.supervisor.request(AcpMethod.Authenticate, { methodId: method.id });
   }
@@ -354,7 +373,7 @@ export class AcpCodingDriver implements CodingAgentDriver {
       },
     );
     if (typeof response.sessionId !== 'string')
-      throw new Error('ACP agent did not return a session ID.');
+      throw new Error(CodingErrorMessage.AcpSessionIdMissing);
     const configOptions = normalizeConfigOptions(response.configOptions);
     if (configOptions.length > 0) {
       this.capabilities = { ...this.capabilities, supportsConfigOptions: true };
@@ -374,7 +393,7 @@ export class AcpCodingDriver implements CodingAgentDriver {
   }): Promise<CodingAgentSession> {
     await this.ensureConnected(input.workspaceRoot);
     if (!this.capabilities.supportsLoadSession && !this.capabilities.supportsResumeSession) {
-      throw new Error('The ACP agent does not support loading sessions.');
+      throw new Error(CodingErrorMessage.AcpLoadUnsupported);
     }
     const response = await this.requestSessionLifecycle<AcpSessionResult>(
       input.workspaceRoot,
@@ -410,6 +429,9 @@ export class AcpCodingDriver implements CodingAgentDriver {
     this.fallbackMessageIds.delete(this.messageFallbackKey(input.sessionId, 'user'));
     const stream: EventStream = { events: [], waiters: [], done: false, error: null };
     this.streams.set(input.sessionId, stream);
+    const turn = { hasOutput: false };
+    this.turns.set(input.sessionId, turn);
+    this.armFirstOutputWatchdog(input.sessionId);
     void this.supervisor
       .request(
         AcpMethod.SessionPrompt,
@@ -434,13 +456,15 @@ export class AcpCodingDriver implements CodingAgentDriver {
         yield next.value;
       }
     } finally {
+      this.clearFirstOutputWatchdog(input.sessionId);
+      this.turns.delete(input.sessionId);
       this.streams.delete(input.sessionId);
     }
   }
 
   async cancel(sessionId: string): Promise<void> {
     this.supervisor.notify(AcpMethod.SessionCancel, { sessionId });
-    this.finishStream(sessionId, new Error('ACP session prompt was cancelled.'));
+    this.finishStream(sessionId, new Error(CodingErrorMessage.AcpPromptCancelled));
     for (const [requestId, pending] of this.permissions) {
       pending.resolve({ outcome: { outcome: CodingPermissionOutcome.Cancelled } });
       this.permissions.delete(requestId);
@@ -449,9 +473,9 @@ export class AcpCodingDriver implements CodingAgentDriver {
 
   async respondToPermission(response: CodingPermissionResponse): Promise<void> {
     const pending = this.permissions.get(response.requestId);
-    if (!pending) throw new Error('The ACP permission request is no longer pending.');
+    if (!pending) throw new Error(CodingErrorMessage.AcpPermissionNotPending);
     if (response.outcome === CodingPermissionOutcome.Selected && !response.optionId) {
-      throw new Error('An ACP permission selection requires an option ID.');
+      throw new Error(CodingErrorMessage.AcpPermissionOptionRequired);
     }
     pending.resolve({
       outcome:
@@ -511,8 +535,12 @@ export class AcpCodingDriver implements CodingAgentDriver {
 
   async dispose(): Promise<void> {
     for (const pending of this.permissions.values()) {
-      pending.reject(new Error('The ACP connection was disposed.'));
+      pending.reject(new Error(CodingErrorMessage.AcpConnectionDisposed));
     }
+    for (const sessionId of [...this.firstOutputTimers.keys()]) {
+      this.clearFirstOutputWatchdog(sessionId);
+    }
+    this.turns.clear();
     this.permissions.clear();
     this.configOptionsBySession.clear();
     this.availableCommandsBySession.clear();
@@ -588,6 +616,7 @@ export class AcpCodingDriver implements CodingAgentDriver {
 
   private receiveNotification(method: string, params: Record<string, unknown>): void {
     if (method !== AcpMethod.SessionUpdate || typeof params.sessionId !== 'string') return;
+    this.markTurnActivity(params.sessionId);
     const update = asRecord(params.update);
     if (update.sessionUpdate === AcpSessionUpdateKind.ConfigOptionUpdate) {
       this.configOptionsBySession.set(
@@ -625,14 +654,14 @@ export class AcpCodingDriver implements CodingAgentDriver {
     if (method === AcpMethod.TerminalWaitForExit) return await this.waitForTerminal(params);
     if (method === AcpMethod.TerminalKill) return this.killTerminal(params);
     if (method === AcpMethod.TerminalRelease) return this.releaseTerminal(params);
-    throw new Error(`Unsupported ACP agent request: ${method}.`);
+    throw new Error(`${CodingErrorDetailMessage.AcpRequestUnsupported} ${method}.`);
   }
 
   private async requestPermission(
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     if (typeof params.sessionId !== 'string')
-      throw new Error('ACP permission request has no session ID.');
+      throw new Error(CodingErrorMessage.AcpPermissionNoSession);
     const requestId = randomUUID();
     this.pushEvent(params.sessionId, {
       kind: CodingEventKind.Permission,
@@ -675,7 +704,9 @@ export class AcpCodingDriver implements CodingAgentDriver {
   private async writeWorkspaceFile(
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    if (typeof params.content !== 'string') throw new Error('ACP file write has no text content.');
+    if (typeof params.content !== 'string') {
+      throw new Error(CodingErrorMessage.AcpFileWriteNoContent);
+    }
     const target = await this.resolveWorkspacePath(params.path);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, params.content, 'utf8');
@@ -688,7 +719,7 @@ export class AcpCodingDriver implements CodingAgentDriver {
 
   private async createTerminal(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (typeof params.command !== 'string' || !params.command) {
-      throw new Error('ACP terminal creation has no command.');
+      throw new Error(CodingErrorMessage.AcpTerminalNoCommand);
     }
     const cwd = await this.resolveWorkspacePath(
       typeof params.cwd === 'string' ? params.cwd : this.workspaceRoot,
@@ -738,8 +769,10 @@ export class AcpCodingDriver implements CodingAgentDriver {
   }
 
   private async resolveWorkspacePath(value: unknown): Promise<string> {
-    if (typeof value !== 'string' || !value) throw new Error('ACP filesystem request has no path.');
-    if (!this.workspaceBroker) throw new Error('ACP workspace broker is unavailable.');
+    if (typeof value !== 'string' || !value) {
+      throw new Error(CodingErrorMessage.AcpFilesystemNoPath);
+    }
+    if (!this.workspaceBroker) throw new Error(CodingErrorMessage.AcpWorkspaceBrokerMissing);
     return await this.workspaceBroker.resolveTarget(value);
   }
 
@@ -773,14 +806,15 @@ export class AcpCodingDriver implements CodingAgentDriver {
   }
 
   private requireTerminalId(value: unknown): string {
-    if (typeof value !== 'string' || !value)
-      throw new Error('ACP terminal request has no terminal ID.');
+    if (typeof value !== 'string' || !value) {
+      throw new Error(CodingErrorMessage.AcpTerminalNoId);
+    }
     return value;
   }
 
   private requireTerminal(value: unknown) {
     const terminal = this.terminalBroker.output(this.requireTerminalId(value));
-    if (!terminal) throw new Error('The ACP terminal was not found.');
+    if (!terminal) throw new Error(CodingErrorMessage.AcpTerminalGone);
     return terminal;
   }
 
@@ -876,9 +910,51 @@ export class AcpCodingDriver implements CodingAgentDriver {
   private pushEvent(sessionId: string, event: DriverEvent): void {
     const stream = this.streams.get(sessionId);
     if (!stream || stream.done) return;
+    this.markTurnActivity(sessionId);
     const waiter = stream.waiters.shift();
     if (waiter) waiter.resolve({ done: false, value: event });
     else stream.events.push(event);
+  }
+
+  /**
+   * Any traffic for the session — a transcript event or a metadata update —
+   * proves the agent is working, so the first-output watchdog stands down. A
+   * turn that sends only metadata is legitimate; whether it produced an answer
+   * is decided by the caller (codingRoomService), not here.
+   */
+  private markTurnActivity(sessionId: string): void {
+    const turn = this.turns.get(sessionId);
+    if (!turn || turn.hasOutput) return;
+    turn.hasOutput = true;
+    this.clearFirstOutputWatchdog(sessionId);
+  }
+
+  /**
+   * Fail a prompt that never produced a single event. Without this the lane
+   * stays "running" until the 5-minute request cap, which is exactly how an
+   * unusable ACP credential looks to the user (issue: silent external agent).
+   */
+  private armFirstOutputWatchdog(sessionId: string): void {
+    this.clearFirstOutputWatchdog(sessionId);
+    const timer = setTimeout(() => {
+      this.firstOutputTimers.delete(sessionId);
+      const stream = this.streams.get(sessionId);
+      if (!stream || stream.done) return;
+      console.warn(
+        `[AcpDriver] no output within ${ACP_FIRST_OUTPUT_TIMEOUT_MS}ms for session ${sessionId}; stopping the turn.`,
+      );
+      this.supervisor.notify(AcpMethod.SessionCancel, { sessionId });
+      this.finishStream(sessionId, new Error(CodingErrorMessage.AgentNoOutputTimeout));
+    }, ACP_FIRST_OUTPUT_TIMEOUT_MS);
+    timer.unref?.();
+    this.firstOutputTimers.set(sessionId, timer);
+  }
+
+  private clearFirstOutputWatchdog(sessionId: string): void {
+    const timer = this.firstOutputTimers.get(sessionId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.firstOutputTimers.delete(sessionId);
   }
 
   private finishStream(sessionId: string, error?: unknown): void {
