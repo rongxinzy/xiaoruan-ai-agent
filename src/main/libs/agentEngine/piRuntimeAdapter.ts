@@ -196,6 +196,7 @@ import type {
   PiSessionPatch,
   PiStartOptions,
 } from './piRuntimeTypes';
+import { cancelPiRetry, waitForPiRetryCancellation } from './piRetryCancellation';
 
 // ── Types ──
 
@@ -307,9 +308,7 @@ interface ActivePiSession {
   lastCompletedAnswerMessageId: string | null;
   lastCompletedAnswerText: string;
   /**
-   * Set once the turn's error was already shown to the user. Pi emits further
-   * retry/settle events after the runtime ends a non-retryable turn, and those
-   * must not surface the same failure twice.
+   * Set once a settled turn's error was shown, preventing duplicate reporting.
    */
   errorSurfaced: boolean;
   /** One retry notice per turn: the user learns the model answered with an error. */
@@ -351,8 +350,8 @@ interface ActivePiSession {
    * flushPendingError surfaces it once the run settles (auto_retry_end /
    * agent_settled). Cleared when a retry succeeds or the turn is reset.
    *
-   * `sticky` marks an error the runtime itself recorded (a stalled turn, an
-   * unrecoverable truncated file payload). Pi reports those turns with a plain
+   * `sticky` marks a terminal error (including an explicitly cancelled retry).
+   * Pi can report aborted turns with a plain
    * stop reason, so a later successful-looking assistant message must not erase
    * them the way it erases a recovered retry.
    */
@@ -1500,6 +1499,8 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     const explicitExpertIds = normalizeSingleExpertIds(options.expertIds);
     const nextUnattended = options.unattended === true;
     const active = this.activeSessions.get(sessionId);
+    const retryCancellation = active && waitForPiRetryCancellation(active.piSession);
+    if (retryCancellation) await retryCancellation;
     if (active?.completionPending) await active.completionPending;
     if (!active || active.aborted) {
       if (active?.aborted) {
@@ -2828,18 +2829,9 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
               active.pendingError.classified.kind !== CoworkErrorKind.Unknown &&
               !isTransient(active.pendingError.classified.kind)
             ) {
-              // Pi retries a failed turn on its own schedule (2s/4s/8s backoff
-              // measured). An error that cannot succeed — a rejected API key, an
-              // exhausted budget, an unknown model — only delays the answer, so
-              // the run ends now instead of after the whole retry cycle.
-              console.warn(
-                `[PiRuntime] session ${sessionId} reported ${active.pendingError.classified.kind}, which cannot recover by retrying; ending the turn.`,
-              );
-              // Pi owns its retry timer and does not cancel it on abort(), so
-              // the turn is reported here and the remaining retry events are
-              // ignored (see errorSurfaced) — the session itself stays usable
-              // for the next message.
-              this.flushPendingError(sessionId, active);
+              // Keep the original failure until Pi settles. If the SDK retries,
+              // auto_retry_start cancels its newly installed backoff controller.
+              active.pendingError.sticky = true;
             }
             return;
           }
@@ -3201,6 +3193,12 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       }
 
       case 'auto_retry_start':
+        if (active.pendingError?.sticky) {
+          void cancelPiRetry(active.piSession).catch(error => {
+            console.error(`[PiRuntime] failed to cancel retry for session ${sessionId}:`, error);
+          });
+          break;
+        }
         // Pi is retrying after an error. Retrying is invisible otherwise — the
         // failed attempt is deferred until the run settles — so the user is told
         // once per turn that the model answered with an error.
@@ -3221,19 +3219,20 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         // must not reopen the error.
         if (active.errorSurfaced) break;
         // Pi reports both recovered retries and final exhaustion here.
-        if (event.success === true) {
+        if (event.success === true && !active.pendingError?.sticky) {
           active.pendingError = null;
           active.turnFailed = false;
           break;
         }
-        if (event.finalError) {
+        if (event.finalError && !active.pendingError?.sticky) {
           active.pendingError = {
             message: event.finalError,
             classified: classifyCoworkError(event.finalError),
             sticky: false,
           };
         }
-        this.flushPendingError(sessionId, active);
+        // Cancellation precedes agent_settled: retain the lane and writer lease.
+        if (!active.pendingError?.sticky) this.flushPendingError(sessionId, active);
         break;
 
       case 'agent_settled':

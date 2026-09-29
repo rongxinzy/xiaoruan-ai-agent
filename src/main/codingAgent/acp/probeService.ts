@@ -6,10 +6,13 @@ import {
 import { AcpConnectionSupervisor } from './connectionSupervisor';
 import {
   ACP_PROBE_CLIENT_CAPABILITIES,
+  ACP_AUTH_REQUIRED_CODE,
   ACP_PROTOCOL_VERSION,
   AcpMethod,
+  AcpSessionUpdateKind,
   AcpProtocolIncompatibleError,
 } from './protocol';
+import { AcpRequestError } from './requestError';
 
 const PROBE_TIMEOUT_MS = 30_000;
 /**
@@ -124,11 +127,11 @@ const verifyAgentAnswers = async (
     if (method !== AcpMethod.SessionUpdate || params.sessionId !== sessionId) return;
     const update = (params.update ?? {}) as Record<string, unknown>;
     const kind = update.sessionUpdate ?? update.kind;
+    const content = update.content as { text?: unknown } | undefined;
     if (
-      kind === 'agent_message_chunk' ||
-      kind === 'agent_thought_chunk' ||
-      kind === 'tool_call' ||
-      kind === 'tool_call_update'
+      kind === AcpSessionUpdateKind.AgentMessageChunk &&
+      typeof content?.text === 'string' &&
+      content.text.trim()
     ) {
       markAnswered?.();
     }
@@ -139,14 +142,16 @@ const verifyAgentAnswers = async (
     { sessionId, prompt: [{ type: 'text', text: PROBE_PROMPT_TEXT }] },
     { timeoutMs: null },
   );
-  // The check reports through the race below; this request must never surface as
-  // an unhandled rejection when the supervisor disposes with it still pending.
-  void prompt.catch((): void => {});
+  // Empty completed turns and explicit errors must retain their actual cause.
+  const finished = prompt.then(() => {
+    throw new AcpProbeNoAnswerError(authMethods);
+  });
 
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
     await Promise.race([
       answered,
+      finished,
       new Promise<never>((_, reject) => {
         timeout = setTimeout(
           () => reject(new AcpProbeNoAnswerError(authMethods)),
@@ -157,20 +162,28 @@ const verifyAgentAnswers = async (
   } finally {
     if (timeout) clearTimeout(timeout);
     // The turn is no longer needed; the probe process is disposed right after.
-    await supervisor
-      .request(AcpMethod.SessionCancel, { sessionId }, { timeoutMs: PROBE_TIMEOUT_MS })
-      .catch((): void => {});
+    if (supervisor.isRunning()) supervisor.notify(AcpMethod.SessionCancel, { sessionId });
   }
 };
 
 /**
- * The connection check reached the agent but a minimal prompt came back with
- * nothing. Carries the advertised auth methods so the caller can tell "needs
- * sign-in" apart from "unavailable".
+ * Preserve handshake auth methods even if session creation or prompting fails.
  */
-export class AcpProbeNoAnswerError extends Error {
+export class AcpProbeFailureError extends Error {
+  constructor(
+    message: string,
+    readonly authMethods: CodingAgentAuthMethod[],
+    readonly needsAuth: boolean,
+    cause?: unknown,
+  ) {
+    super(message, { cause });
+    this.name = 'AcpProbeFailureError';
+  }
+}
+
+export class AcpProbeNoAnswerError extends AcpProbeFailureError {
   constructor(readonly authMethods: CodingAgentAuthMethod[]) {
-    super(CodingErrorMessage.AgentProbeNoAnswer);
+    super(CodingErrorMessage.AgentProbeNoAnswer, authMethods, authMethods.length > 0);
     this.name = 'AcpProbeNoAnswerError';
   }
 }
@@ -183,22 +196,22 @@ export class AcpProbeService {
     environment: Record<string, string | undefined>;
   }): Promise<AcpProbeResult> {
     const supervisor = new AcpConnectionSupervisor();
+    let authMethods: CodingAgentAuthMethod[] = [];
     try {
       await supervisor.start(input);
-      const response = await Promise.race([
-        supervisor.request<{
-          agentCapabilities?: Record<string, unknown>;
-          capabilities?: Record<string, unknown>;
-          authMethods?: unknown;
-          protocolVersion?: unknown;
-        }>(AcpMethod.Initialize, {
+      const response = await supervisor.request<{
+        agentCapabilities?: Record<string, unknown>;
+        capabilities?: Record<string, unknown>;
+        authMethods?: unknown;
+        protocolVersion?: unknown;
+      }>(
+        AcpMethod.Initialize,
+        {
           protocolVersion: ACP_PROTOCOL_VERSION,
           clientCapabilities: ACP_PROBE_CLIENT_CAPABILITIES,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(CodingErrorMessage.AcpProbeTimedOut)), PROBE_TIMEOUT_MS),
-        ),
-      ]);
+        },
+        { timeoutMs: PROBE_TIMEOUT_MS },
+      );
       if (response.protocolVersion !== ACP_PROTOCOL_VERSION) {
         throw new AcpProtocolIncompatibleError(response.protocolVersion);
       }
@@ -211,7 +224,7 @@ export class AcpProbeService {
         capabilities.promptCapabilities && typeof capabilities.promptCapabilities === 'object'
           ? (capabilities.promptCapabilities as Record<string, unknown>)
           : {};
-      const authMethods = parseAuthMethods(response.authMethods);
+      authMethods = parseAuthMethods(response.authMethods);
       await verifyAgentAnswers(supervisor, input.cwd, authMethods);
       return {
         capabilities: {
@@ -230,6 +243,21 @@ export class AcpProbeService {
         },
         authMethods,
       };
+    } catch (error) {
+      if (error instanceof AcpProbeFailureError || error instanceof AcpProtocolIncompatibleError)
+        throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      const needsAuth =
+        (error instanceof AcpRequestError && error.code === ACP_AUTH_REQUIRED_CODE) ||
+        /auth(?:entication)?[_\s]required|not (?:logged|signed) in|unauthorized|invalid.*api.*key/i.test(
+          message,
+        );
+      throw new AcpProbeFailureError(
+        needsAuth ? CodingErrorMessage.AgentAuthRequired : message,
+        authMethods,
+        needsAuth,
+        error,
+      );
     } finally {
       await supervisor.dispose();
     }

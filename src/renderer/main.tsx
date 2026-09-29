@@ -10,6 +10,8 @@ import {
   LlamaCppModelLaunchLogWindowView,
 } from '../shared/llamacpp';
 import { EnterpriseSessionGate } from './components/enterprise/EnterpriseSessionGate';
+import { startCodingFailureNoticeListener } from './services/codingFailureNotice';
+import { startRuntimeNoticeListener } from './services/runtimeNotice';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -24,6 +26,7 @@ const isModelLaunchLogWindow =
 const root = ReactDOM.createRoot(rootElement);
 let activityUnsubscribe: (() => void) | null = null;
 let runtimeNoticeUnsubscribe: (() => void) | null = null;
+let codingFailureUnsubscribe: (() => void) | null = null;
 let devNetworkUnsubscribe: (() => void) | null = null;
 
 async function renderRoot(): Promise<void> {
@@ -49,9 +52,10 @@ async function renderRoot(): Promise<void> {
 
   const [{ default: App }, { store }] = await Promise.all([import('./App'), import('./store')]);
 
-  const { startRuntimeNoticeListener } = await import('./services/runtimeNotice');
   runtimeNoticeUnsubscribe?.();
   runtimeNoticeUnsubscribe = startRuntimeNoticeListener();
+  codingFailureUnsubscribe?.();
+  codingFailureUnsubscribe = startCodingFailureNoticeListener();
 
   const { hydrateRuns, upsertRun } = await import('./store/slices/activitySlice');
   activityUnsubscribe?.();
@@ -76,6 +80,8 @@ if (import.meta.hot) {
     activityUnsubscribe = null;
     runtimeNoticeUnsubscribe?.();
     runtimeNoticeUnsubscribe = null;
+    codingFailureUnsubscribe?.();
+    codingFailureUnsubscribe = null;
     devNetworkUnsubscribe?.();
     devNetworkUnsubscribe = null;
   });
