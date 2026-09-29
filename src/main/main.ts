@@ -24,6 +24,8 @@ import { pathToFileURL } from 'url';
 import { buildSessionTitleFromInput } from '../common/sessionTitle';
 import { classifyCoworkError } from '../common/coworkError';
 import { persistCoworkTerminalError } from './coworkTerminalErrorPersistence';
+import { registerArtifactFileAvailabilityHandler } from './artifactFileAvailability';
+import { observePreparedRun } from './workbenchTask/preparedRunFailure';
 import {
   migrateLegacyScheduledTaskRunsToCanonical,
   migrateLegacyScheduledTasksToCanonical,
@@ -6151,6 +6153,7 @@ if (!gotTheLock) {
     '.ico': 'image/x-icon',
     '.avif': 'image/avif',
   };
+  registerArtifactFileAvailabilityHandler();
   ipcMain.handle(
     'dialog:readFileAsDataUrl',
     async (
@@ -7286,36 +7289,38 @@ if (!gotTheLock) {
         const previousProduction =
           getWorkbenchTaskService().productionLoop.repository.getLatestForTask(task.id, run.id);
         // 2026/09/17 lixiang  resume 不等待整段跑完（对齐 Continue IPC），否则底部无法切到停止
-        void getPiRuntimeAdapter()
-          .continueSession(session.id, prompt, {
-            systemPrompt: session.systemPrompt,
-            skillIds: resumeInput?.skillIds ?? session.activeSkillIds,
-            sessionMode: session.mode,
-            workspaceRoot: session.cwd,
-            agentId: session.agentId,
-            expertIds:
-              resumeInput?.expertIds === undefined
-                ? session.experts.slice(0, 1).map(expert => expert.expertId)
-                : normalizeSingleExpertIds(resumeInput.expertIds),
-            modelOverride: session.modelOverride,
-            approvalMode:
-              config.permissionMode === CoworkPermissionMode.AllowAll
-                ? WorkbenchApprovalMode.AllowAll
-                : WorkbenchApprovalMode.Ask,
-            goalMode: resumeInput?.goalMode,
-            productionLoopMode: resumeInput?.productionLoopMode,
-            imageAttachments: resumeInput?.imageAttachments,
-            fileAttachments: resumeInput?.fileAttachments,
-            _workbenchRunId: run.id,
-            _productionWorkflowRequired: shouldRequireProductionOnResume(
-              task.contract.kind,
-              previousProduction,
-            ),
-            _skipUserMessage: !amendment,
-          })
-          .catch(error => {
-            console.error('[WorkbenchTask] resume continue error:', error);
-          });
+        observePreparedRun(
+          () =>
+            getPiRuntimeAdapter().continueSession(session.id, prompt, {
+              systemPrompt: session.systemPrompt,
+              skillIds: resumeInput?.skillIds ?? session.activeSkillIds,
+              sessionMode: session.mode,
+              workspaceRoot: session.cwd,
+              agentId: session.agentId,
+              expertIds:
+                resumeInput?.expertIds === undefined
+                  ? session.experts.slice(0, 1).map(expert => expert.expertId)
+                  : normalizeSingleExpertIds(resumeInput.expertIds),
+              modelOverride: session.modelOverride,
+              approvalMode:
+                config.permissionMode === CoworkPermissionMode.AllowAll
+                  ? WorkbenchApprovalMode.AllowAll
+                  : WorkbenchApprovalMode.Ask,
+              goalMode: resumeInput?.goalMode,
+              productionLoopMode: resumeInput?.productionLoopMode,
+              imageAttachments: resumeInput?.imageAttachments,
+              fileAttachments: resumeInput?.fileAttachments,
+              _workbenchRunId: run.id,
+              _productionWorkflowRequired: shouldRequireProductionOnResume(
+                task.contract.kind,
+                previousProduction,
+              ),
+              _skipUserMessage: !amendment,
+            }),
+          task,
+          run,
+          { service: getWorkbenchTaskService(), runtime: getPiRuntimeAdapter() },
+        );
       },
     });
     todoReminderScheduler = new TodoReminderScheduler(getStore().getDatabase());
