@@ -8,6 +8,7 @@ import { CoworkToolActivityEventType } from '../../../shared/cowork/toolActivity
 import {
   CodingConversationActivityKind,
   CodingConversationRole,
+  CodingConversationTimelineItemKind,
   CodingConversationTurnStatus,
   type CodingConversationActivityKind as CodingConversationActivityKindType,
   type CodingConversationRole as CodingConversationRoleType,
@@ -35,12 +36,29 @@ export interface CodingConversationActivity {
   event: CodingEvent;
 }
 
+export type CodingConversationTimelineItem =
+  | {
+      kind: 'reasoning';
+      reasoning: CodingConversationReasoning;
+    }
+  | {
+      kind: 'activity';
+      activity: CodingConversationActivity;
+    }
+  | {
+      kind: 'assistant-message';
+      message: CodingConversationMessage;
+    };
+
 export interface CodingConversationTurn {
   id: string;
   userMessage: CodingConversationMessage | null;
   reasoning: CodingConversationReasoning | null;
   activities: CodingConversationActivity[];
   assistantMessages: CodingConversationMessage[];
+  /** The latest assistant response rendered as the live user-facing answer. */
+  bodyMessageId: string | null;
+  timeline: CodingConversationTimelineItem[];
   status: CodingConversationTurnStatusType | null;
   statusDetail: string | null;
 }
@@ -115,6 +133,8 @@ const createTurn = (event: CodingEvent): CodingConversationTurn => ({
   reasoning: null,
   activities: [],
   assistantMessages: [],
+  bodyMessageId: null,
+  timeline: [],
   status: null,
   statusDetail: null,
 });
@@ -125,23 +145,54 @@ const appendAssistantMessage = (
   content: string,
 ): void => {
   const messageId = getMessageId(event);
-  const existing = turn.assistantMessages.find(message => message.id === messageId);
-  if (!existing) {
-    turn.assistantMessages.push({
+  let message = turn.assistantMessages.find(candidate => candidate.id === messageId);
+  if (!message) {
+    message = {
       id: messageId,
       content,
       createdAt: event.createdAt,
       role: CodingConversationRole.Assistant,
       isFinalAnswer: isFinalAssistantMessage(event),
+    };
+    turn.assistantMessages.push(message);
+    turn.timeline.push({
+      kind: CodingConversationTimelineItemKind.AssistantMessage,
+      message,
     });
-    return;
+  } else {
+    message.content =
+      event.kind === CodingEventKind.Message ||
+      event.payload.streamUpdateMode === CodingStreamUpdateMode.Replace
+        ? content
+        : `${message.content}${content}`;
+    message.isFinalAnswer ||= isFinalAssistantMessage(event);
   }
-  existing.content =
-    event.kind === CodingEventKind.Message ||
-    event.payload.streamUpdateMode === CodingStreamUpdateMode.Replace
-      ? content
-      : `${existing.content}${content}`;
-  existing.isFinalAnswer ||= isFinalAssistantMessage(event);
+  // Normal assistant deltas are the answer stream. Keep them outside the
+  // collapsible reasoning panel from their first rendered chunk.
+  turn.bodyMessageId = message.id;
+};
+
+const appendReasoning = (turn: CodingConversationTurn, event: CodingEvent, content: string): void => {
+  const previousItem = turn.timeline.at(-1);
+  if (previousItem?.kind === CodingConversationTimelineItemKind.Reasoning) {
+    previousItem.reasoning.content =
+      event.payload.streamUpdateMode === CodingStreamUpdateMode.Replace
+        ? content
+        : `${previousItem.reasoning.content}${content}`;
+  } else {
+    turn.timeline.push({
+      kind: CodingConversationTimelineItemKind.Reasoning,
+      reasoning: { id: event.id, content, createdAt: event.createdAt },
+    });
+  }
+
+  if (turn.reasoning && event.payload.streamUpdateMode === CodingStreamUpdateMode.Replace) {
+    turn.reasoning.content = content;
+  } else if (turn.reasoning) {
+    turn.reasoning.content += content;
+  } else {
+    turn.reasoning = { id: event.id, content, createdAt: event.createdAt };
+  }
 };
 
 const activityKind = (event: CodingEvent): CodingConversationActivityKindType | null => {
@@ -252,10 +303,7 @@ export const projectCodingEvents = (events: CodingEvent[]): CodingConversationTu
       const content = getCodingEventText(event);
       if (!content) continue;
       const turn = ensureTurn(event);
-      if (turn.reasoning && event.payload.streamUpdateMode === CodingStreamUpdateMode.Replace) {
-        turn.reasoning.content = content;
-      } else if (turn.reasoning) turn.reasoning.content += content;
-      else turn.reasoning = { id: event.id, content, createdAt: event.createdAt };
+      appendReasoning(turn, event, content);
       continue;
     }
 
@@ -278,7 +326,11 @@ export const projectCodingEvents = (events: CodingEvent[]): CodingConversationTu
                 payload: { ...existing.event.payload, ...normalizedEvent.payload },
               }
             : normalizedEvent;
-      } else turn.activities.push({ id, kind: projectedActivityKind, event: normalizedEvent });
+      } else {
+        const activity = { id, kind: projectedActivityKind, event: normalizedEvent };
+        turn.activities.push(activity);
+        turn.timeline.push({ kind: CodingConversationTimelineItemKind.Activity, activity });
+      }
       continue;
     }
 

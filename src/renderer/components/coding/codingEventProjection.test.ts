@@ -10,7 +10,12 @@ import {
   CoworkToolActivityEventType,
   CoworkToolActivityPhase,
 } from '../../../shared/cowork/toolActivity';
-import { CodingConversationActivityKind, CodingConversationTurnStatus } from './constants';
+import {
+  CodingConversationActivityKind,
+  CodingConversationRole,
+  CodingConversationTimelineItemKind,
+  CodingConversationTurnStatus,
+} from './constants';
 import { getCodingEventText, projectCodingEvents } from './codingEventProjection';
 
 const event = (
@@ -27,6 +32,47 @@ const event = (
 });
 
 describe('projectCodingEvents', () => {
+  test('keeps tools next to the reasoning and messages that produced them', () => {
+    const turns = projectCodingEvents([
+      event(1, CodingEventKind.Message, { role: CodingConversationRole.User, content: 'Fix it' }),
+      event(2, CodingEventKind.Reasoning, { content: 'Inspect the failing test. ' }),
+      event(3, CodingEventKind.ToolCall, {
+        toolCallId: 'call-1',
+        toolName: 'bash',
+        toolInput: { command: 'npm test' },
+        status: CodingToolCallStatus.Pending,
+      }),
+      event(4, CodingEventKind.Reasoning, { content: 'Apply the narrowest fix. ' }),
+      event(5, CodingEventKind.ToolCall, {
+        toolCallId: 'call-1',
+        output: 'passed',
+        status: CodingToolCallStatus.Completed,
+      }),
+      event(6, CodingEventKind.Message, {
+        role: CodingConversationRole.Assistant,
+        messageId: 'answer-1',
+        content: 'Fixed.',
+      }),
+    ]);
+
+    expect(turns[0].timeline.map(item => item.kind)).toEqual([
+      CodingConversationTimelineItemKind.Reasoning,
+      CodingConversationTimelineItemKind.Activity,
+      CodingConversationTimelineItemKind.Reasoning,
+      CodingConversationTimelineItemKind.AssistantMessage,
+    ]);
+    const toolItem = turns[0].timeline[1];
+    expect(toolItem?.kind).toBe(CodingConversationTimelineItemKind.Activity);
+    if (toolItem?.kind !== CodingConversationTimelineItemKind.Activity) return;
+    expect(turns[0].bodyMessageId).toBe('answer-1');
+    expect(toolItem.activity.event.payload).toMatchObject({
+      toolCallId: 'call-1',
+      toolInput: { command: 'npm test' },
+      output: 'passed',
+      status: CodingToolCallStatus.Completed,
+    });
+  });
+
   test('groups a complete agent turn and merges reasoning chunks', () => {
     const turns = projectCodingEvents([
       event(1, CodingEventKind.Message, { role: 'user', content: '修复登录问题' }),
@@ -47,7 +93,40 @@ describe('projectCodingEvents', () => {
     expect(turns[0].assistantMessages).toHaveLength(1);
     expect(turns[0].assistantMessages[0].content).toBe('已经修复。');
     expect(turns[0].assistantMessages[0].isFinalAnswer).toBe(true);
+    expect(turns[0].bodyMessageId).toBe('answer-1');
     expect(turns[0].status).toBe(CodingConversationTurnStatus.Complete);
+  });
+
+  test('selects the streamed assistant output for the body before completion', () => {
+    const turns = projectCodingEvents([
+      event(1, CodingEventKind.Reasoning, { content: 'Preparing the final response.' }),
+      event(2, CodingEventKind.MessageDelta, {
+        role: CodingConversationRole.Assistant,
+        messageId: 'answer-1',
+        content: 'Streaming final response.',
+        streamUpdateMode: CodingStreamUpdateMode.Replace,
+      }),
+    ]);
+
+    expect(turns[0].bodyMessageId).toBe('answer-1');
+    expect(turns[0].assistantMessages[0].isFinalAnswer).toBe(false);
+    expect(turns[0].status).toBeNull();
+  });
+
+  test('preserves whitespace reasoning chunks between streamed text updates', () => {
+    const turns = projectCodingEvents([
+      event(1, CodingEventKind.Message, { role: CodingConversationRole.User, content: 'Inspect it' }),
+      event(2, CodingEventKind.Reasoning, { content: 'Plan the summary.' }),
+      event(3, CodingEventKind.Reasoning, { content: '\n\n' }),
+      event(4, CodingEventKind.Reasoning, { content: 'Refine the device specifications.' }),
+    ]);
+
+    expect(turns[0].timeline.map(item => item.kind)).toEqual([
+      CodingConversationTimelineItemKind.Reasoning,
+    ]);
+    expect(turns[0].reasoning?.content).toBe(
+      'Plan the summary.\n\nRefine the device specifications.',
+    );
   });
 
   test('replaces cumulative built-in reasoning snapshots', () => {

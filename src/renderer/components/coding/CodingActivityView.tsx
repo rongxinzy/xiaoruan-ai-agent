@@ -251,7 +251,7 @@ const CodingActivityComponent = ({
   const isTool = activity.kind === CodingConversationActivityKind.Tool;
   return (
     <div className="flex flex-col gap-2">
-      <Tool defaultOpen={activity.kind === CodingConversationActivityKind.Permission}>
+      <Tool className="mb-0" defaultOpen={activity.kind === CodingConversationActivityKind.Permission}>
         <ToolHeader
           type="dynamic-tool"
           toolName="coding-agent"
