@@ -13,6 +13,8 @@ test('marks only the final projected assistant message as an artifact candidate'
       userMessage: null,
       reasoning: null,
       activities: [],
+      timeline: [],
+      bodyMessageId: 'assistant-final',
       assistantMessages: [
         {
           id: 'assistant-intermediate',
