@@ -1,5 +1,5 @@
 import { Button } from '@shared/components/ui/button';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, LoaderCircle } from 'lucide-react';
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -173,9 +173,10 @@ const TYPE_LABEL_KEY: Record<ArtifactType, string> = {
 
 interface ArtifactPreviewCardProps {
   artifact: Artifact;
+  isLoading?: boolean;
 }
 
-const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact }) => {
+const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact, isLoading = false }) => {
   const dispatch = useDispatch();
   const isPanelOpen = useSelector(selectIsPanelOpen);
   const selectedArtifact = useSelector(selectSelectedArtifact);
@@ -219,6 +220,8 @@ const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact }) =
         type="button"
         variant="ghost"
         onClick={handleOpenPreview}
+        disabled={isLoading}
+        aria-busy={isLoading}
         className="flex min-w-0 flex-1 items-center justify-start gap-3 px-0 hover:bg-transparent"
       >
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -226,7 +229,7 @@ const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact }) =
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col items-start text-left">
-          {canOpenLocal ? (
+          {canOpenLocal && !isLoading ? (
             // 文件名独立命中：阻止冒泡到整卡 toggle，只打开本地文件夹
             <span
               role="link"
@@ -253,8 +256,14 @@ const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact }) =
         </div>
 
         <div className="flex shrink-0 items-center gap-1 text-sm font-medium text-primary">
-          <ExternalLink className="h-4 w-4" />
-          <span>{t('artifactOpen')}</span>
+          {isLoading ? (
+            <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <>
+              <ExternalLink className="h-4 w-4" />
+              <span>{t('artifactOpen')}</span>
+            </>
+          )}
         </div>
       </Button>
     </div>

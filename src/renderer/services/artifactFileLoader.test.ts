@@ -5,6 +5,7 @@ import {
   invalidateArtifactFile,
   loadArtifactDataUrl,
   loadArtifactFile,
+  loadArtifactFileWithRetry,
 } from './artifactFileLoader';
 
 const TEXT_DATA_URL = 'data:text/plain;base64,SGVsbG8=';
@@ -49,6 +50,54 @@ test('decodes text artifacts through the same broker', async () => {
 
   expect(loaded?.content).toBe('Hello');
   expect(readFileAsDataUrl).toHaveBeenCalledTimes(1);
+});
+
+test('retries a transient empty file before returning generated content', async () => {
+  const readFileAsDataUrl = vi
+    .fn()
+    .mockResolvedValueOnce({ success: true, dataUrl: 'data:text/plain;base64,' })
+    .mockResolvedValueOnce({ success: true, dataUrl: TEXT_DATA_URL });
+  vi.stubGlobal('window', { electron: { dialog: { readFileAsDataUrl } } });
+
+  const loaded = await loadArtifactFileWithRetry({
+    id: 'artifact-1',
+    messageId: 'message-1',
+    sessionId: 'session-1',
+    type: 'text',
+    title: 'Notes',
+    content: '',
+    filePath: 'C:/workspace/notes.txt',
+    source: 'tool',
+    role: 'deliverable',
+    createdAt: 1,
+  });
+
+  expect(loaded?.content).toBe('Hello');
+  expect(readFileAsDataUrl).toHaveBeenCalledTimes(2);
+});
+
+test('returns a genuinely empty file after the bounded retry window', async () => {
+  const readFileAsDataUrl = vi.fn().mockResolvedValue({
+    success: true,
+    dataUrl: 'data:text/plain;base64,',
+  });
+  vi.stubGlobal('window', { electron: { dialog: { readFileAsDataUrl } } });
+
+  const loaded = await loadArtifactFileWithRetry({
+    id: 'artifact-2',
+    messageId: 'message-2',
+    sessionId: 'session-2',
+    type: 'text',
+    title: 'Empty notes',
+    content: '',
+    filePath: 'C:/workspace/empty.txt',
+    source: 'tool',
+    role: 'deliverable',
+    createdAt: 1,
+  });
+
+  expect(loaded?.content).toBe('');
+  expect(readFileAsDataUrl).toHaveBeenCalledTimes(5);
 });
 
 test('invalidating a path forces a fresh read', async () => {

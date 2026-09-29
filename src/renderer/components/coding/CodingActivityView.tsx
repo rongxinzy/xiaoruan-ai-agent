@@ -239,10 +239,12 @@ const activityTitle = (activity: CodingConversationActivity): string => {
 const CodingActivityComponent = ({
   activity,
   artifacts,
+  loadingArtifactIds,
 }: {
   activity: CodingConversationActivity;
   /** File artifacts produced by this tool call, shown as preview cards. */
   artifacts?: Artifact[];
+  loadingArtifactIds?: ReadonlySet<string>;
 }) => {
   const state = activityState(activity);
   const isPlan = activity.kind === CodingConversationActivityKind.Plan;
@@ -274,7 +276,11 @@ const CodingActivityComponent = ({
       {artifacts && artifacts.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {artifacts.map(artifact => (
-            <ArtifactPreviewCard key={artifact.id} artifact={artifact} />
+            <ArtifactPreviewCard
+              key={artifact.id}
+              artifact={artifact}
+              isLoading={loadingArtifactIds?.has(artifact.id) ?? false}
+            />
           ))}
         </div>
       )}

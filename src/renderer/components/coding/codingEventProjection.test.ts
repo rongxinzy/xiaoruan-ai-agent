@@ -46,6 +46,7 @@ describe('projectCodingEvents', () => {
     expect(turns[0].reasoning?.content).toBe('先检查认证流程。');
     expect(turns[0].assistantMessages).toHaveLength(1);
     expect(turns[0].assistantMessages[0].content).toBe('已经修复。');
+    expect(turns[0].assistantMessages[0].isFinalAnswer).toBe(true);
     expect(turns[0].status).toBe(CodingConversationTurnStatus.Complete);
   });
 
@@ -121,6 +122,21 @@ describe('projectCodingEvents', () => {
     expect(turns).toHaveLength(1);
     expect(turns[0].assistantMessages).toHaveLength(1);
     expect(turns[0].assistantMessages[0].content).toBe('最终内容');
+  });
+
+  test('keeps a final-answer marker supplied by a nested Pi message', () => {
+    const turns = projectCodingEvents([
+      event(1, CodingEventKind.Message, {
+        message: {
+          id: 'answer-1',
+          type: 'assistant',
+          content: 'Created C:/work/mother.txt',
+          metadata: { isFinalAnswer: true },
+        },
+      }),
+    ]);
+
+    expect(turns[0].assistantMessages[0].isFinalAnswer).toBe(true);
   });
 
   test('coalesces updates for the same tool call', () => {

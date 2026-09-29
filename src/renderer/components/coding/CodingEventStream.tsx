@@ -11,25 +11,24 @@ import {
   EmptyTitle,
 } from '@shared/components/ui/empty';
 import { Code2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import type { CodingEvent } from '../../../shared/codingAgent';
-import { detectArtifactsFromMessages } from '../../services/artifactParser';
+import { loadArtifactFileWithRetry } from '../../services/artifactFileLoader';
+import {
+  detectArtifactsFromMessages,
+  normalizeFilePathForDedup,
+  type DetectedArtifact,
+} from '../../services/artifactParser';
 import { i18nService } from '../../services/i18n';
 import type { RootState } from '../../store';
 import { addArtifact, selectSessionArtifacts } from '../../store/slices/artifactSlice';
-import { isBinaryArtifactFile, type Artifact } from '../../types/artifact';
-import type { CoworkMessage } from '../../types/cowork';
+import type { Artifact } from '../../types/artifact';
+import { toDetectableCodingMessages } from './codingArtifactMessages';
 import { CodingConversationTurn } from './CodingConversationTurn';
-import {
-  collectCodingFileArtifacts,
-  resolveArtifactFilePath,
-} from './codingArtifacts';
-import {
-  projectCodingEvents,
-  type CodingConversationTurn as TurnModel,
-} from './codingEventProjection';
+import { collectCodingFileArtifacts } from './codingArtifacts';
+import { projectCodingEvents } from './codingEventProjection';
 
 interface CodingEventStreamProps {
   events: CodingEvent[];
@@ -48,17 +47,10 @@ interface CodingEventStreamProps {
   artifactBaseDir?: string | null;
 }
 
-const toDetectableMessages = (turns: TurnModel[]): CoworkMessage[] =>
-  turns.flatMap(turn =>
-    turn.assistantMessages
-      .filter(message => message.content.trim())
-      .map(message => ({
-        id: message.id,
-        type: 'assistant' as const,
-        content: message.content,
-        timestamp: message.createdAt,
-      })),
-  );
+type LoadableArtifact = Pick<DetectedArtifact, 'artifact' | 'needsFileLoad'> & {
+  version: string;
+  toolCallId: string | null;
+};
 
 const groupArtifactsByMessage = (artifacts: Artifact[]): Map<string, Artifact[]> => {
   const grouped = new Map<string, Artifact[]>();
@@ -69,31 +61,6 @@ const groupArtifactsByMessage = (artifacts: Artifact[]): Map<string, Artifact[]>
     grouped.set(artifact.messageId, list);
   }
   return grouped;
-};
-
-const loadCodingArtifactContent = async (
-  artifact: Artifact,
-  baseDir: string | null | undefined,
-): Promise<Artifact | null> => {
-  if (!artifact.filePath) return null;
-  const absPath = resolveArtifactFilePath(artifact.filePath, baseDir);
-  try {
-    const result = await window.electron.dialog.readFileAsDataUrl(absPath);
-    if (!result?.success || !result.dataUrl) return null;
-    let content = result.dataUrl;
-    if (!isBinaryArtifactFile(absPath)) {
-      try {
-        const base64 = result.dataUrl.split(',')[1] || '';
-        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-        content = new TextDecoder('utf-8').decode(bytes);
-      } catch {
-        content = result.dataUrl;
-      }
-    }
-    return { ...artifact, content, filePath: absPath };
-  } catch {
-    return null;
-  }
 };
 
 export const CodingEventStream = ({
@@ -114,13 +81,32 @@ export const CodingEventStream = ({
   // Tracks the latest loaded write per artifact so a file is re-read from disk
   // after a rewrite, but not on every render.
   const loadedFileVersionsRef = useRef<Map<string, string>>(new Map());
+  const [pendingArtifactIds, setPendingArtifactIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   // Artifact detection runs on the settled transcript only — scanning on every
   // streamed chunk would redo the whole parse per token.
   const detectableMessages = useMemo(
-    () => (isStreaming ? [] : toDetectableMessages(turns)),
+    () => (isStreaming ? [] : toDetectableCodingMessages(turns)),
     [turns, isStreaming],
   );
+  const detectedArtifacts = useMemo(
+    () =>
+      artifactSessionKey
+        ? detectArtifactsFromMessages(detectableMessages, artifactSessionKey)
+        : [],
+    [artifactSessionKey, detectableMessages],
+  );
+  const detectedArtifactsByPath = useMemo(() => {
+    const byPath = new Map<string, DetectedArtifact>();
+    for (const detected of detectedArtifacts) {
+      if (detected.artifact.filePath) {
+        byPath.set(normalizeFilePathForDedup(detected.artifact.filePath), detected);
+      }
+    }
+    return byPath;
+  }, [detectedArtifacts]);
   const fileArtifacts = useMemo(
     () =>
       artifactSessionKey
@@ -128,50 +114,132 @@ export const CodingEventStream = ({
         : [],
     [events, artifactSessionKey, artifactBaseDir],
   );
+  const linkedFileArtifacts = useMemo(
+    () =>
+      fileArtifacts.map(fileArtifact => {
+        const detected = fileArtifact.artifact.filePath
+          ? detectedArtifactsByPath.get(normalizeFilePathForDedup(fileArtifact.artifact.filePath))
+          : undefined;
+        if (!detected) return fileArtifact;
+        return {
+          ...fileArtifact,
+          artifact: {
+            ...fileArtifact.artifact,
+            id: detected.artifact.id,
+            messageId: detected.artifact.messageId,
+            title: detected.artifact.title,
+            fileName: detected.artifact.fileName,
+            source: detected.artifact.source,
+            role: detected.artifact.role,
+            declared: detected.artifact.declared,
+          },
+        };
+      }),
+    [fileArtifacts, detectedArtifactsByPath],
+  );
+  const loadableArtifacts = useMemo<LoadableArtifact[]>(() => {
+    const representedPaths = new Set(
+      linkedFileArtifacts.flatMap(fileArtifact =>
+        fileArtifact.artifact.filePath
+          ? [normalizeFilePathForDedup(fileArtifact.artifact.filePath)]
+          : [],
+      ),
+    );
+    return [
+      ...linkedFileArtifacts,
+      ...detectedArtifacts
+        .filter(
+          detected =>
+            detected.needsFileLoad &&
+            detected.artifact.filePath &&
+            !representedPaths.has(normalizeFilePathForDedup(detected.artifact.filePath)),
+        )
+        .map(detected => ({
+          ...detected,
+          version: `detected:${detected.artifact.id}`,
+          toolCallId: null,
+        })),
+    ];
+  }, [detectedArtifacts, linkedFileArtifacts]);
+  const loadingArtifactIds = useMemo(() => {
+    const storedArtifactIds = new Set((artifacts ?? []).map(artifact => artifact.id));
+    return new Set(
+      [
+        ...pendingArtifactIds,
+        ...loadableArtifacts
+          .filter(
+            ({ artifact, needsFileLoad }) => needsFileLoad && !storedArtifactIds.has(artifact.id),
+          )
+          .map(({ artifact }) => artifact.id),
+      ],
+    );
+  }, [artifacts, loadableArtifacts, pendingArtifactIds]);
   useEffect(() => {
     if (!artifactSessionKey) return;
     // Markdown/message artifacts wait for a settled transcript; file artifacts
     // from completed writes / FileChange can sync while the turn still streams
     // so preview cards and the side panel stay consistent.
     if (!isStreaming) {
-      for (const { artifact } of detectArtifactsFromMessages(
-        detectableMessages,
-        artifactSessionKey,
-      )) {
+      for (const { artifact } of detectedArtifacts) {
         // The coding page keeps revealing its own stream artifacts; the cowork
         // panel only opens for live declared deliverables.
         dispatch(addArtifact({ sessionId: artifactSessionKey, artifact, reveal: true }));
       }
     }
-    for (const { artifact, needsFileLoad, version } of fileArtifacts) {
-      // The coding page keeps revealing its own stream artifacts; the cowork
-      // panel only opens for live declared deliverables.
-      dispatch(addArtifact({ sessionId: artifactSessionKey, artifact, reveal: true }));
-      if (!needsFileLoad) continue;
+    for (const { artifact, needsFileLoad, version } of loadableArtifacts) {
+      if (!needsFileLoad) {
+        // The coding page keeps revealing its own stream artifacts; the cowork
+        // panel only opens for live declared deliverables.
+        dispatch(addArtifact({ sessionId: artifactSessionKey, artifact, reveal: true }));
+        continue;
+      }
       const loadKey = `${artifactSessionKey}:${artifact.id}`;
       if (loadedFileVersionsRef.current.get(loadKey) === version) continue;
       loadedFileVersionsRef.current.set(loadKey, version);
-      void loadCodingArtifactContent(artifact, artifactBaseDir).then(loaded => {
-        if (loaded) {
-          dispatch(addArtifact({ sessionId: artifactSessionKey, artifact: loaded, reveal: true }));
-        }
-      });
+      setPendingArtifactIds(previous => new Set(previous).add(artifact.id));
+      void loadArtifactFileWithRetry(artifact, artifactBaseDir, { forceRefresh: true }).then(
+        loaded => {
+          if (loadedFileVersionsRef.current.get(loadKey) !== version) return;
+          if (!loaded) {
+            loadedFileVersionsRef.current.delete(loadKey);
+            setPendingArtifactIds(previous => {
+              const next = new Set(previous);
+              next.delete(artifact.id);
+              return next;
+            });
+            return;
+          }
+          dispatch(
+            addArtifact({
+              sessionId: artifactSessionKey,
+              artifact: { ...artifact, content: loaded.content, filePath: loaded.filePath },
+              reveal: true,
+            }),
+          );
+          setPendingArtifactIds(previous => {
+            const next = new Set(previous);
+            next.delete(artifact.id);
+            return next;
+          });
+        },
+      );
     }
-  }, [artifactSessionKey, artifactBaseDir, isStreaming, detectableMessages, fileArtifacts, dispatch]);
+  }, [artifactSessionKey, artifactBaseDir, isStreaming, detectedArtifacts, loadableArtifacts, dispatch]);
 
   // Anchor preview cards to the tool call that wrote the file. Store artifacts
   // win over collector output because they may carry disk-loaded content.
   const artifactsByToolCallId = useMemo(() => {
     const grouped = new Map<string, Artifact[]>();
     const storedById = new Map((artifacts ?? []).map(artifact => [artifact.id, artifact]));
-    for (const { artifact, toolCallId } of fileArtifacts) {
+    for (const { artifact, toolCallId } of linkedFileArtifacts) {
       if (!toolCallId) continue;
+      const storedArtifact = storedById.get(artifact.id);
       const list = grouped.get(toolCallId) ?? [];
-      list.push(storedById.get(artifact.id) ?? artifact);
+      list.push(storedArtifact ?? artifact);
       grouped.set(toolCallId, list);
     }
     return grouped;
-  }, [fileArtifacts, artifacts]);
+  }, [linkedFileArtifacts, artifacts]);
 
   const artifactsByMessageId = useMemo(
     () => groupArtifactsByMessage(artifacts ?? []),
@@ -228,6 +296,7 @@ export const CodingEventStream = ({
                 }
                 artifactsByMessageId={artifactsByMessageId}
                 artifactsByToolCallId={artifactsByToolCallId}
+                loadingArtifactIds={loadingArtifactIds}
               />
             ))
           )}
