@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
@@ -23,11 +23,7 @@ import { coworkService } from '../services/cowork';
 import { i18nService } from '../services/i18n';
 import { store, type RootState } from '../store';
 import { updateCurrentSessionModelOverride } from '../store/slices/coworkSlice';
-import {
-  setDefaultSelectedModel,
-  setSelectedModel,
-  type Model,
-} from '../store/slices/modelSlice';
+import { setDefaultSelectedModel, setSelectedModel, type Model } from '../store/slices/modelSlice';
 import { toAgentModelRef } from '../utils/agentModelRef';
 
 export function AISphereSettings() {
@@ -174,10 +170,11 @@ export function AISphereSettings() {
   }, []);
 
   // 2026/09/22 lixiang  存储的默认模型缺失或不在目录时，自动持久化为目录首个模型
+  const chooseDefaultModel = useEffectEvent(choose);
   useEffect(() => {
     if (busy || snapshot?.status !== AISphereStatus.Ready || !snapshot.models.length) return;
     if (snapshot.models.some(model => model.id === selected)) return;
-    void choose(snapshot.models[0].id);
+    void chooseDefaultModel(snapshot.models[0].id);
   }, [busy, snapshot, selected]);
 
   // 2026/09/22 lixiang  连接与刷新都使用输入框地址，避免刷新回落到旧绑定
@@ -192,10 +189,9 @@ export function AISphereSettings() {
       setAddress(value.address);
       const config = await configService.reload();
       // 2026/09/22 lixiang  连接/刷新后校验默认模型仍在目录，否则写回首个模型并同步配置
-      const nextSelected =
-        value.models.some(model => model.id === config.model.defaultModel)
-          ? (config.model.defaultModel ?? '')
-          : (value.models[0]?.id ?? '');
+      const nextSelected = value.models.some(model => model.id === config.model.defaultModel)
+        ? (config.model.defaultModel ?? '')
+        : (value.models[0]?.id ?? '');
       // 仅当默认模型需要纠正时才推到 Chat；刷新成功但默认未变时不要覆盖会话手选模型
       if (nextSelected && nextSelected !== config.model.defaultModel) {
         await applyDefaultModelToChat(nextSelected);
@@ -216,7 +212,9 @@ export function AISphereSettings() {
         Object.values(AISphereError).find(code => message.includes(code)) ??
           AISphereError.Unavailable,
       );
-      const value = await window.electron.managedProviders.aisphereSnapshot().catch(() => undefined);
+      const value = await window.electron.managedProviders
+        .aisphereSnapshot()
+        .catch(() => undefined);
       // 2026/09/22 lixiang  连接失败清空目录展示；保留输入框地址，不回写旧绑定
       setSnapshot(
         value

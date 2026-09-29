@@ -13,6 +13,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { agentService } from '../services/agent';
 import { configService } from '../services/config';
 import { coworkService } from '../services/cowork';
+import { requestScheduledTaskCreate } from './scheduledTasks/createRequest';
+import type { WorkspaceSidebarNode } from './agentSidebar/types';
 import { i18nService } from '../services/i18n';
 import { RootState, store } from '../store';
 import {
@@ -460,6 +462,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                   }
                   onDismissSearch={() => {
                     setSearchActive(false);
+                  }}
+                  onCreateScheduledTask={(workspace: WorkspaceSidebarNode) => {
+                    requestScheduledTaskCreate({ workspaceId: workspace.id });
+                    onShowScheduledTasks();
                   }}
                   workMode={WorkMode.Work}
                 />

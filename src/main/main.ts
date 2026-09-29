@@ -44,6 +44,7 @@ import { ActivityService } from './activity/activityService';
 import { registerActivityIpcHandlers } from './activity/ipcHandlers';
 import { ActivitySource, ActivityStatus } from '../shared/activity/constants';
 import { AgentIpcChannel } from '../shared/agent/constants';
+import { renameCoworkSession } from './scheduledSessionTitles/rename';
 import {
   COWORK_MESSAGE_PAGE_SIZE,
   COWORK_SESSION_PAGE_SIZE,
@@ -4449,16 +4450,10 @@ if (!gotTheLock) {
   );
 
   ipcMain.handle(
-    'cowork:session:rename',
+    CoworkSessionIpc.Rename,
     async (_event, options: { sessionId: string; title: string }) => {
       try {
-        const title = options.title.trim();
-        if (!title) {
-          return { success: false, error: 'Title is required' };
-        }
-        const coworkStoreInstance = getCoworkStore();
-        coworkStoreInstance.updateSession(options.sessionId, { title });
-        return { success: true };
+        return renameCoworkSession(getCoworkStore(), options);
       } catch (error) {
         return {
           success: false,

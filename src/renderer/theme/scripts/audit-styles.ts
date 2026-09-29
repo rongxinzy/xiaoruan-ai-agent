@@ -28,7 +28,7 @@ function scan(dir: string): void {
       continue;
     }
     if (!/\.tsx?$/.test(entry.name) || /\.test\./.test(entry.name)) continue;
-    const name = relative(root, path);
+    const name = relative(root, path).replaceAll('\\', '/');
     if (name.includes('/icons/') || exceptions[name]) continue;
     scanned++;
     const source = readFileSync(path, 'utf8');
