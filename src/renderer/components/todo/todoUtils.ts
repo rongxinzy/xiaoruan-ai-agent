@@ -188,15 +188,13 @@ export const toDateTimeInputMaxValue = (dueAt: number | null): string | undefine
 
 export const countTodosByView = (
   activeTodos: Todo[],
-  completedTodos: Todo[],
+  completedCount: number,
   referenceDate: string,
 ): Record<TodoView, number> => ({
   [TodoView.MyDay]: activeTodos.filter(todo => todo.myDayDate === referenceDate).length,
-  [TodoView.Important]:
-    activeTodos.filter(todo => todo.important).length +
-    completedTodos.filter(todo => todo.important).length,
+  [TodoView.Important]: activeTodos.filter(todo => todo.important).length,
   [TodoView.Planned]: activeTodos.filter(todo => todo.dueAt !== null || todo.remindAt !== null)
     .length,
   [TodoView.All]: activeTodos.length,
-  [TodoView.Completed]: completedTodos.length,
+  [TodoView.Completed]: completedCount,
 });
