@@ -191,6 +191,19 @@ const RULES: ErrorRule[] = [
       /\baborted\b|operation was aborted|socket hang up|premature close|stream (?:was )?(?:closed|interrupted)|ECONNRESET/i,
   },
 
+  // ── Turn timeout / truncated writes ─────────────────────────────────────
+  // Both kinds are also set explicitly by the runtime when it knows the cause;
+  // the patterns keep the text-only paths (conversation status lines, IPC
+  // strings) classified instead of leaking English to the UI.
+  {
+    kind: CoworkErrorKind.TurnTimeout,
+    pattern: /produced no output for|turn exceeded .* without finishing|turn was stopped/i,
+  },
+  {
+    kind: CoworkErrorKind.FileWriteTruncated,
+    pattern: /file mutation payload was truncated|chunked-write guidance/i,
+  },
+
   // ── Tool timeout ────────────────────────────────────────────────────────
   {
     kind: CoworkErrorKind.ToolTimeout,

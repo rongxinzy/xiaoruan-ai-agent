@@ -46,8 +46,6 @@ const translations: Record<LanguageType, Record<string, string>> = {
     codingAgentPermissionModeAsk: '每次询问',
     codingAgentPermissionModeAuto: '自动放行低风险',
     codingAgentPermissionModeAllowAll: '全部允许',
-    codingAgentNoAssistantResponse:
-      '外部 Agent 未返回助手内容，请检查 Agent 的登录状态、模型配置和网络连接。',
     cronSessionPrefix: '定时',
     channelPrefixFeishu: '飞书',
     channelPrefixDingtalk: '钉钉',
@@ -358,8 +356,6 @@ const translations: Record<LanguageType, Record<string, string>> = {
     codingAgentPermissionModeAsk: 'Ask every time',
     codingAgentPermissionModeAuto: 'Auto-approve low risk',
     codingAgentPermissionModeAllowAll: 'Allow all',
-    codingAgentNoAssistantResponse:
-      'The external agent returned no assistant content. Check its sign-in state, model configuration, and network connection.',
     cronSessionPrefix: 'Cron',
     channelPrefixFeishu: 'Feishu',
     channelPrefixDingtalk: 'DingTalk',
