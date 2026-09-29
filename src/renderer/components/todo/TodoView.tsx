@@ -57,7 +57,7 @@ const TodoView: React.FC<TodoViewProps> = ({
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [allTodos, setAllTodos] = useState<Todo[]>([]);
-  const [completedCount, setCompletedCount] = useState(0);
+  const [completedTodos, setCompletedTodos] = useState<Todo[]>([]);
   const [suggestionTodos, setSuggestionTodos] = useState<Todo[]>([]);
   const [lists, setLists] = useState<TodoList[]>([]);
   const [query, setQuery] = useState('');
@@ -83,8 +83,8 @@ const TodoView: React.FC<TodoViewProps> = ({
   );
 
   const activeCounts = useMemo<Record<TodoViewFilter, number>>(() => {
-    return countTodosByView(allTodos, completedCount, todayDateKey());
-  }, [allTodos, completedCount]);
+    return countTodosByView(allTodos, completedTodos, todayDateKey());
+  }, [allTodos, completedTodos]);
 
   const listCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -134,7 +134,7 @@ const TodoView: React.FC<TodoViewProps> = ({
     setLists(listsResult.lists ?? []);
     const allTodoItems = allResult.todos ?? [];
     setAllTodos(allTodoItems);
-    setCompletedCount(completedResult.todos?.length ?? 0);
+    setCompletedTodos(completedResult.todos ?? []);
     setSuggestionTodos(
       allTodoItems
         .filter(todo => todo.myDayDate !== todayDateKey())
@@ -187,7 +187,10 @@ const TodoView: React.FC<TodoViewProps> = ({
       if (!(activeListId === null && activeView === TodoViewFilter.All)) {
         next.add(TodoViewFilter.All);
       }
-      if (createInput.important && !(activeListId === null && activeView === TodoViewFilter.Important)) {
+      if (
+        createInput.important &&
+        !(activeListId === null && activeView === TodoViewFilter.Important)
+      ) {
         next.add(TodoViewFilter.Important);
       }
       if (
@@ -468,7 +471,10 @@ const TodoView: React.FC<TodoViewProps> = ({
               >
                 <div className="rounded-lg border border-border bg-card p-2 focus-within:ring-3 focus-within:ring-ring/30">
                   <div className="flex items-center gap-2">
-                    <Plus className="ml-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <Plus
+                      className="ml-1 size-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
                     <Input
                       id="todo-new-input"
                       value={newTodoTitle}
