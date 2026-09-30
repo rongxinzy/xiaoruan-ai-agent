@@ -9,6 +9,7 @@ import {
   CodingWorkspaceFileKind,
   type CodingWorkspaceFileEntry,
 } from '../../../shared/codingAgent';
+import { showAppError } from '../../services/appToast';
 import { i18nService } from '../../services/i18n';
 
 interface CodingWorkspaceFileBrowserProps {
@@ -42,7 +43,6 @@ export const CodingWorkspaceFileBrowser = ({
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<string | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const directoryRequestIds = useRef(new Map<string, number>());
   const directoryRequestGeneration = useRef(0);
   const fileRequestId = useRef(0);
@@ -65,10 +65,9 @@ export const CodingWorkspaceFileBrowser = ({
           directoryRequestIds.current.get(directoryPath) !== requestId
         ) return;
         if (!result.success || !entries) {
-          setError(result.error ?? i18nService.t('codingAgentFilesPreviewUnavailable'));
+          showAppError(result.error, 'codingAgentFilesPreviewUnavailable');
           return;
         }
-        setError(null);
         if (!directoryPath) setNodes(entries);
         else setNodes(current => replaceNodeChildren(current, directoryPath, entries));
       } catch (cause) {
@@ -76,7 +75,7 @@ export const CodingWorkspaceFileBrowser = ({
           directoryRequestGeneration.current !== generation ||
           directoryRequestIds.current.get(directoryPath) !== requestId
         ) return;
-        setError(cause instanceof Error ? cause.message : i18nService.t('codingAgentFilesPreviewUnavailable'));
+        showAppError(cause, 'codingAgentFilesPreviewUnavailable');
       } finally {
         if (
           directoryRequestGeneration.current === generation &&
@@ -103,7 +102,6 @@ export const CodingWorkspaceFileBrowser = ({
     setSelectedPath(null);
     setSelectedContent(null);
     setLoadingFile(false);
-    setError(null);
     void loadDirectory('');
   }, [loadDirectory]);
 
@@ -134,14 +132,13 @@ export const CodingWorkspaceFileBrowser = ({
         });
         if (fileRequestId.current !== requestId) return;
         if (!result.success || !result.file) {
-          setError(result.error ?? i18nService.t('codingAgentFilesPreviewUnavailable'));
+          showAppError(result.error, 'codingAgentFilesPreviewUnavailable');
           return;
         }
-        setError(null);
         setSelectedContent(result.file.content);
       } catch (cause) {
         if (fileRequestId.current !== requestId) return;
-        setError(cause instanceof Error ? cause.message : i18nService.t('codingAgentFilesPreviewUnavailable'));
+        showAppError(cause, 'codingAgentFilesPreviewUnavailable');
       } finally {
         if (fileRequestId.current === requestId) setLoadingFile(false);
       }
@@ -166,7 +163,6 @@ export const CodingWorkspaceFileBrowser = ({
           <span className="truncate text-sm font-medium">{i18nService.t('codingAgentFilesTitle')}</span>
         </div>
       </header>
-      {error ? <p className="px-3 pt-2 text-xs text-destructive">{error}</p> : null}
       <div className="grid min-h-0 flex-1 grid-cols-2">
         <section className="min-h-0 min-w-0 border-r border-border">
           {loadingFile ? (

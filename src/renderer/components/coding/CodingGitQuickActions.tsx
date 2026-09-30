@@ -15,11 +15,10 @@ import { Spinner } from '@shared/components/ui/spinner';
 import { cn } from '@shared/lib/utils';
 import { Check, ChevronDown, FileDiff, GitBranch, GitPullRequest, Send, SlidersHorizontal, Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { toast } from 'sonner';
 
 import type { CodingGitStatus, CodingGitTargetInput } from '../../../shared/codingAgent';
+import { showAppError, showAppToast } from '../../services/appToast';
 import { i18nService } from '../../services/i18n';
-import { normalizeError } from '../../services/errorNormalization';
 import { CodingGitQuickActionMode, type CodingGitQuickActionMode as CodingGitQuickActionModeType } from './constants';
 
 interface CodingGitQuickActionsProps {
@@ -84,7 +83,7 @@ export const CodingGitQuickActions = ({
       setStatus(result.status);
       return result.status;
     }
-    toast.error(normalizeError(result.error ?? i18nService.t('codingGitActionFailed')));
+    showAppError(result.error, 'codingGitActionFailed');
     return null;
   }, [target]);
 
@@ -117,13 +116,13 @@ export const CodingGitQuickActions = ({
     const result = await window.electron.codingAgent.createGitPullRequest({ ...target, title: pullRequestTitle, body: pullRequestBody, base: pullRequestBase });
     setPendingAction(null);
     if (!result.success || !result.url) {
-      toast.error(normalizeError(result.error ?? i18nService.t('codingGitActionFailed')));
+      showAppError(result.error, 'codingGitActionFailed');
       return;
     }
     setPullRequestOpen(false);
     setPullRequestTitle('');
     setPullRequestBody('');
-    toast.success(i18nService.t('codingGitPullRequestCreated'));
+    showAppToast(i18nService.t('codingGitPullRequestCreated'), { isSuccess: true });
     void window.electron.shell.openExternal(result.url);
   };
 
@@ -135,10 +134,10 @@ export const CodingGitQuickActions = ({
     if (result.success && result.status) {
       setStatus(result.status);
       setBranchOpen(false);
-      toast.success(i18nService.t('codingGitBranchSwitched'));
+      showAppToast(i18nService.t('codingGitBranchSwitched'), { isSuccess: true });
       return;
     }
-    toast.error(normalizeError(result.error ?? i18nService.t('codingGitActionFailed')));
+    showAppError(result.error, 'codingGitActionFailed');
   };
 
   const runCommit = async (pushAfterCommit: boolean) => {
@@ -148,20 +147,20 @@ export const CodingGitQuickActions = ({
     try {
       if (includeUnstaged && unstagedPaths.length > 0) {
         const staged = await window.electron.codingAgent.stageGitPaths({ ...target, paths: unstagedPaths });
-        if (!staged.success) throw new Error(staged.error ?? i18nService.t('codingGitActionFailed'));
+        if (!staged.success) throw new Error(staged.error ?? '');
       }
       const committed = await window.electron.codingAgent.commitGitChanges({ ...target, message });
-      if (!committed.success) throw new Error(committed.error ?? i18nService.t('codingGitActionFailed'));
+      if (!committed.success) throw new Error(committed.error ?? '');
       if (pushAfterCommit) {
         const pushed = await window.electron.codingAgent.pushGitBranch(target);
-        if (!pushed.success) throw new Error(pushed.error ?? i18nService.t('codingGitActionFailed'));
+        if (!pushed.success) throw new Error(pushed.error ?? '');
       }
-      toast.success(i18nService.t(pushAfterCommit ? 'codingGitCommittedAndPushed' : 'codingGitCommitted'));
+      showAppToast(i18nService.t(pushAfterCommit ? 'codingGitCommittedAndPushed' : 'codingGitCommitted'), { isSuccess: true });
       setCommitMessage('');
       setCommitOpen(false);
       await loadStatus();
     } catch (error) {
-      toast.error(normalizeError(error instanceof Error ? error.message : String(error)));
+      showAppError(error, 'codingGitActionFailed');
     } finally {
       setPendingAction(null);
     }
@@ -172,17 +171,17 @@ export const CodingGitQuickActions = ({
     const result = await window.electron.codingAgent.pushGitBranch(target);
     setPendingAction(null);
     if (result.success) {
-      toast.success(i18nService.t('codingGitPushed'));
+      showAppToast(i18nService.t('codingGitPushed'), { isSuccess: true });
       await loadStatus();
       return;
     }
-    toast.error(normalizeError(result.error ?? i18nService.t('codingGitActionFailed')));
+    showAppError(result.error, 'codingGitActionFailed');
   };
 
   const openRepository = async () => {
     if (!status?.githubRepositoryUrl) return;
     const result = await window.electron.shell.openExternal(status.githubRepositoryUrl);
-    if (!result.success) toast.error(normalizeError(result.error ?? i18nService.t('codingGitActionFailed')));
+    if (!result.success) showAppError(result.error, 'codingGitActionFailed');
   };
 
   return (

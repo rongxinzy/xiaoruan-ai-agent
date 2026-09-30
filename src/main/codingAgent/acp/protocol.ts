@@ -1,7 +1,15 @@
-import { methods, PROTOCOL_VERSION, type ClientCapabilities } from '@agentclientprotocol/sdk';
+import {
+  methods,
+  PROTOCOL_VERSION,
+  RequestError,
+  type ClientCapabilities,
+} from '@agentclientprotocol/sdk';
+
+import { CodingErrorDetailMessage } from '../../../shared/codingAgent';
 
 /** The stable ACP v1 version exported by the official TypeScript SDK. */
 export const ACP_PROTOCOL_VERSION = PROTOCOL_VERSION;
+export const ACP_AUTH_REQUIRED_CODE = RequestError.authRequired().code;
 
 /** Capabilities implemented by the long-lived ACP driver. */
 export const ACP_CLIENT_CAPABILITIES = {
@@ -57,7 +65,9 @@ export type AcpSessionUpdateKind = (typeof AcpSessionUpdateKind)[keyof typeof Ac
 
 export class AcpProtocolIncompatibleError extends Error {
   constructor(actualVersion: unknown) {
-    super(`ACP protocol version ${String(actualVersion)} is not supported.`);
+    super(
+      `${CodingErrorDetailMessage.AcpProtocolUnsupported} ${String(actualVersion)} is not supported.`,
+    );
     this.name = 'AcpProtocolIncompatibleError';
   }
 }

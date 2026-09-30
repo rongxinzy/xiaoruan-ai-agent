@@ -1,4 +1,5 @@
 import type { CoworkError } from '../../common/coworkError';
+import type { RuntimeRetryNotice } from '../../common/runtimeNotice';
 import type { ActivityRun } from '../../shared/activity/types';
 import type { NvidiaSmiSnapshot, SystemMemorySnapshot } from '../../shared/hardware';
 import type {
@@ -1241,6 +1242,9 @@ interface IElectronAPI {
     getSystemLocale: () => Promise<string>;
     consumePendingLocalInferenceInstall: () => Promise<string | null>;
     relaunch: () => Promise<void>;
+  };
+  runtimeNotices: {
+    onNotice: (callback: (notice: RuntimeRetryNotice) => void) => () => void;
   };
   log: {
     getPath: () => Promise<string>;
