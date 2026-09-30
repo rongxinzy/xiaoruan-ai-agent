@@ -54,8 +54,9 @@ import { resolveArtifactPanelMaxWidth } from '../artifacts/artifactPanelResize';
 import type { RootState } from '../../store';
 import { toAgentModelRef, resolveAgentModelRef } from '../../utils/agentModelRef';
 import { CodingAgentManager } from './CodingAgentManager';
-import { CodingAuthAndPermissionDialogs } from './CodingAuthAndPermissionDialogs';
+import { CodingAuthTerminalDialog } from './CodingAuthTerminalDialog';
 import { CodingComposer } from './CodingComposer';
+import { CodingPermissionOverlay } from './CodingPermissionOverlay';
 import { CodingEventStream } from './CodingEventStream';
 import { useCodingRoomSnapshot } from './useCodingRoomSnapshot';
 import { CodingGitPanel } from './CodingGitPanel';
@@ -80,6 +81,7 @@ import {
 import type { CodingSessionDraft, CodingSidebarSelection } from './CodingWorkspaceSidebar';
 import { CoworkModelPicker } from '../cowork/CoworkModelPicker';
 import { createCodingQueueService } from '../../services/codingQueue';
+import { findPendingCodingPermission } from './codingPermission';
 
 const profileStatusText = (status: CodingAgentProfileStatus): string =>
   i18nService.t(CodingAgentStatusI18nKey[status]);
@@ -418,16 +420,21 @@ export const CodingWorkbenchView = ({
     mediaQuery.addEventListener('change', syncViewport);
     return () => mediaQuery.removeEventListener('change', syncViewport);
   }, []);
-  const activePermission = useMemo(
-    () =>
-      activeLane?.status === CodingLaneStatus.WaitingApproval
-        ? (activeEvents
-            .slice()
-            .reverse()
-            .find(event => event.kind === CodingEventKind.Permission) ?? null)
-        : null,
-    [activeEvents, activeLane?.status],
-  );
+  const activePermission = useMemo(() => {
+    const waitingLaneIds = new Set(
+      (snapshot?.lanes ?? [])
+        .filter(lane => lane.status === CodingLaneStatus.WaitingApproval)
+        .map(lane => lane.id),
+    );
+    if (waitingLaneIds.size === 0) return null;
+    if (activeLane && waitingLaneIds.has(activeLane.id)) {
+      const selectedPermission = findPendingCodingPermission(activeEvents);
+      if (selectedPermission) return selectedPermission;
+    }
+    const waitingEvents =
+      snapshot?.events.filter(event => waitingLaneIds.has(event.laneId)) ?? [];
+    return findPendingCodingPermission(waitingEvents);
+  }, [activeEvents, activeLane, snapshot]);
   const recoveryLane =
     activeLane?.pendingRecoveryPrompt && activeLane.pendingRecoveryContext ? activeLane : null;
 
@@ -619,11 +626,14 @@ export const CodingWorkbenchView = ({
     });
     setAuthTerminalInput('');
   };
-  const respondToPermission = async (outcome: CodingPermissionOutcome, optionId?: string) => {
-    if (!activePermission || typeof activePermission.payload.requestId !== 'string') return;
+  const respondToPermission = async (
+    requestId: string,
+    outcome: CodingPermissionOutcome,
+    optionId?: string,
+  ) => {
     const result = await window.electron.codingAgent.respondPermission({
       workspaceRoot,
-      response: { requestId: activePermission.payload.requestId, outcome, optionId },
+      response: { requestId, outcome, optionId },
     });
     if (result.success && result.snapshot) setSnapshot(result.snapshot);
     else showAppError(result.error, 'codingAgentActionFailed');
@@ -882,15 +892,12 @@ export const CodingWorkbenchView = ({
         }
       >
       <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
-        <CodingAuthAndPermissionDialogs
+        <CodingAuthTerminalDialog
           authTerminal={authTerminal}
           authTerminalInput={authTerminalInput}
-          permission={activePermission}
-          profile={activeProfile}
           onAuthTerminalInputChange={setAuthTerminalInput}
           onCancelAuthTerminal={id => void window.electron.codingAgent.cancelAuthTerminal(id)}
           onSubmitAuthTerminalInput={submitAuthTerminalInput}
-          onRespondToPermission={(outcome, optionId) => void respondToPermission(outcome, optionId)}
         />
         <CodingAgentManager
           open={agentManagerOpen}
@@ -1053,105 +1060,108 @@ export const CodingWorkbenchView = ({
             </ArtifactPanelErrorBoundary>
           )}
         </div>
-        <CodingComposer
-          availableCommands={activeLane?.availableCommands ?? []}
-          configOptions={activeLane ? activeLane.configOptions : draftConfigOptions}
-          disabled={
-            draftSession
-              ? !draftSession.profileId ||
-                !draftSession.sourceRoot ||
-                activeProfile?.status !== CodingAgentProfileStatus.Ready
-              : !activeLane || activeLane.status === CodingLaneStatus.WaitingApproval
-          }
-          isRunning={activeLane?.status === CodingLaneStatus.Running}
-          isSubmitting={isSubmitting}
-          prompt={prompt}
-          sessionId={
-            activeProfile?.driverKind === CodingAgentDriverKind.Acp
-              ? activeLane?.id
-              : activeProfile?.driverKind === CodingAgentDriverKind.Builtin
-                ? activeLane?.localSessionId
-                : undefined
-          }
-          queueService={
-            activeProfile?.driverKind === CodingAgentDriverKind.Acp ? codingQueue : undefined
-          }
-          attachments={promptAttachments}
-          canAttachFiles={
-            activeProfile?.driverKind === CodingAgentDriverKind.Acp &&
-            activeProfile.status === CodingAgentProfileStatus.Ready
-          }
-          leadingTools={
-            activeProfile?.driverKind === CodingAgentDriverKind.Builtin && activeLane ? (
-              <CoworkModelPicker
-                models={availableModels}
-                selectedModel={
-                  (activeLane.modelOverride
-                    ? resolveAgentModelRef(activeLane.modelOverride, availableModels)
-                    : null) ??
-                  defaultSelectedModel ??
-                  null
-                }
-                open={modelPickerOpen}
-                onOpenChange={setModelPickerOpen}
-                onSelect={model => void setLaneModel(toAgentModelRef(model))}
-              />
-            ) : undefined
-          }
-          statusNotice={
-            agentNeedsProbe ? (
-              <div className="flex items-center gap-2 px-1 pb-2 text-xs text-muted-foreground">
-                <span>{i18nService.t('codingAgentProbeRequired')}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="theme-control-sizing-8"
-                  onClick={() => activeProfile && void probeAgent(activeProfile.id)}
-                >
-                  {i18nService.t('codingAgentProbeAgent')}
-                </Button>
-              </div>
-            ) : null
-          }
-          onChange={next => {
-            if (draftSession) {
-              setNewSessionDraftState({ id: draftSession.id, value: next });
-            } else if (activeLane) {
-              setDraftState({ laneId: activeLane.id, value: next });
-              saveDraft(activeLane.id, next);
+        <div className="relative shrink-0">
+          <CodingComposer
+            availableCommands={activeLane?.availableCommands ?? []}
+            configOptions={activeLane ? activeLane.configOptions : draftConfigOptions}
+            disabled={
+              draftSession
+                ? !draftSession.profileId ||
+                  !draftSession.sourceRoot ||
+                  activeProfile?.status !== CodingAgentProfileStatus.Ready
+                : !activeLane || activeLane.status === CodingLaneStatus.WaitingApproval
             }
-          }}
-          onAddAttachments={() => {
-            void window.electron.dialog
-              .selectFiles({ title: i18nService.t('codingAttachmentAdd') })
-              .then(result => {
-                if (!result.success || result.paths.length === 0) return;
-                setPromptAttachments(current => {
-                  const existingPaths = new Set(current.map(attachment => attachment.path));
-                  return [
-                    ...current,
-                    ...result.paths
-                      .filter(filePath => !existingPaths.has(filePath))
-                      .map(filePath => ({
-                        path: filePath,
-                        name: filePath.split(/[/\\\\]/).at(-1) ?? filePath,
-                      })),
-                  ].slice(0, 8);
+            isRunning={activeLane?.status === CodingLaneStatus.Running}
+            isSubmitting={isSubmitting}
+            prompt={prompt}
+            sessionId={
+              activeProfile?.driverKind === CodingAgentDriverKind.Acp
+                ? activeLane?.id
+                : activeProfile?.driverKind === CodingAgentDriverKind.Builtin
+                  ? activeLane?.localSessionId
+                  : undefined
+            }
+            queueService={
+              activeProfile?.driverKind === CodingAgentDriverKind.Acp ? codingQueue : undefined
+            }
+            attachments={promptAttachments}
+            canAttachFiles={
+              activeProfile?.driverKind === CodingAgentDriverKind.Acp &&
+              activeProfile.status === CodingAgentProfileStatus.Ready
+            }
+            leadingTools={
+              activeProfile?.driverKind === CodingAgentDriverKind.Builtin && activeLane ? (
+                <CoworkModelPicker
+                  models={availableModels}
+                  selectedModel={
+                    (activeLane.modelOverride
+                      ? resolveAgentModelRef(activeLane.modelOverride, availableModels)
+                      : null) ??
+                    defaultSelectedModel ??
+                    null
+                  }
+                  open={modelPickerOpen}
+                  onOpenChange={setModelPickerOpen}
+                  onSelect={model => void setLaneModel(toAgentModelRef(model))}
+                />
+              ) : undefined
+            }
+            statusNotice={
+              agentNeedsProbe ? (
+                <div className="flex items-center gap-2 px-1 pb-2 text-xs text-muted-foreground">
+                  <span>{i18nService.t('codingAgentProbeRequired')}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="theme-control-sizing-8"
+                    onClick={() => activeProfile && void probeAgent(activeProfile.id)}
+                  >
+                    {i18nService.t('codingAgentProbeAgent')}
+                  </Button>
+                </div>
+              ) : null
+            }
+            onChange={next => {
+              if (draftSession) {
+                setNewSessionDraftState({ id: draftSession.id, value: next });
+              } else if (activeLane) {
+                setDraftState({ laneId: activeLane.id, value: next });
+                saveDraft(activeLane.id, next);
+              }
+            }}
+            onAddAttachments={() => {
+              void window.electron.dialog
+                .selectFiles({ title: i18nService.t('codingAttachmentAdd') })
+                .then(result => {
+                  if (!result.success || result.paths.length === 0) return;
+                  setPromptAttachments(current => {
+                    const existingPaths = new Set(current.map(attachment => attachment.path));
+                    return [
+                      ...current,
+                      ...result.paths
+                        .filter(filePath => !existingPaths.has(filePath))
+                        .map(filePath => ({
+                          path: filePath,
+                          name: filePath.split(/[/\\\\]/).at(-1) ?? filePath,
+                        })),
+                    ].slice(0, 8);
+                  });
                 });
-              });
-          }}
-          onRemoveAttachment={filePath =>
-            setPromptAttachments(current =>
-              current.filter(attachment => attachment.path !== filePath),
-            )
-          }
-          onConfigOptionChange={(optionId, value) => void changeConfigOption(optionId, value)}
-          supportsSteerShortcut={activeProfile?.driverKind === CodingAgentDriverKind.Builtin}
-          onSend={() => void sendPrompt()}
-          onSteer={() => void sendPrompt('steer')}
-          onStop={() => void cancel()}
-        />
+            }}
+            onRemoveAttachment={filePath =>
+              setPromptAttachments(current =>
+                current.filter(attachment => attachment.path !== filePath),
+              )
+            }
+            onConfigOptionChange={(optionId, value) => void changeConfigOption(optionId, value)}
+            supportsSteerShortcut={activeProfile?.driverKind === CodingAgentDriverKind.Builtin}
+            onSend={() => void sendPrompt()}
+            onSteer={() => void sendPrompt('steer')}
+            onStop={() => void cancel()}
+          />
+          <CodingPermissionOverlay permission={activePermission} onRespond={respondToPermission} />
+        </div>
         {sessionSetupWorkspace ? (
           <CodingSessionSetupDialog
             workspace={sessionSetupWorkspace}
