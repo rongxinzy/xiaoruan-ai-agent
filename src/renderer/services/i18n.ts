@@ -1265,6 +1265,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
 
     // 加载状态
     loading: '加载中...',
+    coworkWorkspaceLoading: '正在准备工作空间…',
 
     // 侧边栏
     conversations: '对话',
@@ -4849,6 +4850,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
 
     // Loading State
     loading: 'Loading...',
+    coworkWorkspaceLoading: 'Preparing workspace…',
 
     // Sidebar
     conversations: 'Conversations',

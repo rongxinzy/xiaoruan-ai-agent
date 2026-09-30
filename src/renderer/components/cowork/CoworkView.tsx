@@ -63,6 +63,7 @@ import { PromptPanel, QuickActionBar } from '../quick-actions';
 import type { SettingsOpenOptions } from '../Settings';
 import PageHeader from '../PageHeader';
 import { useCoworkSelectedModel } from './useCoworkModelSelection';
+import { LogoLoadingState } from '../LogoLoadingState';
 import CoworkPromptInput, { type CoworkPromptInputRef } from './CoworkPromptInput';
 import CoworkSessionViewport from './CoworkSessionViewport';
 import { mergeDirectChatSnapshotMessages } from './directChatSnapshot';
@@ -1552,7 +1553,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
       <div data-page-canvas className="flex-1 h-full flex flex-col bg-background">
         <PageHeader />
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-muted-foreground">{i18nService.t('loading')}</div>
+          <LogoLoadingState label={i18nService.t('coworkWorkspaceLoading')} />
         </div>
       </div>
     );
