@@ -1,4 +1,3 @@
-import { Badge } from '@shared/components/ui/badge';
 import { Button } from '@shared/components/ui/button';
 import {
   Dialog,
@@ -8,12 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@shared/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@shared/components/ui/dropdown-menu';
 import {
   Empty,
   EmptyContent,
@@ -29,22 +22,22 @@ import { Spinner } from '@shared/components/ui/spinner';
 import { PageTabs } from '@shared/components/ui/page-tabs';
 import { Tabs, TabsContent } from '@shared/components/ui/tabs';
 import { Textarea } from '@shared/components/ui/textarea';
-import { Bot, ChevronDown, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { Bot, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
+import { useRef, useState, type FormEvent } from 'react';
 
 import {
-  CodingAgentEnvironmentKey,
   CodingAgentProfileStatus,
   type AddCodingAgentProfileInput,
-  type CodingAgentAuthMethod,
   type CodingAgentProfile,
 } from '../../../shared/codingAgent';
 import { i18nService } from '../../services/i18n';
+import { showAppError } from '../../services/appToast';
 import {
   CodingAgentManagerTab,
-  CodingAgentStatusI18nKey,
   type CodingAgentManagerTab as CodingAgentManagerTabValue,
 } from './constants';
+import { CodingAgentConnectionRow } from './CodingAgentConnectionRow';
+import { isConnectionCheckRunning } from './agentConnectionFeedback';
 
 interface CodingAgentManagerProps {
   open: boolean;
@@ -54,8 +47,6 @@ interface CodingAgentManagerProps {
   onAddProfile: (input: AddCodingAgentProfileInput) => Promise<boolean>;
   onProbe: (profileId: string) => Promise<boolean>;
   onTrust: (profileId: string) => Promise<boolean>;
-  onAuthenticate: (profileId: string, methodId: string) => Promise<boolean>;
-  onTerminalAuthenticate: (profileId: string, methodId: string) => Promise<boolean>;
 }
 
 export const CodingAgentManager = ({
@@ -66,8 +57,6 @@ export const CodingAgentManager = ({
   onAddProfile,
   onProbe,
   onTrust,
-  onAuthenticate,
-  onTerminalAuthenticate,
 }: CodingAgentManagerProps) => {
   const [activeTab, setActiveTab] = useState<CodingAgentManagerTabValue>(
     CodingAgentManagerTab.Local,
@@ -77,7 +66,10 @@ export const CodingAgentManager = ({
   const [command, setCommand] = useState('');
   const [argumentsText, setArgumentsText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const submissionInFlight = useRef(false);
   const [discovering, setDiscovering] = useState(false);
+  const discoveryInFlight = useRef(false);
+  const checking = profiles.some(isConnectionCheckRunning);
   const readyCount = profiles.filter(
     profile => profile.status === CodingAgentProfileStatus.Ready,
   ).length;
@@ -87,33 +79,46 @@ export const CodingAgentManager = ({
     .replace('{ready}', String(readyCount));
 
   const discover = async () => {
+    if (discoveryInFlight.current || checking) return;
+    discoveryInFlight.current = true;
     setDiscovering(true);
     try {
       await onDiscover();
+    } catch (error) {
+      showAppError(error, 'codingAgentActionFailed');
     } finally {
+      discoveryInFlight.current = false;
       setDiscovering(false);
     }
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submissionInFlight.current) return;
+    submissionInFlight.current = true;
     setSubmitting(true);
-    const saved = await onAddProfile({
-      name,
-      description,
-      command,
-      args: argumentsText
-        .split('\n')
-        .map(argument => argument.trim())
-        .filter(Boolean),
-    });
-    setSubmitting(false);
-    if (!saved) return;
-    setName('');
-    setDescription('');
-    setCommand('');
-    setArgumentsText('');
-    setActiveTab(CodingAgentManagerTab.Local);
+    try {
+      const saved = await onAddProfile({
+        name,
+        description,
+        command,
+        args: argumentsText
+          .split('\n')
+          .map(argument => argument.trim())
+          .filter(Boolean),
+      });
+      if (!saved) return;
+      setName('');
+      setDescription('');
+      setCommand('');
+      setArgumentsText('');
+      setActiveTab(CodingAgentManagerTab.Local);
+    } catch (error) {
+      showAppError(error, 'codingAgentActionFailed');
+    } finally {
+      submissionInFlight.current = false;
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -123,16 +128,13 @@ export const CodingAgentManager = ({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-2">
               <DialogTitle>{i18nService.t('codingAgentManagerTitle')}</DialogTitle>
-              <DialogDescription>
-                {i18nService.t('codingAgentManagerDescription')}
-              </DialogDescription>
-              <p className="text-xs text-muted-foreground">{summary}</p>
+              <DialogDescription>{summary}</DialogDescription>
             </div>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              disabled={discovering}
+              disabled={discovering || checking}
               onClick={() => void discover()}
             >
               {discovering ? (
@@ -192,15 +194,14 @@ export const CodingAgentManager = ({
                     </EmptyContent>
                   </Empty>
                 ) : (
-                  <div className="overflow-hidden rounded-xl border border-border">
+                  <div className="flex flex-col gap-3">
                     {profiles.map(profile => (
-                      <AgentRow
+                      <CodingAgentConnectionRow
                         key={profile.id}
                         profile={profile}
+                        disabled={discovering}
                         onProbe={onProbe}
                         onTrust={onTrust}
-                        onAuthenticate={onAuthenticate}
-                        onTerminalAuthenticate={onTerminalAuthenticate}
                       />
                     ))}
                   </div>
@@ -291,177 +292,4 @@ export const CodingAgentManager = ({
       </DialogContent>
     </Dialog>
   );
-};
-
-interface AgentRowProps {
-  profile: CodingAgentProfile;
-  onProbe: (profileId: string) => Promise<boolean>;
-  onTrust: (profileId: string) => Promise<boolean>;
-  onAuthenticate: (profileId: string, methodId: string) => Promise<boolean>;
-  onTerminalAuthenticate: (profileId: string, methodId: string) => Promise<boolean>;
-}
-
-const AgentRow = ({
-  profile,
-  onProbe,
-  onTrust,
-  onAuthenticate,
-  onTerminalAuthenticate,
-}: AgentRowProps) => {
-  const installedCommand =
-    profile.environment[CodingAgentEnvironmentKey.CodexPath] ??
-    profile.environment[CodingAgentEnvironmentKey.ClaudeCodeExecutable] ??
-    profile.command;
-  return (
-    <div className="flex min-w-0 items-center gap-3 border-b border-border px-4 py-3 last:border-b-0">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-        <Bot className="size-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-sm font-medium">{profile.name}</p>
-          <Badge
-            variant={
-              profile.status === CodingAgentProfileStatus.Incompatible ? 'destructive' : 'secondary'
-            }
-          >
-            {i18nService.t(CodingAgentStatusI18nKey[profile.status])}
-          </Badge>
-        </div>
-        {profile.description && (
-          <p className="mt-0.5 truncate text-sm text-muted-foreground">{profile.description}</p>
-        )}
-        {installedCommand && (
-          <p
-            className="mt-1 truncate font-mono text-xs text-muted-foreground"
-            title={installedCommand}
-          >
-            {installedCommand}
-          </p>
-        )}
-      </div>
-      <AgentRowAction
-        profile={profile}
-        onProbe={onProbe}
-        onTrust={onTrust}
-        onAuthenticate={onAuthenticate}
-        onTerminalAuthenticate={onTerminalAuthenticate}
-      />
-    </div>
-  );
-};
-
-const AgentRowAction = ({
-  profile,
-  onProbe,
-  onTrust,
-  onAuthenticate,
-  onTerminalAuthenticate,
-}: AgentRowProps) => {
-  const [pending, setPending] = useState(false);
-  const run = async (action: () => Promise<boolean>) => {
-    setPending(true);
-    try {
-      await action();
-    } finally {
-      setPending(false);
-    }
-  };
-  const authenticate = (method: CodingAgentAuthMethod) =>
-    method.type === 'terminal'
-      ? onTerminalAuthenticate(profile.id, method.id)
-      : onAuthenticate(profile.id, method.id);
-
-  if (profile.status === CodingAgentProfileStatus.Untrusted) {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        onClick={() => void run(() => onTrust(profile.id))}
-      >
-        {pending && <Spinner data-icon="inline-start" />}
-        {i18nService.t('codingAgentTrustAgent')}
-      </Button>
-    );
-  }
-  if (
-    profile.command &&
-    (profile.status === CodingAgentProfileStatus.Detected ||
-      profile.status === CodingAgentProfileStatus.Unavailable)
-  ) {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        onClick={() => void run(() => onProbe(profile.id))}
-      >
-        {pending && <Spinner data-icon="inline-start" />}
-        {i18nService.t('codingAgentProbeAgent')}
-      </Button>
-    );
-  }
-  if (profile.status === CodingAgentProfileStatus.NeedsAuth) {
-    // A stale NeedsAuth flag can survive an agent upgrade or a completed
-    // terminal login, so always offer re-probing as a self-healing path.
-    const probeButton = profile.command ? (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        onClick={() => void run(() => onProbe(profile.id))}
-      >
-        {pending && <Spinner data-icon="inline-start" />}
-        {i18nService.t('codingAgentProbeAgent')}
-      </Button>
-    ) : null;
-    if (profile.authMethods.length === 0) return probeButton;
-    const authControl =
-      profile.authMethods.length === 1 ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={pending}
-          onClick={() => void run(() => authenticate(profile.authMethods[0]))}
-        >
-          {pending && <Spinner data-icon="inline-start" />}
-          {i18nService.t('codingAgentAuthenticate')}
-        </Button>
-      ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            nativeButton
-            render={
-              <Button type="button" size="sm" variant="outline" disabled={pending}>
-                {pending ? <Spinner data-icon="inline-start" /> : null}
-                {i18nService.t('codingAgentAuthenticate')}
-                <ChevronDown data-icon="inline-end" />
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end">
-            {profile.authMethods.map(method => (
-              <DropdownMenuItem
-                key={method.id}
-                onClick={() => void run(() => authenticate(method))}
-              >
-                {method.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
-    return (
-      <div className="flex items-center gap-1.5">
-        {probeButton}
-        {authControl}
-      </div>
-    );
-  }
-  return null;
 };
