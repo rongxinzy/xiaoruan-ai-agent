@@ -4,7 +4,7 @@ import { i18nService } from '../../services/i18n';
 import PageHeader from '../PageHeader';
 
 interface CodingWorkbenchPlaceholderProps {
-  message: string;
+  message: React.ReactNode;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
 }

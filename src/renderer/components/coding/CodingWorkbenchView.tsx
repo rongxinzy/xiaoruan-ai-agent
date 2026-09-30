@@ -23,7 +23,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import type {
   CodingAgentConfigOption,
   CodingPromptAttachment,
-  CodingRoomSnapshot,
   CodingWorkspaceSummary,
 } from '../../../shared/codingAgent';
 import {
@@ -47,6 +46,7 @@ import {
   togglePanel,
 } from '../../store/slices/artifactSlice';
 import PageHeader from '../PageHeader';
+import { LogoLoadingState } from '../LogoLoadingState';
 import { ArtifactPanelErrorBoundary } from '../artifacts/ArtifactPanelErrorBoundary';
 import ArtifactPanelResizeHandle from '../artifacts/ArtifactPanelResizeHandle';
 import { clampArtifactPanelWidth } from '../artifacts/artifactPanelResize';
@@ -57,6 +57,7 @@ import { CodingAgentManager } from './CodingAgentManager';
 import { CodingAuthAndPermissionDialogs } from './CodingAuthAndPermissionDialogs';
 import { CodingComposer } from './CodingComposer';
 import { CodingEventStream } from './CodingEventStream';
+import { useCodingRoomSnapshot } from './useCodingRoomSnapshot';
 import { CodingGitPanel } from './CodingGitPanel';
 import { CodingGitQuickActions } from './CodingGitQuickActions';
 import { CodingInspector } from './CodingInspector';
@@ -83,7 +84,6 @@ import { createCodingQueueService } from '../../services/codingQueue';
 const profileStatusText = (status: CodingAgentProfileStatus): string =>
   i18nService.t(CodingAgentStatusI18nKey[status]);
 
-const EMPTY_SNAPSHOT: CodingRoomSnapshot | null = null;
 const CODING_PANEL_MIN_WIDTH = 280;
 const CODING_PANEL_DEFAULT_WIDTH = 560;
 const CODING_PANEL_EXPAND_DRAG_OVERFLOW = 160;
@@ -113,10 +113,16 @@ export const CodingWorkbenchView = ({
   isSidebarCollapsed = false,
   onToggleSidebar,
 }: CodingWorkbenchViewProps) => {
-  const [snapshot, setSnapshot] = useState<CodingRoomSnapshot | null>(EMPTY_SNAPSHOT);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [draftState, setDraftState] = useState({ laneId: '', value: '' });
   const [newSessionDraftState, setNewSessionDraftState] = useState({ id: '', value: '' });
   const [promptAttachments, setPromptAttachments] = useState<CodingPromptAttachment[]>([]);
+  const { snapshot, setSnapshot, bootstrapError, isCurrentWorkspace } = useCodingRoomSnapshot(
+    workspaceRoot,
+    selectedLaneId,
+    bootstrapAttempt,
+    showAppError,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const codingQueue = useMemo(() => createCodingQueueService(workspaceRoot), [workspaceRoot]);
   const [sidePanelSheetOpen, setSidePanelSheetOpen] = useState(false);
@@ -152,39 +158,6 @@ export const CodingWorkbenchView = ({
   useEffect(() => {
     setPromptAttachments([]);
   }, [selectionKey]);
-  useEffect(() => {
-    if (!workspaceRoot) {
-      setSnapshot(null);
-      return;
-    }
-    let cancelled = false;
-    void window.electron.codingAgent.bootstrap(workspaceRoot).then(result => {
-      if (!cancelled && result.success && result.snapshot) setSnapshot(result.snapshot);
-    });
-    const unsubscribe = window.electron.codingAgent.onChanged(next => {
-      if (next.room.workspaceRoot === workspaceRoot) setSnapshot(next);
-    });
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [workspaceRoot]);
-  useEffect(() => {
-    if (
-      !workspaceRoot ||
-      !selectedLaneId ||
-      !snapshot?.lanes.some(lane => lane.id === selectedLaneId) ||
-      snapshot.room.activeLaneId === selectedLaneId
-    ) {
-      return;
-    }
-    void window.electron.codingAgent
-      .selectLane({ workspaceRoot, laneId: selectedLaneId })
-      .then(result => {
-        if (result.success && result.snapshot) setSnapshot(result.snapshot);
-        else showAppError(result.error, 'codingAgentActionFailed');
-      });
-  }, [selectedLaneId, snapshot, workspaceRoot]);
   useEffect(() => {
     const openManager = (event: Event) => {
       const detail = (event as CustomEvent<CodingManageAgentsEventDetail>).detail;
@@ -327,6 +300,7 @@ export const CodingWorkbenchView = ({
     activeLaneId,
     activeRemoteSessionId,
     activeConfigOptionCount,
+    setSnapshot,
     workspaceRoot,
   ]);
   // A draft has no lane yet, so fetch the default config options of its
@@ -675,6 +649,7 @@ export const CodingWorkbenchView = ({
             ? { configOptionOverrides: draftConfigOverrides }
             : {}),
         });
+        if (!isCurrentWorkspace()) return;
         const laneId = result.snapshot?.room.activeLaneId;
         if (result.success && result.snapshot && laneId) {
           setSnapshot(result.snapshot);
@@ -697,6 +672,7 @@ export const CodingWorkbenchView = ({
           ...(promptAttachments.length > 0 ? { attachments: promptAttachments } : {}),
         },
       });
+      if (!isCurrentWorkspace()) return;
       if (result.success && result.snapshot) {
         setDraftState({ laneId: activeLane.id, value: '' });
         setPromptAttachments([]);
@@ -707,7 +683,9 @@ export const CodingWorkbenchView = ({
         setSnapshot(result.snapshot);
       } else showAppError(result.error, 'codingAgentActionFailed');
     } catch (error) {
-      showAppError(error, 'codingAgentActionFailed');
+      if (isCurrentWorkspace()) {
+        showAppError(error, 'codingAgentActionFailed');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -813,7 +791,14 @@ export const CodingWorkbenchView = ({
   if (!snapshot) {
     return (
       <CodingWorkbenchPlaceholder
-        message={i18nService.t('codingAgentLoading')}
+        message={bootstrapError ? (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <p>{bootstrapError}</p>
+            <Button type="button" variant="outline" onClick={() => setBootstrapAttempt(attempt => attempt + 1)}>
+              {i18nService.t('retry')}
+            </Button>
+          </div>
+        ) : <LogoLoadingState label={i18nService.t('codingAgentLoading')} />}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={onToggleSidebar}
       />
