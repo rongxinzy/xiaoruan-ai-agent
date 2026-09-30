@@ -13,12 +13,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@shared/components/ui/collapsible';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@shared/components/ui/dropdown-menu';
 import { FieldDescription } from '@shared/components/ui/field';
 import { Spinner } from '@shared/components/ui/spinner';
 import { ChevronDown, CheckCircle2, Info, RefreshCw } from 'lucide-react';
@@ -28,7 +22,6 @@ import {
   CodingAgentCheckPhase,
   CodingAgentEnvironmentKey,
   CodingAgentProfileStatus,
-  type CodingAgentAuthMethod,
   type CodingAgentProfile,
 } from '../../../shared/codingAgent';
 import { i18nService } from '../../services/i18n';
@@ -44,8 +37,6 @@ export interface CodingAgentConnectionRowProps {
   profile: CodingAgentProfile;
   onProbe: (profileId: string) => Promise<boolean>;
   onTrust: (profileId: string) => Promise<boolean>;
-  onAuthenticate: (profileId: string, methodId: string) => Promise<boolean>;
-  onTerminalAuthenticate: (profileId: string, methodId: string) => Promise<boolean>;
   disabled?: boolean;
 }
 
@@ -53,8 +44,6 @@ export function CodingAgentConnectionRow({
   profile,
   onProbe,
   onTrust,
-  onAuthenticate,
-  onTerminalAuthenticate,
   disabled,
 }: CodingAgentConnectionRowProps) {
   const [pending, setPending] = useState(false);
@@ -65,7 +54,12 @@ export function CodingAgentConnectionRow({
   const running = isConnectionCheckRunning(profile);
   const busy = pending || running;
   const phase = profile.connectionCheck?.phase;
-  const failed = phase === CodingAgentCheckPhase.Failed || actionFailed;
+  const failed =
+    phase === CodingAgentCheckPhase.Failed ||
+    actionFailed ||
+    profile.status === CodingAgentProfileStatus.NeedsAuth ||
+    profile.status === CodingAgentProfileStatus.Unavailable ||
+    profile.status === CodingAgentProfileStatus.Incompatible;
   const installedCommand =
     profile.environment[CodingAgentEnvironmentKey.CodexPath] ??
     profile.environment[CodingAgentEnvironmentKey.ClaudeCodeExecutable] ??
@@ -89,10 +83,6 @@ export function CodingAgentConnectionRow({
       setPending(false);
     }
   };
-  const authenticate = (method: CodingAgentAuthMethod) =>
-    method.type === 'terminal'
-      ? onTerminalAuthenticate(profile.id, method.id)
-      : onAuthenticate(profile.id, method.id);
 
   return (
     <Card size="sm" aria-label={profile.name} aria-busy={busy}>
@@ -142,41 +132,6 @@ export function CodingAgentConnectionRow({
                 )}
               </Button>
             )}
-            {profile.status === CodingAgentProfileStatus.NeedsAuth &&
-              profile.authMethods.length === 1 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || disabled}
-                  onClick={() => void run(() => authenticate(profile.authMethods[0]))}
-                >
-                  {t('codingAgentAuthenticate')}
-                </Button>
-              )}
-            {profile.status === CodingAgentProfileStatus.NeedsAuth &&
-              profile.authMethods.length > 1 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    nativeButton
-                    render={
-                      <Button size="sm" variant="outline" disabled={busy || disabled}>
-                        {t('codingAgentAuthenticate')}
-                        <ChevronDown data-icon="inline-end" />
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="end">
-                    {profile.authMethods.map(method => (
-                      <DropdownMenuItem
-                        key={method.id}
-                        onClick={() => void run(() => authenticate(method))}
-                      >
-                        {method.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
           </div>
         </div>
         <CardDescription>
@@ -201,7 +156,7 @@ export function CodingAgentConnectionRow({
               </AlertTitle>
               <AlertDescription>{t('codingAgentCheckRequestHint')}</AlertDescription>
             </Alert>
-          ) : phase === CodingAgentCheckPhase.Complete && !actionFailed ? (
+          ) : phase === CodingAgentCheckPhase.Complete && !failed ? (
             <Alert role="status">
               <CheckCircle2 />
               <AlertTitle>{t('codingAgentCheckComplete')}</AlertTitle>

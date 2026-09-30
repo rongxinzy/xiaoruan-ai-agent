@@ -50,8 +50,6 @@ const props = (
   profile,
   onProbe: vi.fn(async () => true),
   onTrust: vi.fn(async () => true),
-  onAuthenticate: vi.fn(async () => true),
-  onTerminalAuthenticate: vi.fn(async () => true),
   ...overrides,
 });
 beforeEach(() => i18nService.setLanguage('zh', { persist: false }));
@@ -148,4 +146,48 @@ test('untrusted commands cannot be checked until trust is confirmed', () => {
   );
   expect(screen.queryByRole('button', { name: '检测连接' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '确认信任' })).toBeEnabled();
+});
+
+test.each([1, 2])(
+  'authentication stays in the local CLI when %s login methods are advertised',
+  count => {
+    const onProbe = vi.fn(async () => true);
+    render(
+      createElement(
+        CodingAgentConnectionRow,
+        props({
+          onProbe,
+          profile: {
+            ...profile,
+            status: CodingAgentProfileStatus.NeedsAuth,
+            authMethods: Array.from({ length: count }, (_, index) => ({
+              id: `login-${index}`,
+              name: `Login ${index}`,
+            })),
+          },
+        }),
+      ),
+    );
+    expect(screen.queryByRole('button', { name: '登录' })).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('连接检测失败');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '请在本机工具中完成账号和模型配置后重新检测',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '检测连接' }));
+    expect(onProbe).toHaveBeenCalledWith(profile.id);
+  },
+);
+
+test('persisted unavailable agents show failure instead of claiming they were never checked', () => {
+  render(
+    createElement(
+      CodingAgentConnectionRow,
+      props({
+        profile: { ...profile, status: CodingAgentProfileStatus.Unavailable },
+      }),
+    ),
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent('连接检测失败');
+  expect(screen.getByRole('alert')).toHaveTextContent('连接未完成');
+  expect(screen.queryByText(/尚未验证连接/)).not.toBeInTheDocument();
 });

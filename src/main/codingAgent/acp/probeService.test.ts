@@ -94,6 +94,25 @@ test('thought output alone cannot certify a working model', async () => {
   ).rejects.toBeInstanceOf(AcpProbeNoAnswerError);
 });
 
+test('an empty response with login methods stays unavailable rather than requiring login', async () => {
+  const registry = new CodingAgentRegistry();
+  const profile = registry.addUntrustedProfile({
+    name: 'Configured agent',
+    description: '',
+    command: execPath,
+    args: ['-e', fakeAgentScript({ answerPrompt: false })],
+  });
+  registry.trust(profile.id);
+  await expect(registry.probe(profile.id, process.cwd())).rejects.toMatchObject({
+    needsAuth: false,
+  });
+  expect(registry.get(profile.id)).toMatchObject({
+    status: CodingAgentProfileStatus.Unavailable,
+    authMethods: AUTH_METHODS,
+    connectionCheck: { failure: CodingAgentCheckFailure.NoReply },
+  });
+});
+
 test.each([AcpMethod.SessionNew, AcpMethod.SessionPrompt])(
   'preserves login methods for an auth error from %s',
   async errorMethod => {

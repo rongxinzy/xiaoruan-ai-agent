@@ -48,5 +48,7 @@ export function connectionHelpKey(profile: CodingAgentProfile): string {
   if (profile.status === CodingAgentProfileStatus.Incompatible)
     return 'codingAgentCheckProtocolHelp';
   if (profile.status === CodingAgentProfileStatus.Untrusted) return 'codingAgentCheckTrustHelp';
+  if (profile.status === CodingAgentProfileStatus.Unavailable)
+    return 'codingAgentCheckConnectionHelp';
   return 'codingAgentCheckRequiredHelp';
 }

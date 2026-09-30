@@ -34,8 +34,6 @@ function openForm(onAddProfile: (input: unknown) => Promise<boolean>) {
       onAddProfile,
       onProbe: vi.fn(async () => true),
       onTrust: vi.fn(async () => true),
-      onAuthenticate: vi.fn(async () => true),
-      onTerminalAuthenticate: vi.fn(async () => true),
     }),
   );
   fireEvent.click(screen.getByRole('tab', { name: i18nService.t('codingAgentCustomAgent') }));
@@ -100,4 +98,32 @@ test('duplicate submissions save once and rejected IPC calls release the submit 
     screen.getByRole('button', { name: i18nService.t('codingAgentAddProfile') }),
   ).toBeEnabled();
   expect(screen.getByLabelText(i18nService.t('codingAgentProfileName'))).toHaveValue('Manual ACP');
+});
+
+test('repeated scan clicks run once and a failed scan restores the action', async () => {
+  let rejectScan: (error: Error) => void = () => {};
+  const onDiscover = vi.fn(
+    () =>
+      new Promise<boolean>((_resolve, reject) => {
+        rejectScan = reject;
+      }),
+  );
+  render(
+    createElement(CodingAgentManager, {
+      open: true,
+      onOpenChange: vi.fn(),
+      profiles: [],
+      onDiscover,
+      onAddProfile: vi.fn(async () => true),
+      onProbe: vi.fn(async () => true),
+      onTrust: vi.fn(async () => true),
+    }),
+  );
+  const button = screen.getByRole('button', { name: i18nService.t('codingAgentRescan') });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(onDiscover).toHaveBeenCalledTimes(1);
+  await act(async () => rejectScan(new Error('Discovery failed')));
+  expect(showAppError).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: i18nService.t('codingAgentRescan') })).toBeEnabled();
 });

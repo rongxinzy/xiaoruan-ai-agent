@@ -47,8 +47,6 @@ interface CodingAgentManagerProps {
   onAddProfile: (input: AddCodingAgentProfileInput) => Promise<boolean>;
   onProbe: (profileId: string) => Promise<boolean>;
   onTrust: (profileId: string) => Promise<boolean>;
-  onAuthenticate: (profileId: string, methodId: string) => Promise<boolean>;
-  onTerminalAuthenticate: (profileId: string, methodId: string) => Promise<boolean>;
 }
 
 export const CodingAgentManager = ({
@@ -59,8 +57,6 @@ export const CodingAgentManager = ({
   onAddProfile,
   onProbe,
   onTrust,
-  onAuthenticate,
-  onTerminalAuthenticate,
 }: CodingAgentManagerProps) => {
   const [activeTab, setActiveTab] = useState<CodingAgentManagerTabValue>(
     CodingAgentManagerTab.Local,
@@ -72,6 +68,7 @@ export const CodingAgentManager = ({
   const [submitting, setSubmitting] = useState(false);
   const submissionInFlight = useRef(false);
   const [discovering, setDiscovering] = useState(false);
+  const discoveryInFlight = useRef(false);
   const checking = profiles.some(isConnectionCheckRunning);
   const readyCount = profiles.filter(
     profile => profile.status === CodingAgentProfileStatus.Ready,
@@ -82,10 +79,15 @@ export const CodingAgentManager = ({
     .replace('{ready}', String(readyCount));
 
   const discover = async () => {
+    if (discoveryInFlight.current || checking) return;
+    discoveryInFlight.current = true;
     setDiscovering(true);
     try {
       await onDiscover();
+    } catch (error) {
+      showAppError(error, 'codingAgentActionFailed');
     } finally {
+      discoveryInFlight.current = false;
       setDiscovering(false);
     }
   };
@@ -126,10 +128,7 @@ export const CodingAgentManager = ({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-2">
               <DialogTitle>{i18nService.t('codingAgentManagerTitle')}</DialogTitle>
-              <DialogDescription>
-                {i18nService.t('codingAgentManagerDescription')}
-              </DialogDescription>
-              <p className="text-xs text-muted-foreground">{summary}</p>
+              <DialogDescription>{summary}</DialogDescription>
             </div>
             <Button
               type="button"
@@ -203,8 +202,6 @@ export const CodingAgentManager = ({
                         disabled={discovering}
                         onProbe={onProbe}
                         onTrust={onTrust}
-                        onAuthenticate={onAuthenticate}
-                        onTerminalAuthenticate={onTerminalAuthenticate}
                       />
                     ))}
                   </div>

@@ -194,7 +194,7 @@ export class AcpProbeFailureError extends Error {
 
 export class AcpProbeNoAnswerError extends AcpProbeFailureError {
   constructor(readonly authMethods: CodingAgentAuthMethod[]) {
-    super(CodingErrorMessage.AgentProbeNoAnswer, authMethods, authMethods.length > 0);
+    super(CodingErrorMessage.AgentProbeNoAnswer, authMethods, false);
     this.name = 'AcpProbeNoAnswerError';
   }
 }

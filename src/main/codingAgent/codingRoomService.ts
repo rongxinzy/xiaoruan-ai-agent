@@ -1218,10 +1218,10 @@ export class CodingRoomService extends EventEmitter {
     const driver = this.driverFactory.create(profile);
     try {
       await driver.authenticate({ methodId, workspaceRoot });
-      this.registry.markReady(profileId);
     } finally {
       await driver.dispose();
     }
+    await this.registry.probe(profileId, workspaceRoot);
     return this.publish(workspaceRoot);
   }
 
@@ -1895,6 +1895,7 @@ export class CodingRoomService extends EventEmitter {
     id: string;
     profileId: string;
     methodId: string;
+    workspaceRoot: string;
     exitCode: number;
     signal?: number;
   }): Promise<void> {
@@ -1912,18 +1913,13 @@ export class CodingRoomService extends EventEmitter {
           '[CodingRoom] Authentication completed for an unavailable coding agent profile.',
         );
       } else {
-        const driver = this.driverFactory.create(profile);
         try {
-          await driver.getAuthState();
-          this.registry.markReady(event.profileId);
+          await this.registry.probe(event.profileId, event.workspaceRoot);
         } catch (error) {
           console.warn(
-            '[CodingRoom] ACP reinitialization after terminal authentication failed:',
+            '[CodingRoom] Model reply verification after terminal authentication failed:',
             error,
           );
-          this.registry.markNeedsAuth(event.profileId);
-        } finally {
-          await driver.dispose();
         }
       }
     } else {
