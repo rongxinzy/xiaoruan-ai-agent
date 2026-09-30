@@ -99,7 +99,7 @@
     "start:electron": "cross-env NODE_ENV=development ELECTRON_START_URL=http://localhost:5175 electron --remote-debugging-port=9222 .",
     "start:electron:inspect": "cross-env NODE_ENV=development ELECTRON_START_URL=http://localhost:5175 electron --inspect=9229 --remote-debugging-port=9222 .",
     "reset:userdata": "node scripts/reset-userdata.mjs",
-    "electron:dev": "cross-env ZHIYUAN_PRESERVE_HOST_RUNTIME=1 bun run channel:runtime:download && bun run engram:runtime:host && rimraf dist-electron && bun run build:electron:dev && node scripts/electron-dev.mjs",
+    "electron:dev": "node node_modules/cross-env/src/bin/cross-env.js ZHIYUAN_PRESERVE_HOST_RUNTIME=1 node scripts/download-channel-runtime.cjs && node scripts/download-engram-runtime.cjs && node node_modules/rimraf/dist/esm/bin.mjs dist-electron && node scripts/build-electron-development.mjs && node scripts/electron-dev.mjs",
     "electron:dev:fresh": "npm run reset:userdata && npm run electron:dev",
     "apply:patches": "patch-package --error-on-fail",
     "postinstall": "bun run apply:patches && electron-builder install-app-deps",

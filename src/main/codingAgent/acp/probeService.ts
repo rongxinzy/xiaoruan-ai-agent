@@ -1,5 +1,7 @@
 import {
   CodingErrorMessage,
+  CodingErrorDetailMessage,
+  CodingAgentCheckPhase,
   type CodingAgentAuthMethod,
   type CodingAgentCapabilities,
 } from '../../../shared/codingAgent';
@@ -88,6 +90,7 @@ const verifyAgentAnswers = async (
   supervisor: AcpConnectionSupervisor,
   cwd: string,
   authMethods: CodingAgentAuthMethod[],
+  onPhase?: (phase: CodingAgentCheckPhase) => void,
 ): Promise<void> => {
   const session = await supervisor.request<{ sessionId?: unknown; configOptions?: unknown }>(
     AcpMethod.SessionNew,
@@ -137,6 +140,7 @@ const verifyAgentAnswers = async (
     }
   });
 
+  onPhase?.(CodingAgentCheckPhase.ModelReply);
   const prompt = supervisor.request(
     AcpMethod.SessionPrompt,
     { sessionId, prompt: [{ type: 'text', text: PROBE_PROMPT_TEXT }] },
@@ -154,7 +158,14 @@ const verifyAgentAnswers = async (
       finished,
       new Promise<never>((_, reject) => {
         timeout = setTimeout(
-          () => reject(new AcpProbeNoAnswerError(authMethods)),
+          () =>
+            reject(
+              new AcpProbeFailureError(
+                CodingErrorDetailMessage.AcpRequestTimedOut + ' model response',
+                authMethods,
+                false,
+              ),
+            ),
           PROBE_PROMPT_TIMEOUT_MS,
         );
       }),
@@ -194,11 +205,14 @@ export class AcpProbeService {
     args: string[];
     cwd: string;
     environment: Record<string, string | undefined>;
+    onPhase?: (phase: CodingAgentCheckPhase) => void;
   }): Promise<AcpProbeResult> {
     const supervisor = new AcpConnectionSupervisor();
     let authMethods: CodingAgentAuthMethod[] = [];
     try {
+      input.onPhase?.(CodingAgentCheckPhase.Starting);
       await supervisor.start(input);
+      input.onPhase?.(CodingAgentCheckPhase.Handshake);
       const response = await supervisor.request<{
         agentCapabilities?: Record<string, unknown>;
         capabilities?: Record<string, unknown>;
@@ -225,7 +239,7 @@ export class AcpProbeService {
           ? (capabilities.promptCapabilities as Record<string, unknown>)
           : {};
       authMethods = parseAuthMethods(response.authMethods);
-      await verifyAgentAnswers(supervisor, input.cwd, authMethods);
+      await verifyAgentAnswers(supervisor, input.cwd, authMethods, input.onPhase);
       return {
         capabilities: {
           ...EMPTY_CAPABILITIES,

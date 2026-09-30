@@ -14,7 +14,10 @@ import { fileURLToPath } from 'node:url';
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '..');
 const iconPath = path.join(projectRoot, 'build', 'icons', 'win', 'icon.ico');
-const electronExePath = path.join(projectRoot, 'node_modules', 'electron', 'dist', 'electron.exe');
+const electronExePath = path.join(
+  process.env.ELECTRON_OVERRIDE_DIST_PATH || path.join(projectRoot, 'node_modules', 'electron', 'dist'),
+  'electron.exe',
+);
 const cacheDirectory = path.join(projectRoot, '.cache', 'rcedit');
 const rceditPath = path.join(cacheDirectory, 'rcedit-x64.exe');
 const stampPath = path.join(cacheDirectory, 'electron-icon.stamp');

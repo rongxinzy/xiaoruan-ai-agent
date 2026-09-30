@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { statSync } from 'fs';
 import { readFile, readdir, stat } from 'fs/promises';
 import path from 'path';
+import { getCodingAgentEnvironment } from './agentEnvironment';
 
 import {
   CodingAgentDriverKind,
@@ -121,29 +122,6 @@ export interface CodingRoomRuntime {
 
 type DriverSession = { id: string; connectionGeneration: number | null };
 
-const ACP_ENVIRONMENT_KEYS = [
-  'PATH',
-  'HOME',
-  'USER',
-  'SHELL',
-  'TMPDIR',
-  'TEMP',
-  'TMP',
-  'LANG',
-  'LC_ALL',
-  // Windows-specific variables needed for npm global resolution, shell
-  // helpers, and credential stores used by ACP agents (e.g. Kimi Code CLI).
-  'APPDATA',
-  'LOCALAPPDATA',
-  'COMSPEC',
-  'PATHEXT',
-  'SystemRoot',
-  'USERPROFILE',
-  'USERNAME',
-  'ProgramFiles',
-  'ProgramFiles(x86)',
-] as const;
-
 export class CodingRoomService extends EventEmitter {
   private readonly drivers = new Map<string, CodingAgentDriver>();
   private readonly driverSessionIds = new Map<string, DriverSession>();
@@ -190,10 +168,7 @@ export class CodingRoomService extends EventEmitter {
         patchSession: patchBuiltinSession,
         setApprovalMode: this.runtime.setBuiltinApprovalMode?.bind(this.runtime),
       },
-      {
-        ...Object.fromEntries(ACP_ENVIRONMENT_KEYS.map(key => [key, process.env[key]])),
-        ...acpEnvironment,
-      },
+      acpEnvironment,
     );
     registry.on('changed', () => {
       for (const room of this.repository.listRooms()) this.publish(room.workspaceRoot);
@@ -1913,7 +1888,7 @@ export class CodingRoomService extends EventEmitter {
   }
 
   private allowedEnvironment(): Record<string, string | undefined> {
-    return Object.fromEntries(ACP_ENVIRONMENT_KEYS.map(key => [key, process.env[key]]));
+    return getCodingAgentEnvironment();
   }
 
   private async completeTerminalAuthentication(event: {

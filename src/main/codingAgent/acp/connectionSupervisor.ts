@@ -2,6 +2,7 @@ import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'child_proc
 
 import { CodingErrorDetailMessage, CodingErrorMessage } from '../../../shared/codingAgent';
 import { AcpRequestError } from './requestError';
+import { windowsBatchArguments } from './windowsBatchLaunch';
 
 const ACP_REQUEST_TIMEOUT_MS = 5_000;
 const MAX_STDOUT_LINE_BYTES = 10 * 1024 * 1024; // 10 MB — session load replays can exceed 1 MB
@@ -155,12 +156,16 @@ export class AcpConnectionSupervisor {
       process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(options.executable);
     const child = spawn(
       isWindowsBatch ? process.env.ComSpec || 'cmd.exe' : options.executable,
-      isWindowsBatch ? ['/d', '/s', '/c', options.executable, ...options.args] : options.args,
+      isWindowsBatch ? windowsBatchArguments(options.executable, options.args) : options.args,
       {
         cwd: options.cwd,
         env,
         shell: false,
-        detached: true,
+        // Windows tree cleanup uses taskkill; detaching allocates a visible
+        // console for CLI agents. Unix still needs a separate process group.
+        detached: process.platform !== 'win32',
+        windowsHide: true,
+        windowsVerbatimArguments: isWindowsBatch,
         stdio: ['pipe', 'pipe', 'pipe'],
       },
     );

@@ -7,6 +7,7 @@ import concurrently from 'concurrently';
 
 import { resolveDevPort } from './find-dev-port.mjs';
 import { describeNativeAbi, inspectNativeAbi, NativeAbiStatus } from './electron-native-abi.mjs';
+import { resolveElectronDevelopmentRuntime } from './electron-development-runtime.mjs';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '..');
@@ -29,12 +30,13 @@ function withLocalBinPath(env) {
   };
 }
 
-function patchWindowsElectronIcon() {
+function patchWindowsElectronIcon(env) {
   if (process.platform !== 'win32') return;
   const patchScript = path.join(scriptDirectory, 'patch-windows-electron-icon.mjs');
   const result = spawnSync(process.execPath, [patchScript], {
     cwd: projectRoot,
     stdio: 'inherit',
+    env,
   });
   if (result.status !== 0) {
     console.warn('[electron:dev] Windows electron icon patch did not complete cleanly.');
@@ -57,7 +59,12 @@ async function main() {
 
   // Windows: embed the app icon into development electron.exe so the taskbar
   // does not keep showing the default Electron atom logo.
-  patchWindowsElectronIcon();
+  const runtimeDirectory = await resolveElectronDevelopmentRuntime(projectRoot);
+  const runtimeEnv = {
+    ...process.env,
+    ...(runtimeDirectory ? { ELECTRON_OVERRIDE_DIST_PATH: runtimeDirectory } : {}),
+  };
+  patchWindowsElectronIcon(runtimeEnv);
 
   const port = await resolveDevPort();
   const startUrl = `http://localhost:${port}`;
@@ -66,7 +73,7 @@ async function main() {
 
   // Env is set on each command so Windows does not need cross-env for these vars.
   const sharedEnv = withLocalBinPath({
-    ...process.env,
+    ...runtimeEnv,
     VITE_SKIP_ELECTRON: '1',
     VITE_DEV_PORT: String(port),
     NODE_ENV: 'development',
@@ -88,7 +95,7 @@ async function main() {
         command: [
           `wait-on -l -t 120000 -i 1000 -s 1 http-get://localhost:${port}/src/renderer/main.tsx http-get://localhost:${port}/src/renderer/index.css`,
           'wait-on -l -t 120000 -i 1000 dist-electron/.electron-ready',
-          'electron --remote-debugging-port=9222 .',
+          'node node_modules/electron/cli.js --remote-debugging-port=9222 .',
         ].join(' && '),
         env: sharedEnv,
         cwd: projectRoot,
