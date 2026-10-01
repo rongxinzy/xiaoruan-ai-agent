@@ -6,6 +6,7 @@ export {
   ApiFormat,
   AuthType,
   ModelCapabilityStatus,
+  ProviderModelOrigin,
   AgentApi,
   AgentProviderId,
   ProviderName,

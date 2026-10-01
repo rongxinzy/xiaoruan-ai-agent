@@ -1,4 +1,4 @@
-import type { ApiFormat, ModelCapabilities } from './constants';
+import type { ApiFormat, ModelCapabilities, ProviderModelOrigin } from './constants';
 import type { ProviderModelPiRuntimeConfig } from './piRuntime';
 import { ProviderName } from './constants';
 
@@ -17,6 +17,8 @@ export interface ProviderConfig {
     contextWindow?: number;
     contextTokens?: number;
     maxTokens?: number;
+    /** How the entry got here; omitted (legacy) is treated as discovered. */
+    origin?: ProviderModelOrigin;
     /** Pi Runtime-specific model routing and compatibility options for agent workflows. */
     piRuntime?: ProviderModelPiRuntimeConfig;
   }>;
