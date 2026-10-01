@@ -1,3 +1,4 @@
+import { CoworkContentNotice } from './CoworkContentNotice';
 import { Message, MessageContent } from '@shared/components/ai-elements/message';
 import React, { useState } from 'react';
 
@@ -33,6 +34,7 @@ export const AssistantBubble: React.FC<{
             isStreaming={isStreaming}
             resolveLocalFilePath={resolveLocalFilePath}
           />
+          <CoworkContentNotice truncated={message.metadata?.contentTruncated} />
         </MessageContent>
       </Message>
       {modelLabel && (

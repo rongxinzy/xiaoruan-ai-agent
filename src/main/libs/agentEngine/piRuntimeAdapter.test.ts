@@ -35,10 +35,15 @@ import { PiExtensionEventType } from './piExtensionTypes';
 import { PiMcpTool } from './piMcpCapabilityPrompt';
 import { collectWorkbenchArtifacts } from '../../workbenchTask/artifactCollector';
 import { setWorkbenchOutputRequirements } from '../../workbenchTask/outputContract';
+import {
+  runTextWorkerOperation,
+  type TextWorkerInput,
+} from '../../workbenchTask/textWorkerOperations';
 
 vi.mock('../../workbenchTask/artifactWorkerPool', () => ({
   collectWorkbenchArtifactsAsync: async (input: Parameters<typeof collectWorkbenchArtifacts>[0]) =>
     collectWorkbenchArtifacts(input),
+  transformCoworkTextAsync: async (input: TextWorkerInput) => runTextWorkerOperation(input),
 }));
 
 const hoisted = vi.hoisted(() => {
@@ -3005,7 +3010,7 @@ describe('PiRuntimeAdapter', () => {
         },
         isError: false,
       });
-
+      await vi.waitFor(() => expect(messages.some(m => m.type === 'tool_result')).toBe(true));
       const toolResult = messages.find(m => m.type === 'tool_result');
       expect(toolResult!.metadata?.isError).toBe(true);
     });
