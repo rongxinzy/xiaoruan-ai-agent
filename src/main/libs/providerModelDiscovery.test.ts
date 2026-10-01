@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
-import { ApiFormat, ModelCapabilityStatus, ProviderModelDiscoveryErrorCode } from '../../shared/providers';
+import {
+  ApiFormat,
+  DiscoveryCapabilitiesSource,
+  ModelCapabilityStatus,
+  ProviderModelDiscoveryErrorCode,
+} from '../../shared/providers';
 import {
   buildProviderModelsUrlCandidates,
   discoverProviderModels,
@@ -103,6 +108,40 @@ describe('parseProviderModelsResponse', () => {
     ).toEqual([{ id: 'qwen-local', contextWindow: 262_144 }]);
   });
 
+  test('maps Ollama-style capability token lists', () => {
+    expect(
+      parseProviderModelsResponse({
+        models: [{ name: 'qwen-vision', capabilities: ['completion', 'vision', 'tools'] }],
+      }),
+    ).toEqual([
+      {
+        id: 'qwen-vision',
+        capabilities: {
+          imageInput: ModelCapabilityStatus.Supported,
+          toolCalling: ModelCapabilityStatus.Supported,
+        },
+      },
+    ]);
+  });
+
+  test('borrows capability metadata from the sibling models list of llama.cpp responses', () => {
+    expect(
+      parseProviderModelsResponse({
+        data: [{ id: 'qwen3.6-35b-a3b', meta: { n_ctx: 262_144 } }],
+        models: [{ name: 'qwen3.6-35b-a3b', capabilities: ['completion', 'multimodal'] }],
+      }),
+    ).toEqual([
+      {
+        id: 'qwen3.6-35b-a3b',
+        contextWindow: 262_144,
+        capabilities: {
+          imageInput: ModelCapabilityStatus.Supported,
+          videoInput: ModelCapabilityStatus.Supported,
+        },
+      },
+    ]);
+  });
+
   test('rejects unsupported payloads', () => {
     expect(() => parseProviderModelsResponse({ items: [] })).toThrowError(
       expect.objectContaining<Partial<ProviderModelDiscoveryError>>({
@@ -156,5 +195,83 @@ describe('discoverProviderModels', () => {
       fetchImpl,
     );
     expect(headers.get('x-goog-api-key')).toBe('gemini-key');
+  });
+
+  test('enriches OpenAI endpoints with llama.cpp /props modalities', async () => {
+    const requests: string[] = [];
+    const fetchImpl: typeof fetch = async input => {
+      const url = String(input);
+      requests.push(url);
+      if (url.endsWith('/v1/models')) {
+        return Response.json({
+          data: [{ id: 'qwen3.6-35b-a3b', meta: { n_ctx: 262_144 } }],
+          models: [{ name: 'qwen3.6-35b-a3b', capabilities: ['completion'] }],
+        });
+      }
+      return Response.json({ modalities: { vision: true, video: true, audio: false } });
+    };
+
+    await expect(
+      discoverProviderModels(
+        { baseUrl: 'http://llama.local:8000', apiFormat: ApiFormat.OpenAI },
+        fetchImpl,
+      ),
+    ).resolves.toEqual([
+      {
+        id: 'qwen3.6-35b-a3b',
+        contextWindow: 262_144,
+        capabilities: {
+          imageInput: ModelCapabilityStatus.Supported,
+          videoInput: ModelCapabilityStatus.Supported,
+          audioInput: ModelCapabilityStatus.Unsupported,
+        },
+        capabilitiesSource: DiscoveryCapabilitiesSource.RuntimeProbe,
+      },
+    ]);
+    expect(requests).toEqual([
+      'http://llama.local:8000/v1/models',
+      'http://llama.local:8000/props',
+    ]);
+  });
+
+  test('lets the /props probe override a stale /v1/models vision claim', async () => {
+    const fetchImpl: typeof fetch = async input =>
+      String(input).endsWith('/v1/models')
+        ? Response.json({
+            data: [{ id: 'qwen3-vl' }],
+            models: [{ name: 'qwen3-vl', capabilities: ['completion', 'multimodal'] }],
+          })
+        : Response.json({ modalities: { vision: false } });
+
+    await expect(
+      discoverProviderModels(
+        { baseUrl: 'http://llama.local:8000', apiFormat: ApiFormat.OpenAI },
+        fetchImpl,
+      ),
+    ).resolves.toEqual([
+      {
+        id: 'qwen3-vl',
+        capabilities: {
+          imageInput: ModelCapabilityStatus.Unsupported,
+          // The probe only measured vision; the entry's remaining claims survive.
+          videoInput: ModelCapabilityStatus.Supported,
+        },
+        capabilitiesSource: DiscoveryCapabilitiesSource.RuntimeProbe,
+      },
+    ]);
+  });
+
+  test('keeps /v1/models results when /props is absent', async () => {
+    const fetchImpl: typeof fetch = async input =>
+      String(input).endsWith('/v1/models')
+        ? Response.json({ data: [{ id: 'model-a', meta: { n_ctx: 8192 } }] })
+        : new Response('', { status: 404 });
+
+    await expect(
+      discoverProviderModels(
+        { baseUrl: 'http://gateway.local:8000/v1', apiFormat: ApiFormat.OpenAI },
+        fetchImpl,
+      ),
+    ).resolves.toEqual([{ id: 'model-a', contextWindow: 8192 }]);
   });
 });

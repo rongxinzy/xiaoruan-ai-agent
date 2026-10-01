@@ -176,8 +176,6 @@ import { PiPendingMessageQueue } from './piPendingMessageQueue';
 import { shouldExposeAskUserQuestionTool } from './piUnattendedPolicy';
 import { createPiWorkLoop } from './piWorkLoop';
 import { PiWriteTokenLimitRecovery } from './piWriteTokenLimit';
-import { createPiTurnStallHandlers } from './piTurnStallHandlers';
-import { PiTurnStallWatchdog } from './piTurnStallWatchdog';
 import {
   createPiBoundedReadTool,
   type PiFileMutationToolDefinition,
@@ -197,6 +195,22 @@ import type {
   PiStartOptions,
 } from './piRuntimeTypes';
 import { cancelPiRetry, waitForPiRetryCancellation } from './piRetryCancellation';
+import { disableModelImageInputCapability } from './piCapabilityCorrection';
+import { PiStreamStallWatchdog } from './piStreamStallWatchdog';
+
+/**
+ * How many times a stalled turn is automatically resumed from the persisted
+ * history. A second consecutive stall leaves the terminal error on screen.
+ */
+const MAX_STREAM_STALL_AUTO_RESUMES = 1;
+
+/** Hidden prompt used for the automatic resume after a stream stall. */
+const STREAM_STALL_RESUME_PROMPT =
+  'The previous response stream stalled and was aborted. Continue from where the response was interrupted, and do not repeat work that is already complete.';
+
+/** Steer injected when the output-contract gate hits its first denial ceiling. */
+const OUTPUT_CONTRACT_CORRECTION_STEER =
+  'You have called tools without committing the required output contract. Your next action MUST be exactly one set_task_output tool call that declares the deliverables. Do not call any other tool first.';
 
 // ── Types ──
 
@@ -341,9 +355,6 @@ interface ActivePiSession {
   /** Whether this Work session was explicitly started in Goal mode. */
   goalMode: boolean;
   writeTokenLimitRecovery: PiWriteTokenLimitRecovery;
-  /** Stops a turn the model stopped making progress on. Null until the session
-   * is registered, because the watchdog needs the session it observes. */
-  stallWatchdog: PiTurnStallWatchdog | null;
   /**
    * Error from the latest failed attempt (message_end with stopReason=error).
    * Deferred — not persisted/emitted — because Pi may auto-retry the turn;
@@ -641,6 +652,21 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
   private llamaCppContextProbe:
     | ((modelName: string) => Promise<LlamaCppRunningModelContext | null>)
     | null = null;
+  /** Aborts turns whose model stream silently stops producing Pi events. */
+  private readonly streamStallWatchdog: PiStreamStallWatchdog;
+  /** Automatic stall resumes already attempted per session (bounded). */
+  private readonly streamStallResumeCounts = new Map<string, number>();
+
+  constructor(options?: { streamStallTimeoutMs?: number }) {
+    super();
+    this.streamStallWatchdog = new PiStreamStallWatchdog(
+      {
+        isSuspended: sessionId => this.isSessionAwaitingUserInput(sessionId),
+        onStall: sessionId => this.handleStreamStall(sessionId),
+      },
+      options?.streamStallTimeoutMs,
+    );
+  }
 
   setCoworkStore(store: CoworkStore): void {
     this.store = store;
@@ -761,6 +787,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     options: PiStartOptions = {},
   ): Promise<void> {
     assertCoworkSubmissionContent({ prompt, imageAttachments: options.imageAttachments });
+    if (!options._streamStallResume) this.streamStallResumeCounts.delete(sessionId);
     const expertIds = normalizeSingleExpertIds(options.expertIds);
 
     if (this.activeSessions.has(sessionId) || this.initializingSessions.has(sessionId)) {
@@ -1366,7 +1393,6 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         writeTokenLimitRecovery: new PiWriteTokenLimitRecovery(resolvedModel.maxOutputTokens, {
           onBudgetExhausted: () => this.reportTruncatedFileMutation(sessionId, active),
         }),
-        stallWatchdog: null,
         pendingError: null,
         errorSurfaced: false,
         retryNoticeEmitted: false,
@@ -1383,30 +1409,6 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         mcpToolManifestGeneration: this.mcpToolManifestGeneration,
       };
       activeSession = active;
-
-      // Only model-waiting time counts: tool execution, a pending approval, or a
-      // question waiting on the user all suspend the watchdog.
-      const stallHandlers = createPiTurnStallHandlers({
-        isReportable: () => !active.aborted && !active.turnFailed && !active.pendingError,
-        hasPendingError: () => active.pendingError !== null,
-        reportTimeout: classified => {
-          active.pendingError = { message: classified.message, classified, sticky: true };
-          active.turnFailed = true;
-        },
-        abortTurn: () => {
-          active.piSession.abortBash();
-          void active.piSession.abort().catch((error: unknown) => {
-            console.warn('[PiRuntime] failed to abort a stalled turn:', error);
-          });
-        },
-        surfaceUnsettled: () => this.flushPendingError(sessionId, active),
-      });
-      active.stallWatchdog = new PiTurnStallWatchdog({
-        isRunning: () => this.activeSessions.get(sessionId) === active && active.isRunning,
-        isSuspended: () => active.toolStartedAtByCallId.size > 0,
-        onStall: stallHandlers.onStall,
-        onUnsettled: stallHandlers.onUnsettled,
-      });
 
       // Subscribe to Pi events before sending the prompt
       active.unsubscribe = session.subscribe(event => {
@@ -1496,6 +1498,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     options: PiContinueOptions = {},
   ): Promise<void> {
     assertCoworkSubmissionContent({ prompt, imageAttachments: options.imageAttachments });
+    if (!options._streamStallResume) this.streamStallResumeCounts.delete(sessionId);
     const explicitExpertIds = normalizeSingleExpertIds(options.expertIds);
     const nextUnattended = options.unattended === true;
     const active = this.activeSessions.get(sessionId);
@@ -1890,6 +1893,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
   }
 
   private disposeSessionForRecreation(sessionId: string, active: ActivePiSession): void {
+    this.streamStallWatchdog.dispose(sessionId);
     this.dismissAskUserQuestionsBySession(sessionId);
     active.agentLoop.stop();
     active.pendingError = null;
@@ -1923,6 +1927,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     drainQueuedFollowUp: boolean,
     cause?: CoworkInterruptionCause,
   ): void {
+    this.streamStallWatchdog.dispose(sessionId);
     this.dismissAskUserQuestionsBySession(sessionId);
     const initializing = this.initializingSessions.get(sessionId);
     if (initializing) {
@@ -2067,6 +2072,8 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
     for (const sessionId of sessionIds) {
       this.stopActiveSession(sessionId, 'The application stopped the active session.', false);
     }
+    this.streamStallWatchdog.disposeAll();
+    this.streamStallResumeCounts.clear();
     void this.cadViewerService.stop();
   }
 
@@ -2386,6 +2393,8 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
 
   onSessionDeleted(sessionId: string): void {
     this.stopActiveSession(sessionId, 'The session was deleted.', false);
+    this.streamStallWatchdog.dispose(sessionId);
+    this.streamStallResumeCounts.delete(sessionId);
     this.clearApprovalsBySession(sessionId);
     this.activeSessions.delete(sessionId);
     this.retainedSessionIds.delete(sessionId);
@@ -2395,6 +2404,7 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
   }
 
   private releaseStoppedSession(sessionId: string): void {
+    this.streamStallWatchdog.dispose(sessionId);
     this.activeSessions.delete(sessionId);
     this.retainedSessionIds.add(sessionId);
     this.clearThrottleStateBySession(sessionId, true);
@@ -2527,7 +2537,15 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
                   });
                   if (!authorization) return undefined;
                   if (authorization.allow) return undefined;
-                  if (authorization.terminateRun) {
+                  if (authorization.forceContractCorrection) {
+                    // The gate hit its first denial ceiling: steer the model
+                    // into one set_task_output call instead of killing the run.
+                    this.enforceOutputContractCorrection(
+                      approvalContext.sessionId,
+                      runId,
+                      authorization.reason,
+                    );
+                  } else if (authorization.terminateRun) {
                     // The run cannot continue: end the turn with a visible error
                     // instead of returning another tool error the model would
                     // answer with yet another tool call (issue #116).
@@ -2698,6 +2716,10 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
   // ── Private: event mapping ──
 
   private handlePiEvent(sessionId: string, active: ActivePiSession, event: PiEvent): void {
+    // Late events from an aborted turn (e.g. after a stall abort) must not
+    // touch state — including the rebuilt session's stream-stall watchdog.
+    if (active.aborted) return;
+    this.streamStallWatchdog.handleEvent(sessionId, event.type);
     // Debug: log all Pi events to diagnose frontend rendering issues
     if (event.type !== 'message_update') {
       console.log(
@@ -2707,18 +2729,13 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         event.message?.stopReason ? `stopReason=${event.message.stopReason}` : '',
       );
     }
-    // Any event is progress; the watchdog only fires on genuine silence.
-    active.stallWatchdog?.noteActivity();
     switch (event.type) {
       case 'agent_start':
         active.isRunning = true;
-        active.stallWatchdog?.arm();
         break;
 
       case 'turn_start':
         active.isRunning = true;
-        // Each turn is one model request; the duration limit restarts here.
-        active.stallWatchdog?.arm();
         active.toolStartedAtByCallId.clear();
         active.preparingToolCallIdByContentIndex.clear();
         {
@@ -2832,6 +2849,16 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
               // Keep the original failure until Pi settles. If the SDK retries,
               // auto_retry_start cancels its newly installed backoff controller.
               active.pendingError.sticky = true;
+            }
+            if (
+              active.pendingError.classified.kind === CoworkErrorKind.ModelCapabilityUnsupported
+            ) {
+              // The stored capability verdict is wrong; downgrade it so the next
+              // turn registers the model as text-only instead of failing again.
+              disableModelImageInputCapability(
+                active.harnessModelProfile.provider,
+                active.harnessModelProfile.model,
+              );
             }
             return;
           }
@@ -3109,6 +3136,8 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
         this.markFinalAnswer(sessionId, active);
         this.clearThrottleStateBySession(sessionId, false);
         active.isRunning = false;
+        // The turn completed, so a later stall earns a fresh auto-resume budget.
+        this.streamStallResumeCounts.delete(sessionId);
         // Pi versions differ in whether they emit agent_settled after agent_end.
         // Drain queued Work follow-ups here so completion never leaves them stuck.
         if (
@@ -3342,6 +3371,109 @@ export class PiRuntimeAdapter extends EventEmitter implements PiRuntime {
       console.warn('[PiRuntime] failed to abort a terminated workbench run:', error);
     });
     this.flushPendingError(sessionId, active);
+  }
+
+  /**
+   * True while the session waits on user input: a pending ask-user question, a
+   * coding elicitation, or a workbench approval. Pi emits nothing in that
+   * state, so the stream-stall watchdog must stand down.
+   */
+  private isSessionAwaitingUserInput(sessionId: string): boolean {
+    for (const pending of this.pendingAskUserQuestions.values()) {
+      if (pending.sessionId === sessionId) return true;
+    }
+    for (const approvalSessionId of this.approvalSessionMap.values()) {
+      if (approvalSessionId === sessionId) return true;
+    }
+    return this.workbenchTaskService?.hasPendingApprovalForSession(sessionId) ?? false;
+  }
+
+  /**
+   * The model stream went silent mid-turn without any Pi event, which the
+   * runtime never reports on its own. Abort the turn, surface a sticky
+   * StreamInterrupted error, and let the next continueSession rebuild the Pi
+   * session from the persisted history (an aborted Pi session is not reusable).
+   */
+  private handleStreamStall(sessionId: string): void {
+    const active = this.activeSessions.get(sessionId);
+    if (!active || active.aborted || !active.isRunning) return;
+    console.warn(
+      `[PiRuntime] session ${sessionId} produced no model stream activity within the stall timeout; aborting the turn`,
+    );
+    const message =
+      'The model stopped responding: the stream produced no output for an extended period, so the turn was aborted.';
+    active.pendingError = {
+      message,
+      classified: makeCoworkError(CoworkErrorKind.StreamInterrupted, message),
+      sticky: true,
+    };
+    active.piSession.abortBash();
+    void active.piSession.abort().catch((error: unknown) => {
+      console.warn('[PiRuntime] failed to abort a stalled session:', error);
+    });
+    active.aborted = true;
+    this.flushPendingError(sessionId, active);
+    this.resumeStalledSession(sessionId, message);
+  }
+
+  /**
+   * Automatically resumes a stalled turn once, via a hidden continueSession
+   * that rebuilds the Pi session from the SQLite history. A second consecutive
+   * stall leaves the terminal error on screen instead of looping forever.
+   */
+  private resumeStalledSession(sessionId: string, stallMessage: string): void {
+    const attempts = this.streamStallResumeCounts.get(sessionId) ?? 0;
+    if (attempts >= MAX_STREAM_STALL_AUTO_RESUMES) return;
+    this.streamStallResumeCounts.set(sessionId, attempts + 1);
+    this.emit('retryNotice', sessionId, {
+      sessionId,
+      kind: CoworkErrorKind.StreamInterrupted,
+      message: stallMessage,
+      attempt: attempts + 1,
+    });
+    this.continueSession(sessionId, STREAM_STALL_RESUME_PROMPT, {
+      _skipUserMessage: true,
+      _streamStallResume: true,
+    }).catch((error: unknown) => {
+      console.error('[PiRuntime] automatic resume after a stream stall failed:', error);
+    });
+  }
+
+  /**
+   * The output-contract gate hit its first denial ceiling. Give the model one
+   * forced correction: steer the live Pi session into exactly one
+   * set_task_output call and grant the run extra denials. When the session
+   * cannot take a steer (stopped or aborted) or the grace was already spent,
+   * the run is failed and terminated as before.
+   */
+  private enforceOutputContractCorrection(
+    sessionId: string,
+    runId: string,
+    reason: string | undefined,
+  ): void {
+    const active = this.activeSessions.get(sessionId);
+    const canSteer = Boolean(active && !active.aborted && active.isRunning);
+    const graceGranted =
+      canSteer && Boolean(this.workbenchTaskService?.grantOutputContractCorrectionGrace(runId));
+    if (active && graceGranted) {
+      console.warn(
+        `[PiRuntime] steering session ${sessionId} back to the output contract after repeated gate denials`,
+      );
+      void active.piSession.steer(OUTPUT_CONTRACT_CORRECTION_STEER).catch((error: unknown) => {
+        console.error('[PiRuntime] failed to steer the output contract correction:', error);
+      });
+      return;
+    }
+    this.workbenchTaskService?.failRun?.(sessionId, {
+      code: 'output_contract_uncommitted',
+      stage: 'contract',
+      message:
+        'Stopped the run: the output contract was never committed, so no tool call could execute.',
+    });
+    this.endTerminatedWorkbenchTurn(
+      sessionId,
+      reason ?? 'The workbench run can no longer continue.',
+    );
   }
 
   // ── Private: assistant message lifecycle ──
