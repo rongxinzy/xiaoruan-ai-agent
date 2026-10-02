@@ -962,11 +962,13 @@ describe('PiRuntimeAdapter', () => {
           },
         });
         listener({ type: 'agent_end' });
-        await Promise.resolve();
-        expect(mockSession.prompt).toHaveBeenCalledOnce();
-        expect(service.getCurrent('adaptive-gate')?.runs[0].status).toBe(
-          WorkbenchRunStatus.Succeeded,
+        listener({ type: 'agent_settled' });
+        await vi.waitFor(() =>
+          expect(service.getCurrent('adaptive-gate')?.runs[0].status).toBe(
+            WorkbenchRunStatus.Succeeded,
+          ),
         );
+        expect(mockSession.prompt).toHaveBeenCalledOnce();
 
         await adapter.continueSession('adaptive-gate', '修复登录流程中的刷新问题', {
           sessionMode: 'work',
@@ -4135,6 +4137,7 @@ describe('PiRuntimeAdapter', () => {
     it('keeps the run alive through an SDK compaction continuation and completes it at agent_settled', async () => {
       const db = new Database(':memory:');
       initializeWorkbenchTaskSchema(db);
+      initializeProductionLoopSchema(db);
       const service = new RealWorkbenchTaskService(db);
       adapter.setWorkbenchTaskService(service);
       const completes: string[] = [];
