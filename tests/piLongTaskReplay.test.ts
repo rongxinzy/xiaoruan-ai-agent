@@ -17,7 +17,9 @@ import { describe, expect, it } from 'vitest';
 import { LONGTASK_DOC_COUNT, runLongTaskScenario } from './replay/piLongTaskScenario';
 
 const TAPE_PATH = path.resolve(__dirname, 'replay/tapes/longtask-200doc.jsonl.gz');
-const WORK_DIR = path.join(os.tmpdir(), 'pi-longtask-replay-work');
+// Distinct from the upstream lane's work dir: the two repos' runs must never
+// share a live filesystem.
+const WORK_DIR = path.join(os.tmpdir(), 'pi-longtask-replay-work-xr');
 const HARD_CAP_MS = 15 * 60 * 1000;
 
 // Path normalization is POSIX-shaped; Windows runs should re-record first.

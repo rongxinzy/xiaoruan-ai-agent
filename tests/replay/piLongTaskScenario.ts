@@ -21,16 +21,85 @@ import { vi } from 'vitest';
 import { ModelCapabilityStatus } from '@shared/providers';
 import { WorkbenchApprovalMode } from '@shared/workbenchTask';
 
-import { CoworkExecutionMode } from '../../src/shared/cowork/constants';
 import { CoworkStore } from '../../src/main/coworkStore';
 import { composeCoworkSystemPrompt } from '../../src/main/coworkPrompt/composer';
 import { setStoreGetter } from '../../src/main/libs/claudeSettings';
 import { stopPiOpenAICompatProxyForTests } from '../../src/main/libs/agentEngine/piOpenAICompatProxy';
 import { PiRuntimeAdapter } from '../../src/main/libs/agentEngine/piRuntimeAdapter';
+import { initializeProductionLoopSchema } from '../../src/main/productionLoop/schema';
 import { SqliteStore } from '../../src/main/sqliteStore';
 import { initializeWorkbenchTaskSchema } from '../../src/main/workbenchTask/schema';
 import { WorkbenchTaskService } from '../../src/main/workbenchTask/taskService';
 import { PiProviderTapeServer } from './piProviderTape';
+
+// This fork routes every model ref through the AISphere platform service. The
+// scenario owns a plain OpenAI endpoint (live upstream or the tape server), so
+// the service is reduced to its two entry points used by model resolution:
+// policy() for the routing decision and selection() for the provider config.
+const aisphereMockState = vi.hoisted(() => ({
+  baseUrl: '',
+  modelId: '',
+  contextWindow: 0,
+  maxTokens: 0,
+}));
+vi.mock('../../src/main/aisphere/service', async () => {
+  const { AISphere } = await import('../../src/shared/aisphere');
+  return {
+    aisphereService: {
+      policy: () => ({ mode: 'exclusive', providerKeys: [AISphere.Provider] }),
+      selection: (model?: string, provider?: string) => {
+        if (!model || (provider && provider !== AISphere.Provider)) {
+          throw new Error('aisphereMissingModel');
+        }
+        if (model !== aisphereMockState.modelId) throw new Error('aisphereMissingModel');
+        return {
+          model,
+          config: {
+            enabled: true,
+            userEnabled: true,
+            displayName: 'AISphere',
+            apiFormat: 'openai',
+            baseUrl: aisphereMockState.baseUrl,
+            // The replay/upstream endpoints ignore the credential, but the SDK
+            // refuses to start without a non-empty key.
+            apiKey: 'sk-replay',
+            models: [
+              {
+                id: model,
+                name: model,
+                supportsImage: false,
+                capabilities: { imageInput: 'unsupported' },
+                contextWindow: aisphereMockState.contextWindow,
+                maxTokens: aisphereMockState.maxTokens,
+              },
+            ],
+          },
+        };
+      },
+      onChanged: () => () => undefined,
+    },
+  };
+});
+
+// The worker pool spawns worker_threads from a compiled .js path that does not
+// exist under vitest; a missing worker is tolerated during streaming but is
+// fatal for declare_artifact (registerArtifact has no fallback). Run the same
+// operations in-process instead — identical code paths, deterministic across
+// record and replay.
+vi.mock('../../src/main/workbenchTask/artifactWorkerPool', async () => {
+  const { collectWorkbenchArtifacts } = await import(
+    '../../src/main/workbenchTask/artifactCollector'
+  );
+  const { runTextWorkerOperation } = await import(
+    '../../src/main/workbenchTask/textWorkerOperations'
+  );
+  return {
+    collectWorkbenchArtifactsAsync: (input: Parameters<typeof collectWorkbenchArtifacts>[0]) =>
+      Promise.resolve(collectWorkbenchArtifacts(input)),
+    transformCoworkTextAsync: (input: Parameters<typeof runTextWorkerOperation>[0]) =>
+      Promise.resolve(runTextWorkerOperation(input)),
+  };
+});
 
 // The shared electron mock drifts behind app.* usage in main-process code;
 // patch only what this scenario triggers (legacy memory migration in SqliteStore).
@@ -45,7 +114,7 @@ export const LONGTASK_DOC_COUNT = 200;
 export const LONGTASK_LIVE_UPSTREAM = 'http://172.18.5.123:8000';
 export const LONGTASK_MODEL_ID = 'Qwen3.6-35B-A3B';
 
-const PROVIDER_NAME = 'custom_ab';
+const PROVIDER_NAME = 'custom_aisphere';
 const ARTIFACT_NAMES = ['summaries.md', 'index.csv', 'report.md'] as const;
 
 const TASK_PROMPT = `工作目录下 data/ 子目录中有 200 个文本文档（doc-001.txt 到 doc-200.txt），是一份产品技术文档集的章节。请严格按以下步骤完成：
@@ -207,6 +276,10 @@ export async function runLongTaskScenario(
     }
     const providerBaseUrl =
       options.mode === 'live' ? `${LONGTASK_LIVE_UPSTREAM}/v1` : tapeServer!.baseUrl;
+    aisphereMockState.baseUrl = providerBaseUrl;
+    aisphereMockState.modelId = LONGTASK_MODEL_ID;
+    aisphereMockState.contextWindow = 262_144;
+    aisphereMockState.maxTokens = 4096;
 
     seedLongTaskWorkspace(options.workDir);
 
@@ -251,6 +324,8 @@ export async function runLongTaskScenario(
 
     const db = store.getDatabase();
     initializeWorkbenchTaskSchema(db);
+    // This fork's getCurrent resolves the production plan alongside the task.
+    initializeProductionLoopSchema(db);
     const coworkStore = new CoworkStore(db);
     const workbenchTaskService = new WorkbenchTaskService(db);
 
@@ -292,7 +367,7 @@ export async function runLongTaskScenario(
       'ab-longtask',
       options.workDir,
       systemPrompt,
-      CoworkExecutionMode.Local,
+      'local',
       [],
       'main',
       '',

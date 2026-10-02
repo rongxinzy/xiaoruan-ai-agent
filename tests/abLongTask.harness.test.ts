@@ -21,7 +21,9 @@ import { runLongTaskScenario } from './replay/piLongTaskScenario';
 
 const MODE = process.env.AB_LONGTASK;
 const TAPE_PATH = path.resolve(__dirname, 'replay/tapes/longtask-200doc.jsonl.gz');
-const WORK_DIR = path.join(os.tmpdir(), 'pi-longtask-replay-work');
+// Distinct from the upstream lane's work dir: the two repos' runs must never
+// share a live filesystem.
+const WORK_DIR = path.join(os.tmpdir(), 'pi-longtask-replay-work-xr');
 const HARD_CAP_MS = 180 * 60 * 1000;
 
 describe.skipIf(!MODE || MODE === '0')('A/B long-task manual driver', () => {
