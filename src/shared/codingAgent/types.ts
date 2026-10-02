@@ -5,6 +5,7 @@ import type {
   CodingAgentCheckFailure,
   CodingAssignmentStatus,
   CodingEventKind,
+  CodingElicitationStatus,
   CodingGitDiffScope,
   CodingGitFileStatus,
   CodingWorkspaceFileKind,
@@ -155,10 +156,45 @@ export interface CodingEvent {
   createdAt: number;
 }
 
+export interface CodingEventWindow {
+  laneId: string;
+  oldestSequence: number | null;
+  newestSequence: number | null;
+  hasMore: boolean;
+}
+
+export interface CodingEventPage {
+  laneId: string;
+  events: CodingEvent[];
+  hasMore: boolean;
+  nextCursor: number | null;
+}
+
+export interface CodingRoomEventDelta {
+  workspaceRoot: string;
+  events: CodingEvent[];
+}
+
 export interface CodingPermissionResponse {
   requestId: string;
   outcome: CodingPermissionOutcome;
   optionId?: string;
+}
+
+/** A coding-only free-text question the agent paused on. */
+export interface CodingElicitation {
+  id: string;
+  laneId: string;
+  question: string;
+  status: CodingElicitationStatus;
+  createdAt: number;
+  answer: string | null;
+  cancelReason: string | null;
+}
+
+export interface CodingElicitationResponse {
+  requestId: string;
+  answer: string;
 }
 
 export interface CodingWorkspaceLease {
@@ -184,6 +220,8 @@ export interface CodingRoomSnapshot {
   lanes: CodingAgentLane[];
   assignments: CodingAssignment[];
   events: CodingEvent[];
+  eventWindows?: CodingEventWindow[];
+  elicitations: CodingElicitation[];
 }
 
 export interface CodingPendingMessagesChangedEvent {

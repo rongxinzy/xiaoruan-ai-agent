@@ -69,9 +69,15 @@ const probe = (script: string) =>
   });
 
 test('rejects an incompatible protocol version', async () => {
-  await expect(probe(fakeAgentScript({ protocolVersion: 2 }))).rejects.toBeInstanceOf(
+  await expect(probe(fakeAgentScript({ protocolVersion: 0 }))).rejects.toBeInstanceOf(
     AcpProtocolIncompatibleError,
   );
+});
+
+test('accepts a newer protocol version after receiving an assistant answer', async () => {
+  await expect(probe(fakeAgentScript({ protocolVersion: 2 }))).resolves.toMatchObject({
+    authMethods: AUTH_METHODS,
+  });
 });
 
 test('a successful notification-only agent finishes without waiting for a cancel response', async () => {

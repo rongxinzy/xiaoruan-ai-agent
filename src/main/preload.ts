@@ -675,6 +675,11 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke(CodingAgentIpc.StartSession, input),
     bootstrap: (workspaceRoot: string) =>
       ipcRenderer.invoke(CodingAgentIpc.Bootstrap, workspaceRoot),
+    loadEventPage: (input: {
+      workspaceRoot: string;
+      laneId: string;
+      beforeSequence: number | null;
+    }) => ipcRenderer.invoke(CodingAgentIpc.LoadEventPage, input),
     prepareLane: (input: { workspaceRoot: string; laneId: string }) =>
       ipcRenderer.invoke(CodingAgentIpc.PrepareLane, input),
     createMission: (input: import('../shared/codingAgent').CreateCodingMissionInput) =>
@@ -704,6 +709,12 @@ contextBridge.exposeInMainWorld('electron', {
     }) => ipcRenderer.invoke(CodingAgentIpc.ConfirmSessionRecovery, input),
     cancel: (input: { workspaceRoot: string; laneId: string }) =>
       ipcRenderer.invoke(CodingAgentIpc.Cancel, input),
+    respondElicitation: (input: {
+      workspaceRoot: string;
+      response: import('../shared/codingAgent').CodingElicitationResponse;
+    }) => ipcRenderer.invoke(CodingAgentIpc.RespondElicitation, input),
+    cancelElicitation: (input: { workspaceRoot: string; requestId: string }) =>
+      ipcRenderer.invoke(CodingAgentIpc.CancelElicitation, input),
     previewHandoff: (input: {
       workspaceRoot: string;
       sourceLaneId: string;
@@ -778,6 +789,9 @@ contextBridge.exposeInMainWorld('electron', {
     }) => ipcRenderer.invoke(CodingAgentIpc.RespondPermission, input),
     onChanged: (callback: (snapshot: import('../shared/codingAgent').CodingRoomSnapshot) => void) =>
       onPush(CodingAgentIpc.Changed, callback),
+    onEventDelta: (
+      callback: (delta: import('../shared/codingAgent').CodingRoomEventDelta) => void,
+    ) => onPush(CodingAgentIpc.EventDelta, callback),
     onPendingMessagesChanged: (
       callback: (event: import('../shared/codingAgent').CodingPendingMessagesChangedEvent) => void,
     ) => onPush(CodingAgentIpc.PendingMessagesChanged, callback),

@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron';
 
 import {
   CodingAgentIpc,
+  CodingEventWindowPageSize,
   type AddCodingAgentProfileInput,
   type CodingGitCommitInput,
   type CodingGitBranchInput,
@@ -13,6 +14,7 @@ import {
   type CodingLaneViewStateInput,
   type CodingLaneConfigOptionInput,
   type CodingPermissionResponse,
+  type CodingElicitationResponse,
   type CodingPendingMessagesChangedEvent,
   type CreateCodingCollaborationPresetInput,
   type CodingPromptInput,
@@ -24,6 +26,7 @@ import {
 } from '../../shared/codingAgent';
 import type { CodingRoomService } from '../codingAgent/codingRoomService';
 import { GitWorktreeConflictError } from '../codingAgent/gitWorktreeService';
+import { agentResourceDiagnostics } from '../agentResourceDiagnostics';
 
 type CodingHandler<T> = () => T | Promise<T>;
 
@@ -53,6 +56,7 @@ async function runCodingHandler<T>(
 export function registerCodingAgentIpcHandlers(getService: () => CodingRoomService): void {
   const service = getService();
   service.on('changed', snapshot => {
+    agentResourceDiagnostics.recordRoomSnapshot(snapshot.events.length, snapshot.lanes.length);
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.send(CodingAgentIpc.Changed, snapshot);
     }
@@ -133,6 +137,64 @@ export function registerCodingAgentIpcHandlers(getService: () => CodingRoomServi
       success: true,
       snapshot: service.bootstrap(workspaceRoot),
     })),
+  );
+  ipcMain.handle(CodingAgentIpc.GetProfileConfigOptions, (_event, profileId: string) => {
+    try {
+      return { success: true, configOptions: service.getProfileConfigOptions(profileId) };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle(CodingAgentIpc.GetProfileAvailableCommands, (_event, profileId: string) => {
+    try {
+      return { success: true, commands: service.getProfileAvailableCommands(profileId) };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle(CodingAgentIpc.CreateSession, async (_event, input: CreateCodingSessionInput) => {
+    try {
+      return { success: true, snapshot: await service.createSession(input) };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle(CodingAgentIpc.StartSession, async (_event, input: StartCodingSessionInput) => {
+    try {
+      return { success: true, snapshot: await service.startSession(input) };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle(CodingAgentIpc.Bootstrap, (_event, workspaceRoot: string) => {
+    try {
+      return {
+        success: true,
+        snapshot: service.bootstrap(workspaceRoot, {
+          eventLimitPerLane: CodingEventWindowPageSize,
+        }),
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  service.on('eventDelta', (delta: import('../../shared/codingAgent').CodingRoomEventDelta) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(CodingAgentIpc.EventDelta, delta);
+    }
+  });
+  ipcMain.handle(
+    CodingAgentIpc.LoadEventPage,
+    (_event, input: { workspaceRoot: string; laneId: string; beforeSequence: number | null }) => {
+      try {
+        return {
+          success: true,
+          page: service.loadEventPage(input.workspaceRoot, input.laneId, input.beforeSequence),
+        };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
   );
   ipcMain.handle(
     CodingAgentIpc.PrepareLane,
@@ -488,5 +550,31 @@ export function registerCodingAgentIpcHandlers(getService: () => CodingRoomServi
         success: true,
         snapshot: await service.respondToPermission(input.workspaceRoot, input.response),
       })),
+  );
+  ipcMain.handle(
+    CodingAgentIpc.RespondElicitation,
+    async (_event, input: { workspaceRoot: string; response: CodingElicitationResponse }) => {
+      try {
+        return {
+          success: true,
+          snapshot: await service.respondElicitation(input.workspaceRoot, input.response),
+        };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  );
+  ipcMain.handle(
+    CodingAgentIpc.CancelElicitation,
+    async (_event, input: { workspaceRoot: string; requestId: string }) => {
+      try {
+        return {
+          success: true,
+          snapshot: await service.cancelElicitation(input.workspaceRoot, input.requestId),
+        };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
   );
 }

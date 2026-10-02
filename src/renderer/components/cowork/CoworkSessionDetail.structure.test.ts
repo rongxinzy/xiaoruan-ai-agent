@@ -75,3 +75,14 @@ test('reserves conversation viewport above the absolutely positioned composer', 
   expect(source).toContain('showFolderSelector={showFolderSelector}');
   expect(source).toContain('workingDirectory={workingDirectory}');
 });
+
+test('unmounts the artifact panel after its close transition', () => {
+  const closeBranchStart = source.indexOf('} else {', source.indexOf('if (isPanelOpen)'));
+  const closeBranchEnd = source.indexOf('return () =>', closeBranchStart);
+
+  expect(closeBranchStart).toBeGreaterThan(0);
+  expect(closeBranchEnd).toBeGreaterThan(closeBranchStart);
+  expect(source.slice(closeBranchStart, closeBranchEnd)).toContain(
+    'setShouldRenderArtifactPanel(false);',
+  );
+});

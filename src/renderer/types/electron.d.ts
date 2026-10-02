@@ -1047,6 +1047,14 @@ interface IElectronAPI {
       includeRecoveryContext: boolean;
     }) => Promise<CodingAgentActionResult>;
     cancel: (input: { workspaceRoot: string; laneId: string }) => Promise<CodingAgentActionResult>;
+    respondElicitation: (input: {
+      workspaceRoot: string;
+      response: import('../../shared/codingAgent').CodingElicitationResponse;
+    }) => Promise<CodingAgentActionResult>;
+    cancelElicitation: (input: {
+      workspaceRoot: string;
+      requestId: string;
+    }) => Promise<CodingAgentActionResult>;
     previewHandoff: (input: {
       workspaceRoot: string;
       sourceLaneId: string;
@@ -1165,6 +1173,18 @@ interface IElectronAPI {
     onChanged: (
       callback: (snapshot: import('../../shared/codingAgent').CodingRoomSnapshot) => void,
     ) => () => void;
+    onEventDelta: (
+      callback: (delta: import('../../shared/codingAgent').CodingRoomEventDelta) => void,
+    ) => () => void;
+    loadEventPage: (input: {
+      workspaceRoot: string;
+      laneId: string;
+      beforeSequence: number | null;
+    }) => Promise<{
+      success: boolean;
+      page?: import('../../shared/codingAgent').CodingEventPage;
+      error?: string;
+    }>;
     onPendingMessagesChanged: (
       callback: (event: import('../../shared/codingAgent').CodingPendingMessagesChangedEvent) => void,
     ) => () => void;

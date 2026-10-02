@@ -28,6 +28,7 @@ function snapshot(root: string): CodingRoomSnapshot {
     missions: [],
     assignments: [],
     events: [],
+    elicitations: [],
     lanes: [
       {
         id: `${root}-lane`,
@@ -90,6 +91,7 @@ function setup() {
           snapshotListeners.push(callback);
           return unsubscribe;
         },
+        onEventDelta: () => unsubscribe,
       },
     },
   });
@@ -179,7 +181,8 @@ test('late bootstrap and subscription callbacks are ignored after switching or u
   });
   expect(result.current.snapshot?.room.workspaceRoot).toBe('/C');
   unmount();
-  expect(unsubscribe).toHaveBeenCalledTimes(3);
+  // Each workspace subscribes to full snapshots and event deltas.
+  expect(unsubscribe).toHaveBeenCalledTimes(6);
   act(() => snapshotListeners[2](snapshot('/C')));
 });
 

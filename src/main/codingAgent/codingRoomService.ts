@@ -20,6 +20,7 @@ import {
   type CodingAgentLane,
   type CodingAgentProfile,
   type CodingAgentConfigOption,
+  type CodingAgentAvailableCommand,
   type AddCodingAgentProfileInput,
   type CodingLaneConfigOptionInput,
   type CodingLaneChangePreview,
@@ -34,6 +35,10 @@ import {
   type CreateCodingCollaborationPresetInput,
   type CodingLaneViewStateInput,
   type CodingPermissionResponse,
+  CodingElicitationStatus,
+  CodingEventWindowPageSize,
+  type CodingEventPage,
+  type CodingElicitationResponse,
   type CodingPromptAttachment,
   type CodingPromptInput,
   CodingPromptDelivery,
@@ -51,6 +56,8 @@ import { CollaborationService } from './collaborationService';
 import { CodingGitController } from './codingGitController';
 import { WorkspaceBroker } from './workspaceBroker';
 import { CodingRoomRepository } from './codingRoomRepository';
+import { CodingEventWindowReader } from './codingEventWindowReader';
+import { CodingEventDeltaBatcher } from './codingEventDeltaBatcher';
 import { isAssistantResponseEvent } from './codingTurnResponse';
 import {
   persistCodingSessionRecord,
@@ -59,14 +66,26 @@ import {
 } from './codingSessionStartup';
 import { t } from '../i18n';
 import type { CodingAgentDriver } from './drivers/codingAgentDriver';
+import { BuiltinCodingConfigId } from './drivers/builtinCodingDriver';
+import {
+  BuiltinCodingControlCommand,
+  parseBuiltinCodingControlCommand,
+} from './drivers/builtinCodingCommands';
 import { CodingDriverFactory } from './drivers/driverFactory';
 import type { CoworkSessionInterruption } from '../../shared/cowork/interruption';
-import type { WorkbenchApprovalMode } from '../../shared/workbenchTask';
+import { WorkbenchApprovalMode } from '../../shared/workbenchTask';
 import type { CoworkPendingMessage } from '../../shared/cowork/pendingMessageQueue';
 import {
   CoworkQueueDelivery,
   CoworkQueueItemStatus,
 } from '../../shared/cowork/pendingMessageQueue';
+
+/**
+ * Config options and slash commands are persisted as JSON, so the cheapest
+ * faithful comparison is the one the repository itself round-trips through.
+ */
+const projectsEqual = (left: readonly unknown[], right: readonly unknown[]): boolean =>
+  JSON.stringify(left) === JSON.stringify(right);
 
 export interface CodingRoomRuntime {
   startBuiltinSession(input: {
@@ -76,10 +95,18 @@ export interface CodingRoomRuntime {
     modelOverride?: string | null;
     thinkingLevel?: string;
     permissionMode?: WorkbenchApprovalMode;
+    /** Whether the turn must run inside the long-horizon goal loop. */
+    goalMode?: boolean;
+    /** Whether the turn must run as a read-only planning turn. */
+    planMode?: boolean;
   }): Promise<void>;
   /** Applies approval-mode changes to a live built-in session. */
   setBuiltinApprovalMode?(sessionId: string, mode: WorkbenchApprovalMode): void;
   cancelBuiltinSession(sessionId: string): Promise<void>;
+  /** Delivers the user's answer to a question the live built-in session asked. */
+  respondBuiltinElicitation?(requestId: string, answer: string): boolean;
+  /** Cancels a question the live built-in session asked. */
+  cancelBuiltinElicitation?(requestId: string, reason: string): boolean;
   enqueueBuiltinMessage?(sessionId: string, prompt: string): { success: boolean; error?: string };
   steerBuiltinMessage?(
     sessionId: string,
@@ -90,6 +117,17 @@ export interface CodingRoomRuntime {
     sessionId: string,
     patch: { model?: string | null; thinkingLevel?: string | null },
   ): Promise<void>;
+  /** Compacts a live built-in session's context without sending a model turn. */
+  compactBuiltinSession?(sessionId: string): Promise<{ cancelled: boolean }>;
+  /** Runs an application-owned action once queued built-in prompts settle. */
+  enqueueBuiltinControlAction?(
+    sessionId: string,
+    action: () => Promise<void>,
+  ): { success: boolean; error?: string };
+  /** Whether the built-in Pi session currently has a turn in flight. */
+  isBuiltinSessionRunning?(sessionId: string): boolean;
+  /** Whether a live built-in Pi session exists for this lane in this process. */
+  isBuiltinSessionActive?(sessionId: string): boolean;
   getBuiltinWorkbenchLink(sessionId: string): { taskId: string; runId: string } | null;
   beginExternalWorkbenchRun(input: { sessionId: string; goal: string; workspaceRoot: string }): {
     taskId: string;
@@ -134,15 +172,14 @@ export class CodingRoomService extends EventEmitter {
   private readonly collaboration = new CollaborationService();
   private readonly authTerminals = new AuthTerminalService();
   private readonly git: CodingGitController;
+  private readonly eventWindowReader: CodingEventWindowReader;
+  private readonly eventDeltaBatcher: CodingEventDeltaBatcher;
   private readonly laneTurnGenerations = new Map<string, number>();
   private readonly cancelledTurnGenerations = new Map<string, number>();
   private readonly acpPendingMessages = new Map<string, CoworkPendingMessage[]>();
   private readonly stagedLaneIds = new Set<string>();
   /** Maps builtin sessionId → laneId to avoid scanning all rooms per event. */
   private readonly builtinSessionLaneMap = new Map<string, string>();
-  /** Throttle timer for publishing builtin event batches. */
-  private builtinPublishTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly BUILTIN_PUBLISH_THROTTLE_MS = 100;
 
   constructor(
     private readonly repository: CodingRoomRepository,
@@ -152,6 +189,10 @@ export class CodingRoomService extends EventEmitter {
   ) {
     super();
     this.git = new CodingGitController(repository);
+    this.eventWindowReader = new CodingEventWindowReader(repository.getDatabase());
+    this.eventDeltaBatcher = new CodingEventDeltaBatcher(delta =>
+      this.emit('eventDelta', delta),
+    );
     const patchBuiltinSession = this.runtime.patchBuiltinSession?.bind(this.runtime);
     this.driverFactory = new CodingDriverFactory(
       {
@@ -163,6 +204,8 @@ export class CodingRoomService extends EventEmitter {
             ...(options?.modelOverride ? { modelOverride: options.modelOverride } : {}),
             ...(options?.thinkingLevel ? { thinkingLevel: options.thinkingLevel } : {}),
             ...(options?.permissionMode ? { permissionMode: options.permissionMode } : {}),
+            ...(options?.goalMode ? { goalMode: true } : {}),
+            ...(options?.planMode ? { planMode: true } : {}),
           }),
         cancel: sessionId => this.runtime.cancelBuiltinSession(sessionId),
         patchSession: patchBuiltinSession,
@@ -179,20 +222,45 @@ export class CodingRoomService extends EventEmitter {
     });
   }
 
-  bootstrap(workspaceRoot: string): CodingRoomSnapshot {
+  bootstrap(
+    workspaceRoot: string,
+    options: { eventLimitPerLane?: number } = {},
+  ): CodingRoomSnapshot {
     this.registry.refreshBuiltinReadiness();
     const room = this.repository.getOrCreateRoom(workspaceRoot);
     const missions = this.repository.listMissions(room.id);
     const lanes = this.repository.listLanes(missions.map(mission => mission.id));
     const assignments = this.repository.listAssignments(missions.map(mission => mission.id));
+    const eventWindow =
+      options.eventLimitPerLane === undefined
+        ? { events: this.repository.listEvents(lanes.map(lane => lane.id)), windows: [] }
+        : this.eventWindowReader.listRecent(
+            lanes.map(lane => lane.id),
+            options.eventLimitPerLane,
+          );
     return {
       room,
       profiles: this.registry.list(),
       missions,
       lanes,
       assignments,
-      events: this.repository.listEvents(lanes.map(lane => lane.id)),
+      events: eventWindow.events,
+      ...(eventWindow.windows.length > 0 ? { eventWindows: eventWindow.windows } : {}),
+      elicitations: this.repository.listElicitations(lanes.map(lane => lane.id)),
     };
+  }
+
+  loadEventPage(
+    workspaceRoot: string,
+    laneId: string,
+    beforeSequence: number | null,
+  ): CodingEventPage {
+    const room = this.repository.getRoomByRoot(workspaceRoot);
+    const laneRoom = this.repository.getRoomByLaneId(laneId);
+    if (!room || !laneRoom || laneRoom.id !== room.id) {
+      throw new Error('The coding event lane does not belong to this workspace.');
+    }
+    return this.eventWindowReader.loadPage(laneId, beforeSequence, CodingEventWindowPageSize);
   }
 
   listProfiles() {
@@ -300,7 +368,8 @@ export class CodingRoomService extends EventEmitter {
       lanes.some(
         lane =>
           lane.status === CodingLaneStatus.Running ||
-          lane.status === CodingLaneStatus.WaitingApproval,
+          lane.status === CodingLaneStatus.WaitingApproval ||
+          lane.status === CodingLaneStatus.WaitingElicitation,
       )
     ) {
       throw new Error(CodingErrorMessage.WorkspaceSessionsRunning);
@@ -328,7 +397,8 @@ export class CodingRoomService extends EventEmitter {
     if (!lane) throw new Error(CodingErrorMessage.SessionNotFound);
     if (
       lane.status === CodingLaneStatus.Running ||
-      lane.status === CodingLaneStatus.WaitingApproval
+      lane.status === CodingLaneStatus.WaitingApproval ||
+      lane.status === CodingLaneStatus.WaitingElicitation
     ) {
       throw new Error(CodingErrorMessage.SessionRunning);
     }
@@ -427,10 +497,23 @@ export class CodingRoomService extends EventEmitter {
 
   /** Running drivers are process-local, so an app restart must never leave stale lanes running. */
   recoverInterruptedState(): number {
+    // A pending question is owned by the process that asked it, so anything
+    // still pending belongs to a previous run: cancel it first, otherwise the
+    // lane stays in WaitingElicitation and refuses prompts and deletion.
+    const elicitationReason = t('codingAgentElicitationCancelledByRestart');
+    const cancelledElicitations = this.repository.cancelPendingElicitations(elicitationReason);
     const interrupted = this.repository.recoverInterruptedLanes();
     for (const lane of interrupted) {
       this.repository.appendEvent(lane.id, CodingEventKind.TurnCancelled, {
         reason: 'application_restart',
+      });
+    }
+    for (const elicitation of cancelledElicitations) {
+      this.repository.appendEvent(elicitation.laneId, CodingEventKind.Elicitation, {
+        requestId: elicitation.id,
+        question: elicitation.question,
+        cancelReason: elicitationReason,
+        status: CodingElicitationStatus.Cancelled,
       });
     }
     return interrupted.length;
@@ -470,10 +553,7 @@ export class CodingRoomService extends EventEmitter {
       !profile ||
       profile.status !== CodingAgentProfileStatus.Ready ||
       (profile.driverKind !== CodingAgentDriverKind.Acp &&
-        profile.driverKind !== CodingAgentDriverKind.Builtin) ||
-      // Built-in lanes only need preparing when their config options were
-      // persisted before config option support existed.
-      (profile.driverKind === CodingAgentDriverKind.Builtin && lane.configOptions.length > 0)
+        profile.driverKind !== CodingAgentDriverKind.Builtin)
     ) {
       return snapshot;
     }
@@ -488,6 +568,14 @@ export class CodingRoomService extends EventEmitter {
     if (!profile || profile.driverKind !== CodingAgentDriverKind.Builtin) return [];
     const driver = this.driverFactory.create(profile);
     return driver.getDefaultConfigOptions?.() ?? [];
+  }
+
+  /** Slash commands a new session of this profile would advertise. */
+  getProfileAvailableCommands(profileId: string): CodingAgentAvailableCommand[] {
+    const profile = this.registry.get(profileId);
+    if (!profile || profile.driverKind !== CodingAgentDriverKind.Builtin) return [];
+    const driver = this.driverFactory.create(profile);
+    return driver.getDefaultAvailableCommands?.() ?? [];
   }
 
   selectLane(workspaceRoot: string, laneId: string): CodingRoomSnapshot {
@@ -608,6 +696,17 @@ export class CodingRoomService extends EventEmitter {
   ): Promise<CodingRoomSnapshot> {
     const snapshot = this.bootstrap(workspaceRoot);
     const lane = this.requireLane(snapshot.lanes, input.laneId);
+    // A pending question owns the turn; answer or cancel it before sending more.
+    if (lane.status === CodingLaneStatus.WaitingElicitation) {
+      throw new Error(t('codingAgentElicitationPromptBlocked'));
+    }
+    const controlCommand = parseBuiltinCodingControlCommand(input.prompt);
+    if (
+      controlCommand &&
+      this.registry.get(lane.profileId)?.driverKind === CodingAgentDriverKind.Builtin
+    ) {
+      return await this.dispatchBuiltinControlCommand(workspaceRoot, lane, controlCommand);
+    }
     if (
       lane.status === CodingLaneStatus.Running ||
       lane.status === CodingLaneStatus.WaitingApproval
@@ -789,6 +888,32 @@ export class CodingRoomService extends EventEmitter {
   async cancel(workspaceRoot: string, laneId: string): Promise<CodingRoomSnapshot> {
     const snapshot = this.bootstrap(workspaceRoot);
     const lane = this.requireLane(snapshot.lanes, laneId);
+    // A pending question keeps the turn alive in the Pi runtime, so it must be
+    // resolved before the turn itself is cancelled.
+    const pendingElicitation = snapshot.elicitations.find(
+      elicitation =>
+        elicitation.laneId === lane.id && elicitation.status === CodingElicitationStatus.Pending,
+    );
+    if (pendingElicitation) {
+      const reason = t('codingAgentElicitationCancelledBySessionStop');
+      this.repository.cancelElicitation(pendingElicitation.id, reason);
+      this.runtime.cancelBuiltinElicitation?.(pendingElicitation.id, reason);
+      this.repository.appendEvent(lane.id, CodingEventKind.Elicitation, {
+        requestId: pendingElicitation.id,
+        question: pendingElicitation.question,
+        cancelReason: reason,
+        status: CodingElicitationStatus.Cancelled,
+      });
+    }
+    if (
+      lane.status !== CodingLaneStatus.Running &&
+      lane.status !== CodingLaneStatus.WaitingApproval &&
+      lane.status !== CodingLaneStatus.WaitingElicitation
+    ) {
+      // Only an active turn can be cancelled; stopping an idle, completed, or
+      // failed lane must not overwrite its mission outcome with "cancelled".
+      return snapshot;
+    }
     const driver = this.getDriver(lane);
     const session = await this.ensureDriverSession(
       driver,
@@ -1305,79 +1430,191 @@ export class CodingRoomService extends EventEmitter {
     return this.publish(workspaceRoot);
   }
 
+  async respondElicitation(
+    workspaceRoot: string,
+    response: CodingElicitationResponse,
+  ): Promise<CodingRoomSnapshot> {
+    const answer = response.answer.trim();
+    if (!answer) throw new Error(t('codingAgentElicitationResponseRequired'));
+    const snapshot = this.bootstrap(workspaceRoot);
+    const elicitation = snapshot.elicitations.find(item => item.id === response.requestId);
+    if (!elicitation || elicitation.status !== CodingElicitationStatus.Pending) {
+      throw new Error(t('codingAgentElicitationNoLongerPending'));
+    }
+    const lane = this.requireLane(snapshot.lanes, elicitation.laneId);
+    if (this.registry.get(lane.profileId)?.driverKind !== CodingAgentDriverKind.Builtin) {
+      throw new Error(t('codingAgentElicitationBuiltinOnly'));
+    }
+    const executionRoot = this.executionRoot(lane, workspaceRoot);
+    const requiresWriterLease = this.requiresWriterLease(lane.sourceRoot, executionRoot);
+    if (requiresWriterLease) {
+      this.repository.acquireWriterLease(snapshot.room.id, lane.sourceRoot, lane.id);
+    }
+    try {
+      const delivered = this.runtime.respondBuiltinElicitation?.(elicitation.id, answer) === true;
+      if (!delivered) {
+        // The live session is gone: resume the lane with the answer as context.
+        await this.runtime.startBuiltinSession({
+          sessionId: lane.localSessionId,
+          workspaceRoot: executionRoot,
+          prompt: `${t('codingAgentElicitationAnsweredPrompt')} ${answer}`,
+          modelOverride: lane.modelOverride,
+          thinkingLevel: this.getThinkingLevel(lane),
+          permissionMode: this.getApprovalMode(lane),
+        });
+      }
+    } catch (error) {
+      if (requiresWriterLease) {
+        this.repository.releaseWriterLease(snapshot.room.id, lane.sourceRoot, lane.id);
+      }
+      throw error;
+    }
+    this.repository.answerElicitation(elicitation.id, answer);
+    this.repository.appendEvent(lane.id, CodingEventKind.Elicitation, {
+      requestId: elicitation.id,
+      question: elicitation.question,
+      answer,
+      status: CodingElicitationStatus.Answered,
+    });
+    this.repository.updateLaneStatus(lane.id, CodingLaneStatus.Running);
+    this.repository.updateMissionStatus(lane.missionId, CodingMissionStatus.Running);
+    this.updateLaneAssignmentStatus(snapshot, lane.id, CodingAssignmentStatus.Running);
+    return this.publish(workspaceRoot);
+  }
+
+  async cancelElicitation(workspaceRoot: string, requestId: string): Promise<CodingRoomSnapshot> {
+    const snapshot = this.bootstrap(workspaceRoot);
+    const elicitation = snapshot.elicitations.find(item => item.id === requestId);
+    if (!elicitation || elicitation.status !== CodingElicitationStatus.Pending) {
+      throw new Error(t('codingAgentElicitationNoLongerPending'));
+    }
+    const lane = this.requireLane(snapshot.lanes, elicitation.laneId);
+    if (this.registry.get(lane.profileId)?.driverKind !== CodingAgentDriverKind.Builtin) {
+      throw new Error(t('codingAgentElicitationBuiltinOnly'));
+    }
+    const reason = t('codingAgentElicitationCancelledByUser');
+    this.repository.cancelElicitation(requestId, reason);
+    this.runtime.cancelBuiltinElicitation?.(requestId, reason);
+    this.repository.appendEvent(lane.id, CodingEventKind.Elicitation, {
+      requestId,
+      question: elicitation.question,
+      cancelReason: reason,
+      status: CodingElicitationStatus.Cancelled,
+    });
+    await this.cancel(workspaceRoot, lane.id);
+    return this.publish(workspaceRoot);
+  }
+
+  recordBuiltinElicitation(
+    sessionId: string,
+    request: { requestId: string; question: string },
+  ): void {
+    const laneId = this.builtinSessionLaneMap.get(sessionId);
+    const question = request.question.trim();
+    if (!question) return;
+    for (const workspaceRoot of this.knownRooms()) {
+      const snapshot = this.bootstrap(workspaceRoot);
+      // A lane started without a prompt has not cached its session mapping yet,
+      // so fall back to the persisted local session id before giving up.
+      const lane = snapshot.lanes.find(
+        candidate => candidate.id === laneId || candidate.localSessionId === sessionId,
+      );
+      if (!lane) continue;
+      if (this.registry.get(lane.profileId)?.driverKind !== CodingAgentDriverKind.Builtin) return;
+      this.builtinSessionLaneMap.set(sessionId, lane.id);
+      this.repository.createElicitation(lane.id, question, request.requestId);
+      this.repository.appendEvent(lane.id, CodingEventKind.Elicitation, {
+        requestId: request.requestId,
+        question,
+        status: CodingElicitationStatus.Pending,
+      });
+      this.repository.updateLaneStatus(lane.id, CodingLaneStatus.WaitingElicitation);
+      this.repository.updateMissionStatus(lane.missionId, CodingMissionStatus.WaitingElicitation);
+      this.updateLaneAssignmentStatus(snapshot, lane.id, CodingAssignmentStatus.WaitingElicitation);
+      if (this.requiresWriterLease(lane.sourceRoot, this.executionRoot(lane, workspaceRoot))) {
+        this.repository.releaseWriterLease(snapshot.room.id, lane.sourceRoot, lane.id);
+      }
+      this.publish(workspaceRoot);
+      return;
+    }
+  }
+
+  private getThinkingLevel(lane: CodingAgentLane): string | undefined {
+    const value = lane.configOptions.find(
+      option => option.id === BuiltinCodingConfigId.ThinkingLevel,
+    )?.currentValue;
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  private getApprovalMode(lane: CodingAgentLane): WorkbenchApprovalMode {
+    const value = lane.configOptions.find(
+      option => option.id === BuiltinCodingConfigId.PermissionMode,
+    )?.currentValue;
+    return value === WorkbenchApprovalMode.Auto || value === WorkbenchApprovalMode.AllowAll
+      ? value
+      : WorkbenchApprovalMode.Ask;
+  }
+
   recordBuiltinEvent(
     sessionId: string,
     kind: (typeof CodingEventKind)[keyof typeof CodingEventKind],
     payload: Record<string, unknown>,
   ): void {
     const laneId = this.builtinSessionLaneMap.get(sessionId);
-    if (!laneId) {
-      // Cache miss: scan rooms once to find the lane, then cache the mapping.
-      for (const workspaceRoot of this.knownRooms()) {
-        const snapshot = this.bootstrap(workspaceRoot);
-        const lane = snapshot.lanes.find(candidate => candidate.localSessionId === sessionId);
-        if (!lane) continue;
-        this.builtinSessionLaneMap.set(sessionId, lane.id);
-        this.applyBuiltinEvent(workspaceRoot, snapshot, lane, kind, payload);
+    if (laneId) {
+      // Fast path: load the lane and its room directly instead of rebuilding
+      // full snapshots of every room per streamed event.
+      const lane = this.repository.getLaneById(laneId);
+      const room = lane ? this.repository.getRoomByLaneId(laneId) : null;
+      if (lane && room) {
+        this.applyBuiltinEvent(room.workspaceRoot, room.id, lane, kind, payload);
         return;
       }
-      return;
     }
-    // Fast path: use cached lane mapping without re-scanning rooms.
+    // Cache miss or stale mapping: scan rooms once to find the lane, then
+    // cache the mapping.
     for (const workspaceRoot of this.knownRooms()) {
       const snapshot = this.bootstrap(workspaceRoot);
-      const lane = snapshot.lanes.find(candidate => candidate.id === laneId);
+      const lane = snapshot.lanes.find(
+        candidate => candidate.localSessionId === sessionId || candidate.id === laneId,
+      );
       if (!lane) continue;
-      this.applyBuiltinEvent(workspaceRoot, snapshot, lane, kind, payload);
+      this.builtinSessionLaneMap.set(sessionId, lane.id);
+      this.applyBuiltinEvent(workspaceRoot, snapshot.room.id, lane, kind, payload);
       return;
     }
   }
 
   private applyBuiltinEvent(
     workspaceRoot: string,
-    snapshot: CodingRoomSnapshot,
+    roomId: string,
     lane: CodingAgentLane,
     kind: (typeof CodingEventKind)[keyof typeof CodingEventKind],
     payload: Record<string, unknown>,
   ): void {
-    this.repository.appendOrMergeStreamEvent(lane.id, kind, payload);
+    const event = this.repository.appendOrMergeStreamEvent(lane.id, kind, payload);
     if (kind === CodingEventKind.Permission) {
       this.repository.updateLaneStatus(lane.id, CodingLaneStatus.WaitingApproval);
       this.repository.updateMissionStatus(lane.missionId, CodingMissionStatus.WaitingApproval);
-      this.updateLaneAssignmentStatus(snapshot, lane.id, CodingAssignmentStatus.WaitingApproval);
+      const assignment = this.repository.getLatestAssignmentForLane(lane.id);
+      if (assignment) {
+        this.repository.updateAssignmentStatus(
+          assignment.id,
+          CodingAssignmentStatus.WaitingApproval,
+        );
+      }
     }
     if (kind === CodingEventKind.TurnComplete) {
-      this.finishTurn(
-        snapshot.room.id,
-        snapshot.room.workspaceRoot,
-        lane,
-        CodingLaneStatus.Completed,
-      );
+      this.finishTurn(roomId, workspaceRoot, lane, CodingLaneStatus.Completed);
       this.publish(workspaceRoot);
       return;
     }
     if (kind === CodingEventKind.TurnFailed) {
-      this.finishTurn(snapshot.room.id, snapshot.room.workspaceRoot, lane, CodingLaneStatus.Failed);
+      this.finishTurn(roomId, workspaceRoot, lane, CodingLaneStatus.Failed);
       this.publish(workspaceRoot);
       return;
     }
-    // Throttle streaming events to avoid flooding the renderer with publishes.
-    this.scheduleBuiltinPublish(workspaceRoot);
-  }
-
-  private scheduleBuiltinPublish(workspaceRoot: string): void {
-    if (this.builtinPublishTimer || this.isDisposed) return;
-    this.builtinPublishTimer = setTimeout(() => {
-      this.builtinPublishTimer = null;
-      if (!this.isDisposed) {
-        try {
-          this.publish(workspaceRoot);
-        } catch (error) {
-          // The database may have been closed during test teardown.
-          console.debug('[CodingRoom] Skipped publish because the service is disposed:', error);
-        }
-      }
-    }, this.BUILTIN_PUBLISH_THROTTLE_MS);
+    this.eventDeltaBatcher.enqueue(workspaceRoot, event);
   }
 
   private isDisposed = false;
@@ -1403,6 +1640,8 @@ export class CodingRoomService extends EventEmitter {
 
   async dispose(): Promise<void> {
     this.isDisposed = true;
+    this.eventDeltaBatcher.dispose();
+    this.repository.flushPendingStreamWrites();
     await Promise.all([...this.drivers.values()].map(driver => driver.dispose()));
     this.drivers.clear();
     this.driverProfileIds.clear();
@@ -1410,10 +1649,6 @@ export class CodingRoomService extends EventEmitter {
     this.driverSessionPromises.clear();
     this.authTerminals.dispose();
     this.builtinSessionLaneMap.clear();
-    if (this.builtinPublishTimer) {
-      clearTimeout(this.builtinPublishTimer);
-      this.builtinPublishTimer = null;
-    }
   }
 
   private getDriver(lane: CodingAgentLane): CodingAgentDriver {
@@ -1441,6 +1676,126 @@ export class CodingRoomService extends EventEmitter {
     });
     this.drivers.set(lane.id, driver);
     this.driverProfileIds.set(lane.id, profile.id);
+  }
+
+  /**
+   * Built-in control commands never become model input. While a turn is in
+   * flight they wait behind the queued prompts, otherwise they run now.
+   */
+  private async dispatchBuiltinControlCommand(
+    workspaceRoot: string,
+    lane: CodingAgentLane,
+    command: BuiltinCodingControlCommand,
+  ): Promise<CodingRoomSnapshot> {
+    const execute = () => this.runBuiltinControlCommand(workspaceRoot, lane, command);
+    if (this.runtime.isBuiltinSessionRunning?.(lane.localSessionId)) {
+      const queued = this.runtime.enqueueBuiltinControlAction?.(lane.localSessionId, execute);
+      if (!queued?.success) {
+        this.appendBuiltinControlFailure(
+          lane,
+          command,
+          queued?.error ?? t('codingAgentCommandQueueUnavailable'),
+        );
+      }
+      return this.publish(workspaceRoot);
+    }
+    await execute();
+    return this.publish(workspaceRoot);
+  }
+
+  private async runBuiltinControlCommand(
+    workspaceRoot: string,
+    lane: CodingAgentLane,
+    command: BuiltinCodingControlCommand,
+  ): Promise<void> {
+    try {
+      if (command === BuiltinCodingControlCommand.Compact) {
+        // `=== false` keeps runtimes that do not report liveness on the normal
+        // path; only a runtime that explicitly says "no session" short-circuits.
+        if (this.runtime.isBuiltinSessionActive?.(lane.localSessionId) === false) {
+          this.appendBuiltinControlMessage(lane, t('codingAgentCommandCompactNoSession'));
+        } else {
+          const result = await this.runtime.compactBuiltinSession?.(lane.localSessionId);
+          if (!result) throw new Error(t('codingAgentCommandCompactionUnavailable'));
+          this.appendBuiltinControlMessage(
+            lane,
+            result.cancelled
+              ? t('codingAgentCommandCompactCancelled')
+              : t('codingAgentCommandCompactSuccess'),
+          );
+        }
+      } else {
+        this.appendBuiltinControlMessage(
+          lane,
+          t('codingAgentCommandStatusResult', {
+            status: this.runtime.isBuiltinSessionRunning?.(lane.localSessionId)
+              ? t('codingAgentCommandStatusRunning')
+              : t('codingAgentCommandStatusIdle'),
+            model: lane.modelOverride ?? t('codingAgentCommandStatusDefaultModel'),
+            thinkingLevel: this.getThinkingLevel(lane) ?? t('codingAgentCommandStatusUnknown'),
+            compaction: this.runtime.compactBuiltinSession
+              ? t('codingAgentCommandStatusAvailable')
+              : t('codingAgentCommandStatusUnavailable'),
+          }),
+        );
+      }
+    } catch (error) {
+      if (
+        command === BuiltinCodingControlCommand.Compact &&
+        this.isCompactionNotNeededError(error)
+      ) {
+        this.appendBuiltinControlMessage(lane, t('codingAgentCommandCompactNotNeeded'));
+        this.publish(workspaceRoot);
+        return;
+      }
+      this.appendBuiltinControlFailure(lane, command, this.errorMessage(error));
+    }
+    this.publish(workspaceRoot);
+  }
+
+  private appendBuiltinControlMessage(lane: CodingAgentLane, content: string): void {
+    this.repository.appendEvent(lane.id, CodingEventKind.Message, { role: 'system', content });
+  }
+
+  private appendBuiltinControlFailure(
+    lane: CodingAgentLane,
+    command: BuiltinCodingControlCommand,
+    error: string,
+  ): void {
+    this.repository.appendEvent(lane.id, CodingEventKind.Message, {
+      role: 'system',
+      content:
+        command === BuiltinCodingControlCommand.Compact
+          ? t('codingAgentCommandCompactFailed', { error })
+          : t('codingAgentCommandFailed', { error }),
+    });
+  }
+
+  private isCompactionNotNeededError(error: unknown): boolean {
+    return /nothing to compact|session too small/i.test(this.errorMessage(error));
+  }
+
+  /**
+   * Re-projects what a bound driver advertises for its session. An empty
+   * snapshot never clears the lane: ACP agents publish removals through
+   * `onAvailableCommandsChanged`, and a freshly created driver has no session
+   * state to report yet.
+   */
+  private syncLaneDriverSnapshot(
+    lane: CodingAgentLane,
+    driver: CodingAgentDriver,
+    sessionId: string,
+  ): void {
+    const commands = driver.getSessionAvailableCommands(sessionId);
+    if (commands.length > 0 && !projectsEqual(commands, lane.availableCommands)) {
+      this.repository.updateLaneAvailableCommands(lane.id, commands);
+      lane.availableCommands = commands;
+    }
+    const configOptions = driver.getSessionConfigOptions(sessionId);
+    if (configOptions.length > 0 && !projectsEqual(configOptions, lane.configOptions)) {
+      this.repository.updateLaneConfigOptions(lane.id, configOptions);
+      lane.configOptions = configOptions;
+    }
   }
 
   private async rollbackCreatedSession(roomId: string, lane: CodingAgentLane): Promise<void> {
@@ -1480,6 +1835,10 @@ export class CodingRoomService extends EventEmitter {
         (driver.isConnectionRunning?.() &&
           driver.getConnectionGeneration?.() === activeSession.connectionGeneration))
     ) {
+      // A bound session can outlive its lane row (legacy rows, restored lanes),
+      // and the built-in driver streams no events to re-project them, so refresh
+      // the advertised commands and config options every time the lane opens.
+      this.syncLaneDriverSnapshot(lane, driver, activeSession.id);
       return { id: activeSession.id, recoveryContext: null };
     }
     const pendingSession = this.driverSessionPromises.get(lane.id);
@@ -1555,6 +1914,9 @@ export class CodingRoomService extends EventEmitter {
   ): Promise<void> {
     try {
       let receivedAssistantResponse = false;
+      // The built-in driver yields no events, so project its session snapshot
+      // before the turn instead of relying on the stream loop below.
+      this.syncLaneDriverSnapshot(lane, driver, sessionId);
       for await (const event of driver.prompt({
         sessionId,
         workspaceRoot: executionRoot,
@@ -1563,7 +1925,11 @@ export class CodingRoomService extends EventEmitter {
         modelOverride: lane.modelOverride,
       })) {
         if (isAssistantResponseEvent(event)) receivedAssistantResponse = true;
-        this.repository.appendOrMergeStreamEvent(lane.id, event.kind, event.payload);
+        const storedEvent = this.repository.appendOrMergeStreamEvent(
+          lane.id,
+          event.kind,
+          event.payload,
+        );
         this.repository.updateLaneConfigOptions(lane.id, driver.getSessionConfigOptions(sessionId));
         this.repository.updateLaneAvailableCommands(
           lane.id,
@@ -1580,7 +1946,11 @@ export class CodingRoomService extends EventEmitter {
             );
           }
         }
-        this.publish(roomWorkspaceRoot);
+        if (event.kind === CodingEventKind.Permission) {
+          this.publish(roomWorkspaceRoot);
+        } else {
+          this.eventDeltaBatcher.enqueue(roomWorkspaceRoot, storedEvent);
+        }
       }
       if (this.consumeCancelledTurn(lane.id, turnGeneration)) {
         if (queuedItemId) this.deletePendingMessage(lane.id, queuedItemId);
@@ -1832,14 +2202,19 @@ export class CodingRoomService extends EventEmitter {
   }
 
   private publish(workspaceRoot: string): CodingRoomSnapshot {
-    const snapshot = this.bootstrap(workspaceRoot);
+    this.eventDeltaBatcher.flush(workspaceRoot);
+    const snapshot = this.bootstrap(workspaceRoot, {
+      eventLimitPerLane: CodingEventWindowPageSize,
+    });
     this.emit('changed', snapshot);
     return snapshot;
   }
 
   private publishLane(laneId: string): void {
     for (const workspaceRoot of this.knownRooms()) {
-      const snapshot = this.bootstrap(workspaceRoot);
+      const snapshot = this.bootstrap(workspaceRoot, {
+        eventLimitPerLane: CodingEventWindowPageSize,
+      });
       if (!snapshot.lanes.some(lane => lane.id === laneId)) continue;
       this.emit('changed', snapshot);
       return;

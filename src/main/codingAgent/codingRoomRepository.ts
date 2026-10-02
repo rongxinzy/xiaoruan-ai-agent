@@ -16,6 +16,8 @@ import {
   type CodingAgentConfigOption,
   type CodingAssignment,
   type CodingEvent,
+  type CodingElicitation,
+  CodingElicitationStatus,
   type CodingMission,
   type CodingRoom,
   type CodingWorkspaceSource,
@@ -82,9 +84,59 @@ const rowWorkspaceSource = (row: Record<string, unknown>): CodingWorkspaceSource
   path: String(row.path),
   isPrimary: Boolean(row.is_primary),
 });
+const rowElicitation = (row: Record<string, unknown>): CodingElicitation => ({
+  id: String(row.id),
+  laneId: String(row.lane_id),
+  question: String(row.question),
+  status: row.status as CodingElicitationStatus,
+  createdAt: Number(row.created_at),
+  answer: (row.answer as string | null) ?? null,
+  cancelReason: (row.cancel_reason as string | null) ?? null,
+});
+
+/**
+ * A stream chunk whose DB row exists but whose payload is newer in memory.
+ * Writes are coalesced so the per-chunk hot path never touches SQLite.
+ */
+interface PendingStreamWrite {
+  laneId: string;
+  id: string;
+  sequence: number;
+  kind: CodingEvent['kind'];
+  createdAt: number;
+  payload: Record<string, unknown>;
+}
+
+const mergeStreamPayload = (
+  kind: CodingEvent['kind'],
+  previousPayload: Record<string, unknown>,
+  payload: Record<string, unknown>,
+): Record<string, unknown> => {
+  if (kind === CodingEventKind.ToolCall) {
+    return { ...previousPayload, ...payload };
+  }
+  const content =
+    payload.streamUpdateMode === CodingStreamUpdateMode.Replace
+      ? payload.content
+      : `${typeof previousPayload.content === 'string' ? previousPayload.content : ''}${
+          typeof payload.content === 'string' ? payload.content : ''
+        }`;
+  return { ...previousPayload, ...payload, content };
+};
 
 export class CodingRoomRepository {
+  /** Stream events whose accumulated payload is newer in memory than in SQLite. */
+  private readonly pendingStreamWrites = new Map<string, PendingStreamWrite>();
+  private readonly streamFlushTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly streamFlushBackoffMs = new Map<string, number>();
+  private static readonly STREAM_FLUSH_THROTTLE_MS = 500;
+  private static readonly STREAM_FLUSH_MAX_BACKOFF_MS = 30_000;
+
   constructor(private readonly db: Database.Database) {}
+
+  getDatabase(): Database.Database {
+    return this.db;
+  }
   listRooms(): CodingRoom[] {
     return (
       this.db
@@ -211,11 +263,15 @@ export class CodingRoomRepository {
   deleteWorkspace(roomId: string): void {
     const missionIds = this.listMissions(roomId).map(mission => mission.id);
     const laneIds = this.listLanes(missionIds).map(lane => lane.id);
+    this.dropPendingStreamWrites(laneIds);
     const remove = this.db.transaction(() => {
       if (laneIds.length) {
         const laneMarks = laneIds.map(() => '?').join(',');
         this.db
           .prepare(`DELETE FROM coding_events WHERE lane_id IN (${laneMarks})`)
+          .run(...laneIds);
+        this.db
+          .prepare(`DELETE FROM coding_elicitations WHERE lane_id IN (${laneMarks})`)
           .run(...laneIds);
         this.db
           .prepare(`DELETE FROM coding_assignments WHERE lane_id IN (${laneMarks})`)
@@ -275,10 +331,27 @@ export class CodingRoomRepository {
       .get(laneId) as Record<string, unknown> | undefined;
     return row ? rowAssignment(row) : null;
   }
+  getLaneById(laneId: string): CodingAgentLane | null {
+    const row = this.db
+      .prepare('SELECT * FROM coding_agent_lanes WHERE id = ?')
+      .get(laneId) as Record<string, unknown> | undefined;
+    return row ? rowLane(row) : null;
+  }
+  getRoomByLaneId(laneId: string): CodingRoom | null {
+    const row = this.db
+      .prepare(
+        `SELECT r.* FROM coding_rooms r
+         JOIN coding_missions m ON m.room_id = r.id
+         JOIN coding_agent_lanes l ON l.mission_id = m.id
+         WHERE l.id = ?`,
+      )
+      .get(laneId) as Record<string, unknown> | undefined;
+    return row ? rowRoom(row) : null;
+  }
   listEvents(laneIds: string[]): CodingEvent[] {
     if (!laneIds.length) return [];
     const marks = laneIds.map(() => '?').join(',');
-    return (
+    const events = (
       this.db
         .prepare(
           `SELECT * FROM coding_events WHERE lane_id IN (${marks}) ORDER BY lane_id, sequence`,
@@ -291,6 +364,120 @@ export class CodingRoomRepository {
       kind: row.kind as CodingEvent['kind'],
       payload: JSON.parse(String(row.payload_json)) as Record<string, unknown>,
       createdAt: Number(row.created_at),
+    }));
+    // Overlay coalesced streams so readers observe the newest in-memory
+    // payload even before the throttled flush has run.
+    for (const entry of this.pendingStreamWrites.values()) {
+      if (!laneIds.includes(entry.laneId)) continue;
+      const index = events.findIndex(event => event.id === entry.id);
+      const projected: CodingEvent = {
+        id: entry.id,
+        laneId: entry.laneId,
+        sequence: entry.sequence,
+        kind: entry.kind,
+        payload: entry.payload,
+        createdAt: entry.createdAt,
+      };
+      if (index >= 0) events[index] = projected;
+      else events.push(projected);
+    }
+    return events.sort((left, right) =>
+      left.laneId === right.laneId
+        ? left.sequence - right.sequence
+        : left.laneId.localeCompare(right.laneId),
+    );
+  }
+  listElicitations(laneIds: string[]): CodingElicitation[] {
+    if (!laneIds.length) return [];
+    const marks = laneIds.map(() => '?').join(',');
+    return (
+      this.db
+        .prepare(`SELECT * FROM coding_elicitations WHERE lane_id IN (${marks}) ORDER BY created_at`)
+        .all(...laneIds) as Record<string, unknown>[]
+    ).map(rowElicitation);
+  }
+  createElicitation(
+    laneId: string,
+    question: string,
+    id: string = randomUUID(),
+  ): CodingElicitation {
+    const existing = this.db
+      .prepare('SELECT id FROM coding_elicitations WHERE lane_id = ? AND status = ?')
+      .get(laneId, CodingElicitationStatus.Pending) as Record<string, unknown> | undefined;
+    if (existing) throw new Error('A coding elicitation is already pending for this lane.');
+    const elicitation: CodingElicitation = {
+      id,
+      laneId,
+      question,
+      status: CodingElicitationStatus.Pending,
+      createdAt: Date.now(),
+      answer: null,
+      cancelReason: null,
+    };
+    this.db
+      .prepare(
+        'INSERT INTO coding_elicitations (id, lane_id, question, status, created_at, answer, cancel_reason) VALUES (?, ?, ?, ?, ?, NULL, NULL)',
+      )
+      .run(elicitation.id, laneId, question, elicitation.status, elicitation.createdAt);
+    return elicitation;
+  }
+  answerElicitation(id: string, answer: string): CodingElicitation {
+    const result = this.db
+      .prepare(
+        'UPDATE coding_elicitations SET status = ?, answer = ?, cancel_reason = NULL WHERE id = ? AND status = ?',
+      )
+      .run(CodingElicitationStatus.Answered, answer, id, CodingElicitationStatus.Pending);
+    if (result.changes !== 1) {
+      throw new Error('The coding elicitation is no longer awaiting a response.');
+    }
+    const row = this.db
+      .prepare('SELECT * FROM coding_elicitations WHERE id = ?')
+      .get(id) as Record<string, unknown>;
+    return rowElicitation(row);
+  }
+  cancelElicitation(id: string, reason: string): CodingElicitation {
+    const result = this.db
+      .prepare(
+        'UPDATE coding_elicitations SET status = ?, cancel_reason = ? WHERE id = ? AND status = ?',
+      )
+      .run(CodingElicitationStatus.Cancelled, reason, id, CodingElicitationStatus.Pending);
+    if (result.changes !== 1) {
+      throw new Error('The coding elicitation is no longer awaiting a response.');
+    }
+    const row = this.db
+      .prepare('SELECT * FROM coding_elicitations WHERE id = ?')
+      .get(id) as Record<string, unknown>;
+    return rowElicitation(row);
+  }
+  /**
+   * Cancels every question a previous application run left pending. An
+   * elicitation only lives in the process that asked it, so a row that is
+   * still pending at startup can never be answered by a live session.
+   */
+  cancelPendingElicitations(reason: string): CodingElicitation[] {
+    const pending = (
+      this.db
+        .prepare('SELECT * FROM coding_elicitations WHERE status = ? ORDER BY created_at')
+        .all(CodingElicitationStatus.Pending) as Record<string, unknown>[]
+    ).map(rowElicitation);
+    if (!pending.length) return [];
+    const update = this.db.prepare(
+      'UPDATE coding_elicitations SET status = ?, cancel_reason = ? WHERE id = ? AND status = ?',
+    );
+    this.db.transaction(() => {
+      for (const elicitation of pending) {
+        update.run(
+          CodingElicitationStatus.Cancelled,
+          reason,
+          elicitation.id,
+          CodingElicitationStatus.Pending,
+        );
+      }
+    })();
+    return pending.map(elicitation => ({
+      ...elicitation,
+      status: CodingElicitationStatus.Cancelled,
+      cancelReason: reason,
     }));
   }
   createMission(roomId: string, title: string, gitBaseline: string | null = null): CodingMission {
@@ -321,10 +508,14 @@ export class CodingRoomRepository {
   }
   deleteMission(roomId: string, missionId: string): void {
     const laneIds = this.listLanes([missionId]).map(lane => lane.id);
+    this.dropPendingStreamWrites(laneIds);
     const remove = this.db.transaction(() => {
       if (laneIds.length) {
         const marks = laneIds.map(() => '?').join(',');
         this.db.prepare(`DELETE FROM coding_events WHERE lane_id IN (${marks})`).run(...laneIds);
+        this.db
+          .prepare(`DELETE FROM coding_elicitations WHERE lane_id IN (${marks})`)
+          .run(...laneIds);
         this.db
           .prepare(`DELETE FROM coding_assignments WHERE lane_id IN (${marks})`)
           .run(...laneIds);
@@ -341,8 +532,10 @@ export class CodingRoomRepository {
     remove();
   }
   deleteLane(roomId: string, laneId: string): void {
+    this.dropPendingStreamWrites([laneId]);
     const remove = this.db.transaction(() => {
       this.db.prepare('DELETE FROM coding_events WHERE lane_id = ?').run(laneId);
+      this.db.prepare('DELETE FROM coding_elicitations WHERE lane_id = ?').run(laneId);
       this.db.prepare('DELETE FROM coding_assignments WHERE lane_id = ?').run(laneId);
       this.db
         .prepare('DELETE FROM coding_handoffs WHERE source_lane_id = ? OR target_lane_id = ?')
@@ -524,44 +717,140 @@ export class CodingRoomRepository {
     if (!streamId || (kind !== CodingEventKind.MessageDelta && kind !== CodingEventKind.ToolCall)) {
       return this.appendEvent(laneId, kind, payload);
     }
+    const key = `${laneId}:${kind}:${streamId}`;
+    const pending = this.pendingStreamWrites.get(key);
+    if (pending) {
+      // Hot path: accumulate in memory only; SQLite is updated by the
+      // throttled flush, so per-chunk cost does not grow with the message.
+      pending.payload = mergeStreamPayload(kind, pending.payload, payload);
+      this.scheduleStreamFlush(laneId);
+      return {
+        id: pending.id,
+        laneId,
+        sequence: pending.sequence,
+        kind,
+        payload: pending.payload,
+        createdAt: pending.createdAt,
+      };
+    }
     const payloadIdPath = kind === CodingEventKind.MessageDelta ? '$.messageId' : '$.toolCallId';
     const previous = this.db
       .prepare(
         `SELECT * FROM coding_events WHERE lane_id = ? AND kind = ? AND json_extract(payload_json, '${payloadIdPath}') = ? ORDER BY sequence DESC LIMIT 1`,
       )
       .get(laneId, kind, streamId) as Record<string, unknown> | undefined;
-    if (!previous) return this.appendEvent(laneId, kind, payload);
-    const previousPayload = JSON.parse(String(previous.payload_json)) as Record<string, unknown>;
-    if (kind === CodingEventKind.ToolCall) {
-      const event = {
-        id: String(previous.id),
+    if (previous) {
+      // The stream row already exists (written before this process saw it);
+      // take it over and continue merging in memory.
+      const event: PendingStreamWrite = {
         laneId,
+        id: String(previous.id),
         sequence: Number(previous.sequence),
         kind,
-        payload: { ...previousPayload, ...payload },
         createdAt: Number(previous.created_at),
-      } satisfies CodingEvent;
-      this.db
-        .prepare('UPDATE coding_events SET payload_json = ? WHERE id = ?')
-        .run(JSON.stringify(event.payload), event.id);
-      return event;
+        payload: mergeStreamPayload(
+          kind,
+          JSON.parse(String(previous.payload_json)) as Record<string, unknown>,
+          payload,
+        ),
+      };
+      this.pendingStreamWrites.set(key, event);
+      this.scheduleStreamFlush(laneId);
+      return { ...event };
     }
-    const content =
-      payload.streamUpdateMode === CodingStreamUpdateMode.Replace
-        ? payload.content
-        : `${typeof previousPayload.content === 'string' ? previousPayload.content : ''}${typeof payload.content === 'string' ? payload.content : ''}`;
-    const event = {
-      id: String(previous.id),
+    // First chunk of a new stream: write through so the row and its sequence
+    // exist, then keep merging subsequent chunks in memory.
+    const event = this.appendEvent(laneId, kind, payload);
+    this.pendingStreamWrites.set(key, {
       laneId,
-      sequence: Number(previous.sequence),
+      id: event.id,
+      sequence: event.sequence,
       kind,
-      payload: { ...previousPayload, ...payload, content },
-      createdAt: Number(previous.created_at),
-    } satisfies CodingEvent;
-    this.db
-      .prepare('UPDATE coding_events SET payload_json = ? WHERE id = ?')
-      .run(JSON.stringify(event.payload), event.id);
+      createdAt: event.createdAt,
+      payload: event.payload,
+    });
+    this.scheduleStreamFlush(laneId);
     return event;
+  }
+
+  private scheduleStreamFlush(laneId: string, delayMs?: number): void {
+    if (this.streamFlushTimers.has(laneId)) return;
+    const delay = delayMs ?? CodingRoomRepository.STREAM_FLUSH_THROTTLE_MS;
+    const timer = setTimeout(() => {
+      this.streamFlushTimers.delete(laneId);
+      this.flushPendingStreamWrites(laneId);
+    }, delay);
+    this.streamFlushTimers.set(laneId, timer);
+  }
+
+  /** Writes coalesced stream payloads to SQLite; defaults to every lane. */
+  flushPendingStreamWrites(laneId?: string): void {
+    const hasPendingFor = (id: string): boolean => {
+      for (const entry of this.pendingStreamWrites.values()) {
+        if (entry.laneId === id) return true;
+      }
+      return false;
+    };
+    for (const [key, entry] of this.pendingStreamWrites) {
+      if (laneId !== undefined && entry.laneId !== laneId) continue;
+      try {
+        this.db
+          .prepare('UPDATE coding_events SET payload_json = ? WHERE id = ?')
+          .run(JSON.stringify(entry.payload), entry.id);
+      } catch (error) {
+        if (!this.db.open) {
+          // The database is closed for good (shutdown, test teardown); the
+          // buffered write can never be persisted again.
+          console.debug('[CodingRoom] Dropped a stream write for a closed database:', error);
+          this.pendingStreamWrites.delete(key);
+          continue;
+        }
+        // Transient failure (busy, lock contention): retain the buffer so no
+        // streamed content is lost, and retry with backoff.
+        console.warn('[CodingRoom] Deferred flushing a stream write:', error);
+        const backoff = Math.min(
+          (this.streamFlushBackoffMs.get(entry.laneId) ?? CodingRoomRepository.STREAM_FLUSH_THROTTLE_MS) *
+            2,
+          CodingRoomRepository.STREAM_FLUSH_MAX_BACKOFF_MS,
+        );
+        this.streamFlushBackoffMs.set(entry.laneId, backoff);
+        this.scheduleStreamFlush(entry.laneId, backoff);
+        continue;
+      }
+      this.pendingStreamWrites.delete(key);
+      this.streamFlushBackoffMs.delete(entry.laneId);
+    }
+    // Keep a lane's retry timer alive while it still has buffered writes.
+    if (laneId === undefined) {
+      for (const [id, timer] of this.streamFlushTimers) {
+        if (!hasPendingFor(id)) {
+          clearTimeout(timer);
+          this.streamFlushTimers.delete(id);
+        }
+      }
+    } else if (!hasPendingFor(laneId)) {
+      const timer = this.streamFlushTimers.get(laneId);
+      if (timer) {
+        clearTimeout(timer);
+        this.streamFlushTimers.delete(laneId);
+      }
+    }
+  }
+
+  private dropPendingStreamWrites(laneIds: string[]): void {
+    if (!laneIds.length) return;
+    const dropped = new Set(laneIds);
+    for (const [key, entry] of this.pendingStreamWrites) {
+      if (dropped.has(entry.laneId)) this.pendingStreamWrites.delete(key);
+    }
+    for (const laneId of laneIds) {
+      this.streamFlushBackoffMs.delete(laneId);
+      const timer = this.streamFlushTimers.get(laneId);
+      if (timer) {
+        clearTimeout(timer);
+        this.streamFlushTimers.delete(laneId);
+      }
+    }
   }
   updateLaneStatus(laneId: string, status: CodingLaneStatus): void {
     this.db
@@ -629,11 +918,12 @@ export class CodingRoomRepository {
   recoverInterruptedLanes(): CodingAgentLane[] {
     const interrupted = (
       this.db
-        .prepare('SELECT * FROM coding_agent_lanes WHERE status IN (?, ?)')
-        .all(CodingLaneStatus.Running, CodingLaneStatus.WaitingApproval) as Record<
-        string,
-        unknown
-      >[]
+        .prepare('SELECT * FROM coding_agent_lanes WHERE status IN (?, ?, ?)')
+        .all(
+          CodingLaneStatus.Running,
+          CodingLaneStatus.WaitingApproval,
+          CodingLaneStatus.WaitingElicitation,
+        ) as Record<string, unknown>[]
     ).map(rowLane);
     if (!interrupted.length) return [];
     const laneIds = interrupted.map(lane => lane.id);
@@ -649,7 +939,7 @@ export class CodingRoomRepository {
         .run(CodingLaneStatus.Idle, now, ...laneIds);
       this.db
         .prepare(
-          `UPDATE coding_assignments SET status = ?, updated_at = ? WHERE lane_id IN (${laneMarks}) AND status IN (?, ?)`,
+          `UPDATE coding_assignments SET status = ?, updated_at = ? WHERE lane_id IN (${laneMarks}) AND status IN (?, ?, ?)`,
         )
         .run(
           CodingAssignmentStatus.Planned,
@@ -657,10 +947,11 @@ export class CodingRoomRepository {
           ...laneIds,
           CodingAssignmentStatus.Running,
           CodingAssignmentStatus.WaitingApproval,
+          CodingAssignmentStatus.WaitingElicitation,
         );
       this.db
         .prepare(
-          `UPDATE coding_missions SET status = ?, updated_at = ? WHERE id IN (${missionMarks}) AND status IN (?, ?)`,
+          `UPDATE coding_missions SET status = ?, updated_at = ? WHERE id IN (${missionMarks}) AND status IN (?, ?, ?)`,
         )
         .run(
           CodingMissionStatus.NeedsReview,
@@ -668,6 +959,7 @@ export class CodingRoomRepository {
           ...missionIds,
           CodingMissionStatus.Running,
           CodingMissionStatus.WaitingApproval,
+          CodingMissionStatus.WaitingElicitation,
         );
       this.db
         .prepare('UPDATE coding_workspace_leases SET lane_id = NULL, acquired_at = NULL')

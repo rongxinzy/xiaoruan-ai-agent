@@ -71,6 +71,7 @@ function setup() {
         lanes: [],
         assignments: [],
         events: [],
+        elicitations: [],
       });
     return () => undefined;
   });

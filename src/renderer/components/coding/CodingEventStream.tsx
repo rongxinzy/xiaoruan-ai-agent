@@ -14,7 +14,7 @@ import { Code2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
-import type { CodingEvent } from '../../../shared/codingAgent';
+import type { CodingElicitation, CodingEvent } from '../../../shared/codingAgent';
 import { loadArtifactFileWithRetry } from '../../services/artifactFileLoader';
 import {
   detectArtifactsFromMessages,
@@ -29,12 +29,14 @@ import { toDetectableCodingMessages } from './codingArtifactMessages';
 import { CodingConversationTurn } from './CodingConversationTurn';
 import { collectCodingFileArtifacts } from './codingArtifacts';
 import { projectCodingEvents } from './codingEventProjection';
+import { CodingElicitationCard } from './CodingElicitationCard';
 
 interface CodingEventStreamProps {
   events: CodingEvent[];
   isStreaming: boolean;
   scrollAreaRef: RefObject<HTMLDivElement | null>;
   onScrollPositionChange: (scrollPosition: number) => void;
+  onLoadOlderEvents?: () => void;
   emptyDescription?: string;
   headerActions?: ReactNode;
   /**
@@ -45,6 +47,10 @@ interface CodingEventStreamProps {
   artifactSessionKey?: string | null;
   /** Base directory used to resolve relative artifact paths for disk reads. */
   artifactBaseDir?: string | null;
+  /** A question the agent is waiting on for this lane. */
+  elicitation?: CodingElicitation | null;
+  onRespondElicitation?: (answer: string) => Promise<boolean>;
+  onCancelElicitation?: () => Promise<boolean>;
 }
 
 type LoadableArtifact = Pick<DetectedArtifact, 'artifact' | 'needsFileLoad'> & {
@@ -68,10 +74,14 @@ export const CodingEventStream = ({
   isStreaming,
   scrollAreaRef,
   onScrollPositionChange,
+  onLoadOlderEvents,
   emptyDescription,
   headerActions,
   artifactSessionKey = null,
   artifactBaseDir = null,
+  elicitation = null,
+  onRespondElicitation,
+  onCancelElicitation,
 }: CodingEventStreamProps) => {
   const dispatch = useDispatch();
   const turns = useMemo(() => projectCodingEvents(events), [events]);
@@ -251,7 +261,16 @@ export const CodingEventStream = ({
       ref={scrollAreaRef}
       className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
       onScrollCapture={event => {
-        if (event.target instanceof HTMLElement) onScrollPositionChange(event.target.scrollTop);
+        // Persist only the conversation viewport's scroll position; inner
+        // scrollable previews (diffs, terminal output) must not overwrite it.
+        const target = event.target;
+        if (
+          target instanceof HTMLElement &&
+          target.classList.contains('coding-conversation-scroll')
+        ) {
+          onScrollPositionChange(target.scrollTop);
+          if (target.scrollTop <= 24) onLoadOlderEvents?.();
+        }
       }}
     >
       {headerActions ? (
@@ -300,6 +319,13 @@ export const CodingEventStream = ({
               />
             ))
           )}
+          {elicitation && onRespondElicitation && onCancelElicitation ? (
+            <CodingElicitationCard
+              elicitation={elicitation}
+              onRespond={onRespondElicitation}
+              onCancel={onCancelElicitation}
+            />
+          ) : null}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>

@@ -21,7 +21,7 @@ import { classifyProbeFailure } from './acp/probeFailure';
 import { getCodingAgentEnvironment } from './agentEnvironment';
 
 const BUILTIN_CAPABILITIES: CodingAgentCapabilities = {
-  supportsLoadSession: true,
+  supportsLoadSession: false,
   supportsResumeSession: true,
   supportsPlans: true,
   supportsPermissions: true,

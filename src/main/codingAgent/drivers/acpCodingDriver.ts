@@ -4,7 +4,6 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 
 import {
-  CodingErrorDetailMessage,
   CodingErrorMessage,
   CodingEventKind,
   CodingPermissionOutcome,
@@ -18,13 +17,20 @@ import {
   type CodingPromptAttachment,
 } from '../../../shared/codingAgent';
 import { AcpConnectionSupervisor } from '../acp/connectionSupervisor';
+import { AcpEventQueue } from '../acp/acpEventQueue';
+import { agentResourceDiagnostics } from '../../agentResourceDiagnostics';
 import {
   ACP_CLIENT_CAPABILITIES,
+  ACP_MINIMUM_PROTOCOL_VERSION,
   ACP_PROTOCOL_VERSION,
+  AcpErrorCode,
   AcpMethod,
   AcpProtocolIncompatibleError,
+  AcpRequestError,
   AcpSessionUpdateKind,
+  AcpStopReason,
 } from '../acp/protocol';
+import { t } from '../../i18n';
 import { TerminalBroker } from '../terminalBroker';
 import { WorkspaceBroker } from '../workspaceBroker';
 import type {
@@ -44,7 +50,7 @@ type AcpInitializeResult = {
 };
 type AcpSessionResult = { sessionId?: string; configOptions?: unknown };
 type EventStream = {
-  events: DriverEvent[];
+  events: AcpEventQueue<DriverEvent>;
   waiters: Array<{
     resolve: (result: IteratorResult<DriverEvent>) => void;
     reject: (error: Error) => void;
@@ -52,10 +58,37 @@ type EventStream = {
   done: boolean;
   error: Error | null;
 };
+
+const mergeAdjacentDriverEvents = (previous: DriverEvent, next: DriverEvent): DriverEvent | null => {
+  if (previous.kind === CodingEventKind.MessageDelta && next.kind === CodingEventKind.MessageDelta) {
+    const previousMessageId = previous.payload.messageId;
+    if (previousMessageId !== next.payload.messageId || typeof previousMessageId !== 'string') {
+      return null;
+    }
+    if (next.payload.streamUpdateMode === CodingStreamUpdateMode.Replace) return next;
+    return {
+      ...next,
+      payload: {
+        ...previous.payload,
+        ...next.payload,
+        content: `${typeof previous.payload.content === 'string' ? previous.payload.content : ''}${typeof next.payload.content === 'string' ? next.payload.content : ''}`,
+      },
+    };
+  }
+  if (previous.kind === CodingEventKind.ToolCall && next.kind === CodingEventKind.ToolCall) {
+    return previous.payload.toolCallId === next.payload.toolCallId
+      ? { ...next, payload: { ...previous.payload, ...next.payload } }
+      : null;
+  }
+  return null;
+};
 type PendingPermission = {
+  streamSessionId: string;
   resolve: (result: Record<string, unknown>) => void;
   reject: (error: Error) => void;
 };
+
+const OPEN_TOOL_CALL_STATUSES = new Set(['pending', 'in_progress']);
 
 const DEFAULT_CAPABILITIES: CodingAgentCapabilities = {
   supportsLoadSession: false,
@@ -310,6 +343,8 @@ export class AcpCodingDriver implements CodingAgentDriver {
   >();
   private readonly sessionTitleListeners = new Set<(sessionId: string, title: string) => void>();
   private readonly permissions = new Map<string, PendingPermission>();
+  private readonly openToolCalls = new Map<string, Set<string>>();
+  private watchdogsHeld = false;
   private readonly fallbackMessageIds = new Map<string, string>();
   /** Per-turn bookkeeping: a prompt that yields nothing is a credential problem, not a slow model. */
   private readonly turns = new Map<string, { hasOutput: boolean }>();
@@ -427,8 +462,15 @@ export class AcpCodingDriver implements CodingAgentDriver {
     await this.ensureConnected(input.workspaceRoot);
     this.fallbackMessageIds.delete(this.messageFallbackKey(input.sessionId, 'assistant'));
     this.fallbackMessageIds.delete(this.messageFallbackKey(input.sessionId, 'user'));
-    const stream: EventStream = { events: [], waiters: [], done: false, error: null };
+    const stream: EventStream = {
+      events: new AcpEventQueue(mergeAdjacentDriverEvents),
+      waiters: [],
+      done: false,
+      error: null,
+    };
     this.streams.set(input.sessionId, stream);
+    agentResourceDiagnostics.startAcpTurn(input.sessionId, this.supervisor.processId);
+    console.debug(`[AcpCodingDriver] started session prompt for ${input.sessionId}`);
     const turn = { hasOutput: false };
     this.turns.set(input.sessionId, turn);
     this.armFirstOutputWatchdog(input.sessionId);
@@ -447,15 +489,35 @@ export class AcpCodingDriver implements CodingAgentDriver {
         // agent finishing normally or by the user cancelling.
         { timeoutMs: 5 * 60 * 1000 },
       )
-      .then(() => this.finishStream(input.sessionId))
-      .catch(error => this.finishStream(input.sessionId, error));
+      .then(response => {
+        const stopReason = asRecord(response).stopReason;
+        if (stopReason === AcpStopReason.Refusal) {
+          console.warn(`[AcpCodingDriver] session prompt refused for ${input.sessionId}`);
+          this.finishStream(input.sessionId, new Error(t('codingAgentStopRefusal')));
+          return;
+        }
+        if (stopReason === AcpStopReason.MaxTokens) {
+          console.warn(`[AcpCodingDriver] session prompt hit the output limit for ${input.sessionId}`);
+          this.finishStream(input.sessionId, new Error(t('codingAgentStopMaxTokens')));
+          return;
+        }
+        console.debug(
+          `[AcpCodingDriver] session prompt completed for ${input.sessionId} (${String(stopReason)})`,
+        );
+        this.finishStream(input.sessionId);
+      })
+      .catch(error => {
+        console.warn(`[AcpCodingDriver] session prompt failed for ${input.sessionId}:`, error);
+        this.finishStream(input.sessionId, error);
+      });
     try {
       while (true) {
-        const next = await this.nextEvent(stream);
+        const next = await this.nextEvent(input.sessionId, stream);
         if (next.done) return;
         yield next.value;
       }
     } finally {
+      agentResourceDiagnostics.finishAcpTurn(input.sessionId, Boolean(stream.error));
       this.clearFirstOutputWatchdog(input.sessionId);
       this.turns.delete(input.sessionId);
       this.streams.delete(input.sessionId);
@@ -466,8 +528,9 @@ export class AcpCodingDriver implements CodingAgentDriver {
     this.supervisor.notify(AcpMethod.SessionCancel, { sessionId });
     this.finishStream(sessionId, new Error(CodingErrorMessage.AcpPromptCancelled));
     for (const [requestId, pending] of this.permissions) {
+      if (pending.streamSessionId !== sessionId) continue;
+      this.releasePermission(requestId);
       pending.resolve({ outcome: { outcome: CodingPermissionOutcome.Cancelled } });
-      this.permissions.delete(requestId);
     }
   }
 
@@ -477,13 +540,14 @@ export class AcpCodingDriver implements CodingAgentDriver {
     if (response.outcome === CodingPermissionOutcome.Selected && !response.optionId) {
       throw new Error(CodingErrorMessage.AcpPermissionOptionRequired);
     }
+    this.releasePermission(response.requestId);
     pending.resolve({
       outcome:
         response.outcome === CodingPermissionOutcome.Cancelled
           ? { outcome: CodingPermissionOutcome.Cancelled }
           : { outcome: CodingPermissionOutcome.Selected, optionId: response.optionId },
     });
-    this.permissions.delete(response.requestId);
+    console.debug(`[AcpCodingDriver] received permission response ${response.requestId}`);
   }
 
   async setConfigOption(
@@ -542,6 +606,8 @@ export class AcpCodingDriver implements CodingAgentDriver {
     }
     this.turns.clear();
     this.permissions.clear();
+    this.openToolCalls.clear();
+    this.syncTurnWatchdogs();
     this.configOptionsBySession.clear();
     this.availableCommandsBySession.clear();
     this.availableCommandListeners.clear();
@@ -603,7 +669,10 @@ export class AcpCodingDriver implements CodingAgentDriver {
       },
       { timeoutMs: ACP_SESSION_LIFECYCLE_TIMEOUT_MS },
     );
-    if (response.protocolVersion !== ACP_PROTOCOL_VERSION) {
+    if (
+      typeof response.protocolVersion !== 'number' ||
+      response.protocolVersion < ACP_MINIMUM_PROTOCOL_VERSION
+    ) {
       throw new AcpProtocolIncompatibleError(response.protocolVersion);
     }
     this.capabilities = normalizeCapabilities(response);
@@ -638,6 +707,10 @@ export class AcpCodingDriver implements CodingAgentDriver {
         listener(params.sessionId, update.title.trim());
       }
     }
+    this.trackOpenToolCalls(params.sessionId, update);
+    // Any session update proves the agent is alive; one lane runs one turn at a
+    // time, so renewing every prompt request of this connection is exact.
+    this.supervisor.touchRequestTimeouts(AcpMethod.SessionPrompt);
     for (const event of this.normalizeUpdate(params.sessionId, update))
       this.pushEvent(params.sessionId, event);
   }
@@ -654,34 +727,85 @@ export class AcpCodingDriver implements CodingAgentDriver {
     if (method === AcpMethod.TerminalWaitForExit) return await this.waitForTerminal(params);
     if (method === AcpMethod.TerminalKill) return this.killTerminal(params);
     if (method === AcpMethod.TerminalRelease) return this.releaseTerminal(params);
-    throw new Error(`${CodingErrorDetailMessage.AcpRequestUnsupported} ${method}.`);
+    throw new AcpRequestError(
+      AcpErrorCode.MethodNotFound,
+      `Unsupported ACP agent request: ${method}.`,
+    );
+  }
+
+  /**
+   * Tool calls the agent reported as running. A build or test suite can stay
+   * silent for a long time while it is genuinely working, so the turn watchdog
+   * stays paused until the tool call reports a final status.
+   */
+  private trackOpenToolCalls(sessionId: string, update: Record<string, unknown>): void {
+    const kind = update.sessionUpdate;
+    if (kind !== AcpSessionUpdateKind.ToolCall && kind !== AcpSessionUpdateKind.ToolCallUpdate) {
+      return;
+    }
+    const toolCallId = typeof update.toolCallId === 'string' ? update.toolCallId : null;
+    if (!toolCallId) return;
+    const status = typeof update.status === 'string' ? update.status : null;
+    const open = this.openToolCalls.get(sessionId) ?? new Set<string>();
+    if (status === null || OPEN_TOOL_CALL_STATUSES.has(status)) open.add(toolCallId);
+    else open.delete(toolCallId);
+    if (open.size > 0) this.openToolCalls.set(sessionId, open);
+    else this.openToolCalls.delete(sessionId);
+    this.syncTurnWatchdogs();
   }
 
   private async requestPermission(
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    if (typeof params.sessionId !== 'string')
-      throw new Error(CodingErrorMessage.AcpPermissionNoSession);
+    if (typeof params.sessionId !== 'string') {
+      throw new AcpRequestError(
+        AcpErrorCode.InvalidParams,
+        'ACP permission request has no session ID.',
+      );
+    }
     const requestId = randomUUID();
-    this.pushEvent(params.sessionId, {
-      kind: CodingEventKind.Permission,
-      payload: {
-        requestId,
-        sessionId: params.sessionId,
-        toolCall: params.toolCall,
-        options: params.options,
-      },
+    const streamSessionId = this.resolvePermissionStreamSessionId(params.sessionId);
+    if (!streamSessionId) {
+      throw new AcpRequestError(
+        AcpErrorCode.InvalidParams,
+        'ACP permission request has no active session prompt.',
+      );
+    }
+    console.debug(
+      `[AcpCodingDriver] received permission request for ${params.sessionId}; delivering it to ${streamSessionId}`,
+    );
+    const permission = new Promise<Record<string, unknown>>((resolve, reject) => {
+      this.permissions.set(requestId, { streamSessionId, resolve, reject });
+      this.syncTurnWatchdogs();
     });
-    return await new Promise<Record<string, unknown>>((resolve, reject) => {
-      this.permissions.set(requestId, { resolve, reject });
-    });
+    if (
+      !this.pushEvent(streamSessionId, {
+        kind: CodingEventKind.Permission,
+        payload: {
+          requestId,
+          sessionId: params.sessionId,
+          toolCall: params.toolCall,
+          options: params.options,
+        },
+      })
+    ) {
+      this.releasePermission(requestId);
+      throw new Error('ACP permission request could not be delivered to the session prompt.');
+    }
+    console.debug(`[AcpCodingDriver] published permission request ${requestId}`);
+    return await permission;
   }
 
   private async readWorkspaceFile(
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     const target = await this.resolveWorkspacePath(params.path);
-    const content = await readFile(target, 'utf8');
+    const content = await readFile(target, 'utf8').catch(error => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new AcpRequestError(AcpErrorCode.ResourceNotFound, `File not found: ${target}.`);
+      }
+      throw error;
+    });
     this.pushToolEvent(params.sessionId, CodingEventKind.FileChange, {
       action: 'read',
       path: target,
@@ -705,7 +829,10 @@ export class AcpCodingDriver implements CodingAgentDriver {
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     if (typeof params.content !== 'string') {
-      throw new Error(CodingErrorMessage.AcpFileWriteNoContent);
+      throw new AcpRequestError(
+        AcpErrorCode.InvalidParams,
+        'ACP file write has no text content.',
+      );
     }
     const target = await this.resolveWorkspacePath(params.path);
     await mkdir(path.dirname(target), { recursive: true });
@@ -719,7 +846,10 @@ export class AcpCodingDriver implements CodingAgentDriver {
 
   private async createTerminal(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (typeof params.command !== 'string' || !params.command) {
-      throw new Error(CodingErrorMessage.AcpTerminalNoCommand);
+      throw new AcpRequestError(
+        AcpErrorCode.InvalidParams,
+        'ACP terminal creation has no command.',
+      );
     }
     const cwd = await this.resolveWorkspacePath(
       typeof params.cwd === 'string' ? params.cwd : this.workspaceRoot,
@@ -770,10 +900,20 @@ export class AcpCodingDriver implements CodingAgentDriver {
 
   private async resolveWorkspacePath(value: unknown): Promise<string> {
     if (typeof value !== 'string' || !value) {
-      throw new Error(CodingErrorMessage.AcpFilesystemNoPath);
+      throw new AcpRequestError(
+        AcpErrorCode.InvalidParams,
+        'ACP filesystem request has no path.',
+      );
     }
-    if (!this.workspaceBroker) throw new Error(CodingErrorMessage.AcpWorkspaceBrokerMissing);
-    return await this.workspaceBroker.resolveTarget(value);
+    if (!this.workspaceBroker) throw new Error('ACP workspace broker is unavailable.');
+    try {
+      return await this.workspaceBroker.resolveTarget(value);
+    } catch (error) {
+      throw new AcpRequestError(
+        AcpErrorCode.InvalidParams,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   private terminalEnvironment(value: unknown): Record<string, string> {
@@ -807,14 +947,19 @@ export class AcpCodingDriver implements CodingAgentDriver {
 
   private requireTerminalId(value: unknown): string {
     if (typeof value !== 'string' || !value) {
-      throw new Error(CodingErrorMessage.AcpTerminalNoId);
+      throw new AcpRequestError(
+        AcpErrorCode.InvalidParams,
+        'ACP terminal request has no terminal ID.',
+      );
     }
     return value;
   }
 
   private requireTerminal(value: unknown) {
     const terminal = this.terminalBroker.output(this.requireTerminalId(value));
-    if (!terminal) throw new Error(CodingErrorMessage.AcpTerminalGone);
+    if (!terminal) {
+      throw new AcpRequestError(AcpErrorCode.ResourceNotFound, 'The ACP terminal was not found.');
+    }
     return terminal;
   }
 
@@ -907,15 +1052,6 @@ export class AcpCodingDriver implements CodingAgentDriver {
     return messageId;
   }
 
-  private pushEvent(sessionId: string, event: DriverEvent): void {
-    const stream = this.streams.get(sessionId);
-    if (!stream || stream.done) return;
-    this.markTurnActivity(sessionId);
-    const waiter = stream.waiters.shift();
-    if (waiter) waiter.resolve({ done: false, value: event });
-    else stream.events.push(event);
-  }
-
   /**
    * Any traffic for the session — a transcript event or a metadata update —
    * proves the agent is working, so the first-output watchdog stands down. A
@@ -962,14 +1098,86 @@ export class AcpCodingDriver implements CodingAgentDriver {
     if (!stream || stream.done) return;
     stream.done = true;
     stream.error = error instanceof Error ? error : error ? new Error(String(error)) : null;
+    console.debug(
+      `[AcpCodingDriver] finished session prompt for ${sessionId}${stream.error ? ' with an error' : ''}`,
+    );
+    // A turn that ends mid tool call must not keep the watchdog paused for the
+    // next turn: the agent can no longer report that tool call as finished.
+    this.openToolCalls.delete(sessionId);
+    this.syncTurnWatchdogs();
+    for (const [requestId, pending] of this.permissions) {
+      if (pending.streamSessionId !== sessionId) continue;
+      this.releasePermission(requestId);
+      pending.reject(
+        stream.error ?? new Error('ACP session prompt ended before permission response.'),
+      );
+    }
     for (const waiter of stream.waiters.splice(0)) {
       if (stream.error) waiter.reject(stream.error);
       else waiter.resolve({ done: true, value: undefined });
     }
   }
 
-  private async nextEvent(stream: EventStream): Promise<IteratorResult<DriverEvent>> {
-    if (stream.events.length > 0) return { done: false, value: stream.events.shift()! };
+  /**
+   * Holds the turn watchdog while the agent legitimately stops reporting
+   * progress: waiting for the user's approval or running a tool call. Driven by
+   * state instead of a call counter so no path can unbalance it.
+   */
+  private syncTurnWatchdogs(): void {
+    const held =
+      this.permissions.size > 0 ||
+      [...this.openToolCalls.values()].some(toolCalls => toolCalls.size > 0);
+    if (held === this.watchdogsHeld) return;
+    this.watchdogsHeld = held;
+    if (held) this.supervisor.holdRequestTimeouts();
+    else this.supervisor.releaseRequestTimeouts();
+  }
+
+  private releasePermission(requestId: string): PendingPermission | undefined {
+    const pending = this.permissions.get(requestId);
+    if (!pending) return undefined;
+    this.permissions.delete(requestId);
+    this.syncTurnWatchdogs();
+    return pending;
+  }
+
+  private resolvePermissionStreamSessionId(sessionId: string): string | null {
+    if (this.streams.has(sessionId)) return sessionId;
+    if (this.streams.size !== 1) return null;
+    const onlySessionId = this.streams.keys().next().value;
+    return typeof onlySessionId === 'string' ? onlySessionId : null;
+  }
+
+  private pushEvent(sessionId: string, event: DriverEvent): boolean {
+    const stream = this.streams.get(sessionId);
+    if (!stream || stream.done) return false;
+    this.markTurnActivity(sessionId);
+    const waiter = stream.waiters.shift();
+    if (waiter) waiter.resolve({ done: false, value: event });
+    else {
+      const queued = stream.events.enqueue(event);
+      if (!queued.accepted) {
+        this.finishStream(sessionId, new Error('ACP event queue exceeded its memory limits.'));
+        return false;
+      }
+      if (queued.replaced) {
+        agentResourceDiagnostics.recordAcpReplaced(sessionId, queued.replaced, queued.event);
+      } else {
+        agentResourceDiagnostics.recordAcpEnqueued(sessionId, queued.event);
+      }
+    }
+    return true;
+  }
+
+  private async nextEvent(
+    sessionId: string,
+    stream: EventStream,
+  ): Promise<IteratorResult<DriverEvent>> {
+    if (stream.events.length > 0) {
+      const event = stream.events.dequeue()!;
+      agentResourceDiagnostics.recordAcpDequeued(sessionId, event);
+      return { done: false, value: event };
+    }
     if (stream.done) {
       if (stream.error) throw stream.error;
       return { done: true, value: undefined };
