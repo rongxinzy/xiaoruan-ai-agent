@@ -7,6 +7,11 @@ on:
         description: Existing verified Windows build run to upload
         required: true
         type: string
+      signed-run-id:
+        description: 'ZhiYuan central signing run ID carrying signed-windows-build. When set, the signed installer is verified against the source run and uploaded instead of the unsigned build.'
+        required: false
+        type: string
+        default: ''
   workflow_call:
 
 permissions:
@@ -36,17 +41,41 @@ jobs:
           SOURCE_RUN_ID: ${{ inputs.source-run-id }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release/verify-windows-artifact-source.mjs
+      - name: Verify signed package provenance
+        if: inputs.signed-run-id != ''
+        id: signed
+        env:
+          SIGNED_RUN_ID: ${{ inputs.signed-run-id }}
+          GH_TOKEN: ${{ secrets.ZHIYUAN_ARTIFACT_READ_TOKEN }}
+        run: node scripts/release/verify-signed-package-source.mjs
       - name: Check dedicated storage configuration
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
         run: node --input-type=module -e "import { uploadIdentity } from './scripts/release/upload-custom-packages.mjs'; uploadIdentity(process.env)"
       - uses: actions/download-artifact@v8
+        if: inputs.signed-run-id == ''
         with:
           name: windows-build
           run-id: ${{ inputs.source-run-id || github.run_id }}
           github-token: ${{ github.token }}
           path: packages/windows-build
+      - name: Download signed Windows build
+        if: inputs.signed-run-id != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: signed-windows-build
+          repository: rongxinzy/RongxinAI
+          run-id: ${{ inputs.signed-run-id }}
+          github-token: ${{ secrets.ZHIYUAN_ARTIFACT_READ_TOKEN }}
+          path: packages/signed-windows-build
+      - name: Verify signing receipt and installer integrity
+        if: inputs.signed-run-id != ''
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source-run-id }}
+          PACKAGE_SOURCE_COMMIT: ${{ steps.source.outputs.source-commit }}
+          SIGNED_RUN_ID: ${{ inputs.signed-run-id }}
+        run: node scripts/release/verify-signed-package-source.mjs receipt packages/signed-windows-build
       - name: Verify and store installers
         env:
           PACKAGE_SOURCE_COMMIT: ${{ steps.source.outputs.source-commit || github.sha }}

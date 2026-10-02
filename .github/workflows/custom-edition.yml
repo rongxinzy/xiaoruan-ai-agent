@@ -35,7 +35,7 @@ jobs:
       - name: Verify scheduled task titles, folder actions and native ABI
         run: npm test -- src/renderer/utils/sessionTitle.test.ts src/shared/cowork/constants.test.ts src/renderer/components/agentSidebar src/renderer/components/scheduledTasks src/renderer/components/Sidebar.search.test.ts src/renderer/components/cowork/CoworkSearchModal.test.ts src/scheduledTask/piScheduledTaskExecutor.test.ts scripts/electron-native-abi.test.ts src/main/scheduledSessionTitles src/main/sqliteStore.test.ts src/renderer/components/AISphereSettings.test.ts
       - name: Verify isolated package storage
-        run: bunx vitest run scripts/release/upload-custom-packages.test.ts scripts/release/verify-windows-artifact-source.test.ts tests/customReleaseIsolation.test.ts
+        run: bunx vitest run scripts/release/upload-custom-packages.test.ts scripts/release/verify-windows-artifact-source.test.ts scripts/release/verify-signed-package-source.test.ts tests/customReleaseIsolation.test.ts
       - name: Verify configured chat transports and installer identity
         run: bunx vitest run src/renderer/services/chatChatTransport.test.ts src/renderer/services/ipcChatTransport.test.ts src/renderer/services/api.webSearch.test.ts src/renderer/services/chatToolCapabilityPolicy.test.ts src/renderer/services/toolCallUnsupported.test.ts src/renderer/services/i18n.modelCapabilities.test.ts tests/nsis-installer.test.ts
       - name: Verify AISphere exclusive access and transport
