@@ -1,8 +1,10 @@
 import {
   ApiFormat,
+  DiscoveryCapabilitiesSource,
   ModelCapabilityStatus,
   type ModelCapabilities,
   type DiscoveredProviderModel,
+  parseLlamaCppRuntimeCapabilities,
   ProviderModelDiscoveryErrorCode,
   type ProviderModelDiscoveryErrorCode as ProviderModelDiscoveryErrorCodeValue,
   type ProviderModelDiscoveryRequest,
@@ -78,6 +80,12 @@ export function buildProviderModelsUrlCandidates(baseUrl: string): string[] {
   return [...new Set(candidates)];
 }
 
+export function buildLlamaCppPropsUrl(baseUrl: string): string {
+  const normalized = normalizedBaseUrl(baseUrl);
+  const serverRoot = normalized.replace(/\/v\d+(?:(?:alpha|beta)\d*)?$/i, '');
+  return `${serverRoot}/props`;
+}
+
 function normalizedModelId(rawId: unknown): string | null {
   if (typeof rawId !== 'string') return null;
   const id = rawId.trim().replace(/^models\//, '');
@@ -119,6 +127,35 @@ function capabilityStatus(value: unknown): ModelCapabilityStatus | undefined {
     return ModelCapabilityStatus.Unsupported;
   }
   return undefined;
+}
+
+// Ollama and llama.cpp describe model capabilities as a string list
+// (for example ["completion", "multimodal"]) instead of a record; map the
+// known tokens onto Agent capability verdicts.
+const CAPABILITY_LIST_TOKENS = [
+  { token: 'vision', capability: 'imageInput' },
+  { token: 'multimodal', capability: 'imageInput' },
+  { token: 'multimodal', capability: 'videoInput' },
+  { token: 'audio', capability: 'audioInput' },
+  { token: 'tools', capability: 'toolCalling' },
+  { token: 'thinking', capability: 'reasoning' },
+] as const satisfies readonly {
+  readonly token: string;
+  readonly capability: keyof ModelCapabilities;
+}[];
+
+function capabilitiesFromDeclaredList(item: Record<string, unknown>): Partial<ModelCapabilities> {
+  if (!Array.isArray(item.capabilities)) return {};
+  const declared = new Set(
+    item.capabilities
+      .filter((value): value is string => typeof value === 'string')
+      .map(value => value.trim().toLowerCase()),
+  );
+  const verdicts: { -readonly [Key in keyof ModelCapabilities]?: ModelCapabilities[Key] } = {};
+  for (const { token, capability } of CAPABILITY_LIST_TOKENS) {
+    if (declared.has(token)) verdicts[capability] = ModelCapabilityStatus.Supported;
+  }
+  return verdicts;
 }
 
 function modelCapabilities(item: Record<string, unknown>): Partial<ModelCapabilities> | undefined {
@@ -185,10 +222,11 @@ function modelCapabilities(item: Record<string, unknown>): Partial<ModelCapabili
       'supports_thinking',
       'reasoning_content',
     ]),
+    ...capabilitiesFromDeclaredList(item),
   };
   const knownEntries = Object.entries(capabilities).filter(([, status]) => status !== undefined);
   return knownEntries.length > 0
-    ? Object.fromEntries(knownEntries) as Partial<ModelCapabilities>
+    ? (Object.fromEntries(knownEntries) as Partial<ModelCapabilities>)
     : undefined;
 }
 
@@ -227,6 +265,42 @@ function modelMetadata(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+// llama.cpp answers /v1/models with an OpenAI `data` list that carries no
+// capability fields plus an Ollama-compatible `models` list that does; borrow
+// missing metadata from the sibling section so either shape yields the same
+// verdict.
+function withSiblingSectionMetadata(
+  siblingItems: unknown[],
+): (entry: DiscoveredProviderModel) => DiscoveredProviderModel {
+  const siblingsById = new Map<string, Record<string, unknown>>();
+  for (const item of siblingItems) {
+    if (!isRecord(item)) continue;
+    for (const key of ['id', 'name', 'model'] as const) {
+      const value = item[key];
+      if (typeof value === 'string' && value.trim() && !siblingsById.has(value.trim())) {
+        siblingsById.set(value.trim(), item);
+      }
+    }
+  }
+  return entry => {
+    const sibling = siblingsById.get(entry.id);
+    if (!sibling) return entry;
+    const metadata = modelMetadata(sibling);
+    return {
+      ...entry,
+      ...(entry.contextWindow === undefined && metadata.contextWindow !== undefined
+        ? { contextWindow: metadata.contextWindow }
+        : {}),
+      ...(entry.maxTokens === undefined && metadata.maxTokens !== undefined
+        ? { maxTokens: metadata.maxTokens }
+        : {}),
+      ...(entry.capabilities === undefined && metadata.capabilities !== undefined
+        ? { capabilities: metadata.capabilities }
+        : {}),
+    };
+  };
 }
 
 export function parseProviderModelsResponse(payload: unknown): DiscoveredProviderModel[] {
@@ -274,6 +348,10 @@ export function parseProviderModelsResponse(payload: unknown): DiscoveredProvide
       ProviderModelDiscoveryErrorCode.UnsupportedFormat,
       'The model endpoint returned an unsupported response.',
     );
+  }
+
+  if (Array.isArray(payload.data) && Array.isArray(payload.models)) {
+    entries = entries.map(withSiblingSectionMetadata(payload.models));
   }
 
   const modelsById = new Map<string, DiscoveredProviderModel>();
@@ -333,6 +411,56 @@ function errorBody(text: string): string {
   return text.length > ERROR_BODY_MAX_CHARS ? `${text.slice(0, ERROR_BODY_MAX_CHARS)}...` : text;
 }
 
+// llama.cpp declares multimodal modalities on /props rather than in
+// /v1/models. The probe is best-effort: any other backend answers 404 or
+// non-JSON and discovery keeps its /v1/models results untouched.
+async function enrichWithLlamaCppProps(
+  request: ProviderModelDiscoveryRequest,
+  entries: DiscoveredProviderModel[],
+  fetchImpl: typeof fetch,
+): Promise<DiscoveredProviderModel[]> {
+  if (entries.length === 0) return entries;
+  let payload: unknown;
+  try {
+    const response = await fetchImpl(buildLlamaCppPropsUrl(request.baseUrl), {
+      method: 'GET',
+      headers: requestHeaders(request),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) return entries;
+    payload = JSON.parse(await readBoundedText(response));
+  } catch {
+    return entries;
+  }
+  const detected = parseLlamaCppRuntimeCapabilities(payload);
+  if (Object.keys(detected).length === 0) return entries;
+  // A successful /props probe is ground truth for modalities: the server just
+  // told us what the loaded model can see, so it overrides stale /v1/models
+  // claims (e.g. a sibling section declaring "multimodal" while no mmproj is
+  // loaded). The tool verdict is different: chat_template_caps is a template
+  // heuristic that many self-hosted deployments report as false for
+  // tool-capable models, so it may only fill a gap, never override the entry.
+  const probeModalities: { -readonly [K in keyof ModelCapabilities]?: ModelCapabilities[K] } = {};
+  for (const key of ['imageInput', 'videoInput', 'audioInput'] as const) {
+    const status = detected[key];
+    if (status !== undefined) probeModalities[key] = status;
+  }
+  return entries.map(entry => {
+    const capabilities: { -readonly [K in keyof ModelCapabilities]?: ModelCapabilities[K] } = {
+      ...(entry.capabilities ?? {}),
+      ...probeModalities,
+    };
+    if (capabilities.toolCalling === undefined && detected.toolCalling !== undefined) {
+      capabilities.toolCalling = detected.toolCalling;
+    }
+    return {
+      ...entry,
+      capabilities,
+      capabilitiesSource: DiscoveryCapabilitiesSource.RuntimeProbe,
+    };
+  });
+}
+
 export async function discoverProviderModels(
   request: ProviderModelDiscoveryRequest,
   fetchImpl: typeof fetch,
@@ -368,7 +496,10 @@ export async function discoverProviderModels(
     const body = await readBoundedText(response);
     if (response.ok) {
       try {
-        return parseProviderModelsResponse(JSON.parse(body));
+        const models = parseProviderModelsResponse(JSON.parse(body));
+        return request.apiFormat === ApiFormat.OpenAI
+          ? await enrichWithLlamaCppProps(request, models, fetchImpl)
+          : models;
       } catch (error) {
         if (error instanceof ProviderModelDiscoveryError) throw error;
         throw new ProviderModelDiscoveryError(

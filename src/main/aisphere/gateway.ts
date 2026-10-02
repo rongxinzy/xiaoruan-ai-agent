@@ -9,8 +9,8 @@ import { t } from '../i18n';
 /**
  * Hard cap on one gateway request, whatever the model is doing.
  *
- * The Pi runtime detects a silent or runaway turn long before this
- * ({@link PI_TURN_STALL_LIMITS}), so this cap only exists for the case the
+ * The Pi runtime detects a silent turn long before this (the stream-stall
+ * watchdog in the agent engine), so this cap only exists for the case the
  * runtime cannot see: a turn the runtime considers healthy because a tool owns
  * it while the upstream stream is already dead.
  */

@@ -1192,6 +1192,10 @@ export class IMCoworkHandler extends EventEmitter {
       case CoworkErrorKind.TurnTimeout:
       case CoworkErrorKind.MaxIterations:
         return t('imErrorExecutionLimit');
+      case CoworkErrorKind.ModelCapabilityUnsupported:
+        return t('imErrorModelCapabilityUnsupported');
+      case CoworkErrorKind.ProviderUnavailable:
+        return t('imErrorProviderUnavailable');
       case CoworkErrorKind.StreamInterrupted:
         return t('imErrorStreamInterrupted');
       case CoworkErrorKind.FileWriteTruncated:

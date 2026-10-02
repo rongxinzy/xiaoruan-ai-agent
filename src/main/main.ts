@@ -23,6 +23,7 @@ import { pathToFileURL } from 'url';
 
 import { buildSessionTitleFromInput } from '../common/sessionTitle';
 import { classifyCoworkError } from '../common/coworkError';
+import { setPiCapabilityCorrectionStoreGetter } from './libs/agentEngine/piCapabilityCorrection';
 import { persistCoworkTerminalError } from './coworkTerminalErrorPersistence';
 import { registerArtifactFileAvailabilityHandler } from './artifactFileAvailability';
 import { observePreparedRun } from './workbenchTask/preparedRunFailure';
@@ -7353,6 +7354,7 @@ if (!gotTheLock) {
     });
     // Inject store getter into claudeSettings
     setStoreGetter(() => store);
+    setPiCapabilityCorrectionStoreGetter(() => store);
     piModelCatalogRefreshCoordinator = new PiModelCatalogRefreshCoordinator({
       resolveApiKeys: resolveAllProviderApiKeys,
     });
