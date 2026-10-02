@@ -8,6 +8,7 @@ import type { ProductionLoopMode } from '../../../shared/productionLoop';
 import type { CoworkSessionInterruption } from '../../../shared/cowork/interruption';
 import type { WorkbenchApprovalMode } from '../../../shared/workbenchTask';
 import type { PiPlanEntry } from './piPlanTool';
+import type { PiRunProgressEvent } from './piRunState';
 
 /**
  * Pi-native workbench runtime types (issue #225).
@@ -39,6 +40,7 @@ export interface PiPermissionRequest {
 }
 
 export interface PiRuntimeEvents {
+  executionEvent: (sessionId: string, event: PiRunProgressEvent) => void;
   message: (sessionId: string, message: CoworkMessage) => void;
   messageUpdate: (
     sessionId: string,
