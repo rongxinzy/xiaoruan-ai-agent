@@ -113,9 +113,10 @@ jobs:
       source_run_id: ${{ github.run_id }}
       release_version: ${{ needs.build-platforms.outputs.version }}
     secrets:
-      CERTUM_USER_ID: ${{ secrets.CERTUM_USER_ID }}
-      CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
-      CERTUM_CERT_THUMBPRINT: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
+      # Only the repository-level token is passed explicitly; the Certum
+      # credentials live in this repository's `release` environment and are
+      # picked up by the called workflow's signing job directly (environment
+      # secrets cannot be forwarded through a workflow_call boundary).
       MODELSCOPE_TOKENS: ${{ secrets.MODELSCOPE_TOKENS }}
 
   upload:
