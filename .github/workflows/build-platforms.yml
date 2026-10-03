@@ -51,7 +51,7 @@ jobs:
             echo "- artifact: \`windows-build\` (unsigned)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Enforce retired runtime decoupling
         run: node scripts/ci/check-openclaw-decoupling.mjs
       - uses: actions/setup-node@v6
@@ -133,7 +133,7 @@ jobs:
       PACKAGE_SOURCE_COMMIT: ${{ github.sha }}
       XIAORUAN_R2_ACCOUNT_ID: ${{ vars.XIAORUAN_R2_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '24.x'
