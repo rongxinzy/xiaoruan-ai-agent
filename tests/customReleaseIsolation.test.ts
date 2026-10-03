@@ -71,3 +71,11 @@ test('the custom upload job uses only dedicated storage and main-branch credenti
     /zhiyuan-releases|rongxzyai\.com|secrets\.R2_ACCESS_KEY_ID|publish-update-manifest|wrangler pages/,
   );
 });
+
+test('the custom upload workflow accepts a centrally signed installer release', () => {
+  const content = fs.readFileSync('.github/workflows/upload-custom-packages.yml', 'utf8');
+  expect(content).toContain('signed-release-tag:');
+  expect(content).toContain('signed-sha256:');
+  expect(content).toContain('verify-signed-release-source.mjs');
+  expect(fs.existsSync('scripts/release/verify-signed-release-source.mjs')).toBe(true);
+});
