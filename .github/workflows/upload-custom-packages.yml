@@ -5,8 +5,24 @@ on:
     inputs:
       source-run-id:
         description: Existing verified Windows build run to upload
-        required: true
+        required: false
         type: string
+        default: ''
+      signed-release-tag:
+        description: 'Release tag in this repository that carries the centrally signed Windows installer (alternative to source-run-id)'
+        required: false
+        type: string
+        default: ''
+      signed-sha256:
+        description: 'Expected lowercase SHA-256 of the signed installer (required with signed-release-tag)'
+        required: false
+        type: string
+        default: ''
+      signed-source-run-id:
+        description: 'Central signing run ID that produced the signed installer; recorded in the upload manifest'
+        required: false
+        type: string
+        default: ''
   workflow_call:
 
 permissions:
@@ -29,6 +45,22 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24.x'
+      - name: Validate upload source selection
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source-run-id }}
+          SIGNED_RELEASE_TAG: ${{ inputs.signed-release-tag }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$SOURCE_RUN_ID" && -n "$SIGNED_RELEASE_TAG" ]]; then
+            echo 'Pass either source-run-id or signed-release-tag, not both' >&2
+            exit 1
+          fi
+          if [[ -z "$SOURCE_RUN_ID" && -z "$SIGNED_RELEASE_TAG" ]]; then
+            echo 'One of source-run-id or signed-release-tag is required' >&2
+            exit 1
+          fi
       - name: Verify existing Windows build provenance
         if: github.event_name == 'workflow_dispatch' && inputs.source-run-id != ''
         id: source
@@ -36,12 +68,22 @@ jobs:
           SOURCE_RUN_ID: ${{ inputs.source-run-id }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release/verify-windows-artifact-source.mjs
+      - name: Verify signed installer release
+        if: github.event_name == 'workflow_dispatch' && inputs.source-run-id == '' && inputs.signed-release-tag != ''
+        id: source-signed
+        env:
+          SIGNED_RELEASE_TAG: ${{ inputs.signed-release-tag }}
+          SIGNED_SHA256: ${{ inputs.signed-sha256 }}
+          SIGNED_SOURCE_RUN_ID: ${{ inputs.signed-source-run-id }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/verify-signed-release-source.mjs
       - name: Check dedicated storage configuration
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
         run: node --input-type=module -e "import { uploadIdentity } from './scripts/release/upload-custom-packages.mjs'; uploadIdentity(process.env)"
       - uses: actions/download-artifact@v8
+        if: inputs.signed-release-tag == ''
         with:
           name: windows-build
           run-id: ${{ inputs.source-run-id || github.run_id }}
@@ -49,8 +91,8 @@ jobs:
           path: packages/windows-build
       - name: Verify and store installers
         env:
-          PACKAGE_SOURCE_COMMIT: ${{ steps.source.outputs.source-commit || github.sha }}
-          SOURCE_BUILD_RUN_ID: ${{ steps.source.outputs.source-run-id || github.run_id }}
+          PACKAGE_SOURCE_COMMIT: ${{ steps.source.outputs.source-commit || steps.source-signed.outputs.source-commit || github.sha }}
+          SOURCE_BUILD_RUN_ID: ${{ steps.source.outputs.source-run-id || steps.source-signed.outputs.source-run-id || github.run_id }}
           AWS_ACCESS_KEY_ID: ${{ secrets.XIAORUAN_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.XIAORUAN_R2_SECRET_ACCESS_KEY }}
         run: node scripts/release/upload-custom-packages.mjs packages 1
