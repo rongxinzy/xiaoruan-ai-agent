@@ -135,45 +135,14 @@ export function registerCodingAgentIpcHandlers(getService: () => CodingRoomServi
   ipcMain.handle(CodingAgentIpc.Bootstrap, (_event, workspaceRoot: string) =>
     runCodingHandler(CodingAgentIpc.Bootstrap, () => ({
       success: true,
-      snapshot: service.bootstrap(workspaceRoot),
+      snapshot: service.bootstrap(workspaceRoot, {
+        eventLimitPerLane: CodingEventWindowPageSize,
+      }),
     })),
   );
-  ipcMain.handle(CodingAgentIpc.GetProfileConfigOptions, (_event, profileId: string) => {
-    try {
-      return { success: true, configOptions: service.getProfileConfigOptions(profileId) };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  });
   ipcMain.handle(CodingAgentIpc.GetProfileAvailableCommands, (_event, profileId: string) => {
     try {
       return { success: true, commands: service.getProfileAvailableCommands(profileId) };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  });
-  ipcMain.handle(CodingAgentIpc.CreateSession, async (_event, input: CreateCodingSessionInput) => {
-    try {
-      return { success: true, snapshot: await service.createSession(input) };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  });
-  ipcMain.handle(CodingAgentIpc.StartSession, async (_event, input: StartCodingSessionInput) => {
-    try {
-      return { success: true, snapshot: await service.startSession(input) };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  });
-  ipcMain.handle(CodingAgentIpc.Bootstrap, (_event, workspaceRoot: string) => {
-    try {
-      return {
-        success: true,
-        snapshot: service.bootstrap(workspaceRoot, {
-          eventLimitPerLane: CodingEventWindowPageSize,
-        }),
-      };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
