@@ -2,6 +2,8 @@
 
 This file provides guidance to coding agents when working with code in this repository.
 
+`CLAUDE.md` is a regular UTF-8 file importing this file with `@AGENTS.md`, so Windows checkouts do not depend on Git symlink support. Keep project rules here rather than duplicating them in the import file.
+
 ## Build and Development Commands
 
 ```bash
@@ -120,13 +122,12 @@ The Cowork feature provides AI-assisted coding sessions:
 
 SYSTEM_PROMPT.md declares this environment to the model (运行环境与工具链 section); keep that section in sync when the runtime layout changes.
 
-**Memory System**: File-based persistent memory stored in the application-owned agent workspace:
+**Memory System**: Local Engram runtime plus SQLite projections, owned by `src/main/memory/` and wired in `src/main/main.ts`:
 
-- `MEMORY.md` - Durable facts, preferences, and decisions; loaded automatically at every session start.
-- `memory/YYYY-MM-DD.md` - Daily notes for recent context.
-- `USER.md` / `SOUL.md` - User profile and agent personality files read at session startup.
-- Writes happen via the agent's `write` tool when the user issues an explicit "remember" instruction or the agent self-records important findings. No background extraction or confidence scoring.
-- GUI in Settings panel allows manual add/edit/delete of `MEMORY.md` entries.
+- Project, personal, and session memory are managed through `ProjectMemoryService`; personal proposals require user confirmation before becoming recallable.
+- Work uses the `memory` tool from `piMemoryTool.ts`, with atomic extraction for saved or proposed facts. `PiRuntimeAdapter` assembles project memory context and runs post-turn session summary/migration maintenance through the configured services.
+- Legacy `MEMORY.md` and old SQLite memory entries are imported as review candidates by `legacyMemoryFileImportService.ts`; the file is not the canonical active memory store or a direct prompt-injection source. This existing memory import does not authorize migration of retired product data or databases.
+- Settings memory operations use the `memory:*` IPC contract and the memory repository/service, rather than editing `MEMORY.md`. Read the current service and adapter code when changing recall, lifecycle, or maintenance behavior.
 
 **Stream Events** (IPC from main to renderer):
 
@@ -447,11 +448,17 @@ The `SKILLs/` directory contains bundled skill definitions used by the Pi runtim
 
 ### Claude Code
 
-When using Claude Code with this repository, it reads `CLAUDE.md` (which points to this file) for context. For UI work, you may also use the following global Claude skills installed for this project:
+Claude Code imports this file through `CLAUDE.md`. Coding agents read project skills by their explicit paths; do not assume `.codex/skills/` is natively discovered by every tool.
+
+| Task                                                                | Project skill                                        |
+| ------------------------------------------------------------------- | ---------------------------------------------------- |
+| Existing product UI visual or layout changes                        | `.codex/skills/frontend-ui-change-strategy/SKILL.md` |
+| Shared component selection, theme recipes, i18n and UI verification | `.codex/skills/rongxinai-ui-adapter/SKILL.md`        |
+
+The following optional external skills complement these project entries; verify their actual availability in the current agent environment:
 
 - `shadcn/ui` — shadcn/ui component usage and styling rules.
 - `vercel/ai-elements` — AI Elements chat components.
-- `rongxinai-ui-adapter` — 项目适配层：`--zy-*` 主题映射、页面级组件选择矩阵、i18n 与常量约定（与 DESIGN.md「技能参考」一致）。
 
 These global skills complement, not replace, the conventions in this file.
 
