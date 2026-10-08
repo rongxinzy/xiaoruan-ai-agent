@@ -16,6 +16,7 @@ import {
   type CodingWorkspaceSummary,
 } from '../../../shared/codingAgent';
 import { i18nService } from '../../services/i18n';
+import { CodingAgentStatusI18nKey } from './constants';
 
 interface CodingSessionSetupDialogProps {
   workspace: CodingWorkspaceSummary;
@@ -81,7 +82,7 @@ export const CodingSessionSetupDialog = ({
           <X />
         </Button>
         <FieldGroup>
-          {readyProfiles.length > 0 ? (
+          {profiles.length > 0 ? (
             <Field>
               <FieldLabel>{i18nService.t('codingAgentChooseAgent')}</FieldLabel>
               <Select value={profileId} onValueChange={value => value && setProfileId(value)}>
@@ -92,14 +93,24 @@ export const CodingSessionSetupDialog = ({
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {readyProfiles.map(profile => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.name}
+                  {profiles.map(profile => (
+                    <SelectItem
+                      key={profile.id}
+                      value={profile.id}
+                      disabled={profile.status !== CodingAgentProfileStatus.Ready}
+                    >
+                      {profile.status === CodingAgentProfileStatus.Ready
+                        ? profile.name
+                        : `${profile.name} · ${i18nService.t(CodingAgentStatusI18nKey[profile.status])}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <FieldDescription>{i18nService.t('codingSessionAgentBinding')}</FieldDescription>
+              <FieldDescription>
+                {readyProfiles.length > 0
+                  ? i18nService.t('codingSessionAgentBinding')
+                  : i18nService.t('codingSessionNoReadyAgent')}
+              </FieldDescription>
             </Field>
           ) : (
             <FieldDescription>{i18nService.t('codingSessionNoReadyAgent')}</FieldDescription>

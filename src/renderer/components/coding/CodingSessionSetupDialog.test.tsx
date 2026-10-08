@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 
 import {
@@ -61,5 +61,36 @@ test('preselects the workspace default when that Agent is ready', () => {
   );
 
   expect(screen.getByRole('combobox', { name: '选择 Agent' })).toHaveTextContent('OpenCode');
+  expect(screen.getByRole('button', { name: '确认' })).toBeEnabled();
+});
+
+test('keeps a registered agent listed when it is not ready', async () => {
+  i18nService.setLanguage('zh', { persist: false });
+  const builtin: CodingAgentProfile = {
+    ...profiles[0],
+    id: 'builtin-zhiyuan-coding',
+    name: '晓软智能体编程 Agent',
+    driverKind: CodingAgentDriverKind.Builtin,
+    status: CodingAgentProfileStatus.NeedsConfiguration,
+    command: null,
+    isBuiltin: true,
+  };
+  render(
+    <CodingSessionSetupDialog
+      workspace={workspace}
+      profiles={[builtin, ...profiles]}
+      onCancel={() => {}}
+      onManageAgents={() => {}}
+      onSubmit={() => {}}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole('combobox', { name: '选择 Agent' }));
+  const options = await screen.findAllByRole('option');
+  expect(options.map(option => option.textContent)).toEqual([
+    '晓软智能体编程 Agent · 需要配置模型',
+    'OpenCode',
+  ]);
+  expect(options[0]).toHaveAttribute('aria-disabled', 'true');
   expect(screen.getByRole('button', { name: '确认' })).toBeEnabled();
 });
