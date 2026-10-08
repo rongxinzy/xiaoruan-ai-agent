@@ -24,6 +24,8 @@ import { coworkService } from '../../services/cowork';
 import { coworkQueueService } from '../../services/coworkQueue';
 import { DirectChatTurnState } from '../../services/directChatTurnState';
 import { i18nService } from '../../services/i18n';
+// 2026/10/08  配置提示同样走错误管道：接口英文原文不再直接拼进设置页提示
+import { appErrorText } from '../../services/appErrorText';
 import { normalizeError } from '../../services/errorNormalization';
 // 2026/09/15 lixiang  Write Direct Chat failures as canonical terminal errors
 import { createDirectChatTerminalErrorMessage } from '../../services/coworkTerminalError';
@@ -306,7 +308,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
     ) {
       return { noticeI18nKey: key };
     }
-    return { noticeI18nKey: key, noticeExtra: error };
+    return { noticeI18nKey: key, noticeExtra: appErrorText(error, 'coworkModelSettingsRequired') };
   };
 
   useEffect(() => {
@@ -909,7 +911,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({
               type: 'system',
               content: i18nService
                 .t('coworkErrorSessionStartFailed')
-                .replace('{error}', startError),
+                .replace('{error}', appErrorText(startError, 'coworkErrorSessionStartFailed')),
               timestamp: Date.now(),
             },
           }),

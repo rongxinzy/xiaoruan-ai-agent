@@ -53,6 +53,8 @@ export interface CoworkMessageMetadata {
   toolResult?: string;
   toolUseId?: string | null;
   error?: string;
+  /** Classification of `error` (a CoworkErrorKind value) so bubbles can show localized copy. */
+  errorKind?: string;
   isError?: boolean;
   isStreaming?: boolean;
   isFinal?: boolean;

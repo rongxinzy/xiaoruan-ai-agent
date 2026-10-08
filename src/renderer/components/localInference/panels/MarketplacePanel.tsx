@@ -16,6 +16,8 @@ import {
   type MarketplaceHardwareProfile,
 } from '../../../../shared/marketplace/scoring';
 import { i18nService } from '../../../services/i18n';
+// 2026/10/08  市场检索失败正文走错误管道，界面不出现上游英文
+import { appErrorText } from '../../../services/appErrorText';
 import { EmptyState } from '../components/Common';
 import { MarketplaceModelCard } from '../components/MarketplaceModelCard';
 import { FluidTabs, FluidTabsSize } from '@shared/components/ui/fluid-tabs';
@@ -326,7 +328,7 @@ export function MarketplacePanel({
               : i18nService.t('marketplaceSearchStatusWarning')}
           </AlertTitle>
           <AlertDescription>
-            {marketplaceError.replace(/^(?:CATALOG_ERROR|AUTH_ERROR):\s*/, '')}
+            {appErrorText(marketplaceError.replace(/^(?:CATALOG_ERROR|AUTH_ERROR):\s*/, ''))}
           </AlertDescription>
         </Alert>
       ) : null}

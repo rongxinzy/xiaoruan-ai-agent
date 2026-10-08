@@ -87,3 +87,62 @@ test('ProviderUnavailable maps to its own i18n key', () => {
     'coworkErrorProviderUnavailable',
   );
 });
+
+// ─── Main-process wording that reaches the UI (#105) ────────────────────────
+
+test('scheduler wording written by the main process classifies into localized kinds', () => {
+  expect(classifyCoworkError('Scheduled task Pi run timed out after 3600000ms').kind).toBe(
+    CoworkErrorKind.ScheduledTaskTimeout,
+  );
+  expect(classifyCoworkError('Scheduler interrupted before Pi completion').kind).toBe(
+    CoworkErrorKind.SchedulerInterrupted,
+  );
+  // Activity recovery covers every source, so it must not reuse the scheduler copy.
+  expect(classifyCoworkError('Run was interrupted when the application closed.').kind).toBe(
+    CoworkErrorKind.AppInterrupted,
+  );
+  expect(
+    classifyCoworkError('Scheduled task Pi session stopped before completion: session-1').kind,
+  ).toBe(CoworkErrorKind.StreamInterrupted);
+});
+
+test('a platform pool answer without a status code still classifies as ServerError', () => {
+  expect(classifyCoworkError('No running instances available').kind).toBe(
+    CoworkErrorKind.ServerError,
+  );
+});
+
+test('scheduler kinds expose log level and their own i18n keys', () => {
+  expect(getErrorLogLevel(CoworkErrorKind.ScheduledTaskTimeout)).toBe('warn');
+  expect(getErrorLogLevel(CoworkErrorKind.SchedulerInterrupted)).toBe('info');
+  expect(getErrorLogLevel(CoworkErrorKind.AppInterrupted)).toBe('info');
+  expect(isTransient(CoworkErrorKind.ScheduledTaskTimeout)).toBe(false);
+  expect(getUserErrorI18nKey(CoworkErrorKind.ScheduledTaskTimeout)).toBe(
+    'coworkErrorScheduledTaskTimeout',
+  );
+  expect(getUserErrorI18nKey(CoworkErrorKind.SchedulerInterrupted)).toBe(
+    'coworkErrorSchedulerInterrupted',
+  );
+  expect(getUserErrorI18nKey(CoworkErrorKind.AppInterrupted)).toBe('coworkErrorAppInterrupted');
+});
+
+test('config resolution wording from claudeSettings classifies instead of leaking English', () => {
+  expect(classifyCoworkError('OpenAI compatibility proxy is not running.').kind).toBe(
+    CoworkErrorKind.EngineNotReady,
+  );
+  expect(classifyCoworkError('OpenAI compatibility proxy token is unavailable.').kind).toBe(
+    CoworkErrorKind.EngineNotReady,
+  );
+  expect(classifyCoworkError('Store is not initialized.').kind).toBe(
+    CoworkErrorKind.EngineNotReady,
+  );
+  expect(classifyCoworkError('No available model configured in enabled providers.').kind).toBe(
+    CoworkErrorKind.ProviderUnavailable,
+  );
+  expect(classifyCoworkError('Model validation timed out after 30s.').kind).toBe(
+    CoworkErrorKind.TurnTimeout,
+  );
+  expect(classifyCoworkError('Model validation failed: 503 service unavailable').kind).toBe(
+    CoworkErrorKind.ServerError,
+  );
+});
