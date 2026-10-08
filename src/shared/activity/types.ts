@@ -14,6 +14,12 @@ export interface ActivityRun {
   inputPreview?: string;
   replyPreview?: string;
   errorMessage?: string;
+  /**
+   * Classification of {@link errorMessage} (a CoworkErrorKind value) so surfaces
+   * can show localized copy even when the stored message is English. Absent for
+   * messages that could not be classified.
+   */
+  errorCode?: string;
 }
 
 export type ActivityRunUpdate = Omit<ActivityRun, 'startedAt' | 'updatedAt'> & {

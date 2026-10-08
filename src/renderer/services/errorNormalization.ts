@@ -1,4 +1,8 @@
-﻿import { CoworkErrorKind, getUserErrorI18nKey } from '../../common/coworkError';
+﻿import {
+  classifyCoworkError,
+  CoworkErrorKind,
+  getUserErrorI18nKey,
+} from '../../common/coworkError';
 import { CodingErrorTranslationKeys } from '../../shared/codingAgent';
 import { WorkbenchErrorI18nKey } from '../../shared/workbenchTask';
 import { i18nService } from './i18n';
@@ -36,6 +40,50 @@ export function readErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return typeof error === 'string' ? error : String(error);
 }
+
+/** Any CJK character means the text is already human-readable for zh users. */
+const CONTAINS_CJK = /[\u3400-\u9fff]/;
+
+/** 2026/09/15 lixiang  Prefer extracting error.message from JSON when present **/
+const tryExtractMessageFromJson = (value: string): string | null => {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const errorObj = parsed.error;
+    if (errorObj && typeof errorObj === 'object' && !Array.isArray(errorObj)) {
+      const message = (errorObj as Record<string, unknown>).message;
+      if (typeof message === 'string' && message.trim()) {
+        return message.trim();
+      }
+    }
+    if (typeof parsed.message === 'string' && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+  } catch {
+    // Not JSON.
+  }
+  return null;
+};
+
+/**
+ * 2026/09/15 lixiang  User-facing error text:
+ * use error.message directly when present; do not wrap with a request-failed prefix
+ */
+export const extractUserFacingErrorMessage = (raw: string): string => {
+  const value = raw.trim();
+  if (!value) return raw;
+
+  const fromJson = tryExtractMessageFromJson(value);
+  if (fromJson) return fromJson;
+
+  // 2026/09/15 lixiang  Support JSON embedded after a prefix, e.g. "xxx: {...}"
+  const jsonMatch = value.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    const fromEmbedded = tryExtractMessageFromJson(jsonMatch[0]);
+    if (fromEmbedded) return fromEmbedded;
+  }
+
+  return value;
+};
 
 const APP_COPY_KEYS = [
   ...new Set([
@@ -103,6 +151,39 @@ export function normalizeError(error: unknown): string {
   const reason = cleanErrorReason(message);
   if (!reason) return i18nService.t('operationFailed');
   return i18nService.getLanguage() === 'zh' ? `${i18nService.t('operationFailed')}：${reason}` : `${i18nService.t('operationFailed')}: ${reason}`;
+}
+
+/**
+ * Display text for an error string persisted by the main process — activity
+ * rows, scheduled-task run history and terminal error bubbles.
+ *
+ * Resolution order: a stored kind wins (it survives upstream wording changes),
+ * then the raw text is classified (status codes are still present), then text
+ * that already contains Chinese is kept verbatim, and only unknown English text
+ * falls back to the generic localized sentence described by `normalizeError`.
+ */
+export function appErrorTextFromStored(raw: string | undefined, storedKind?: string): string {
+  const text = raw?.trim() ?? '';
+  if (storedKind && (Object.values(CoworkErrorKind) as string[]).includes(storedKind)) {
+    const kind = storedKind as CoworkErrorKind;
+    if (kind !== CoworkErrorKind.Unknown) return i18nService.t(getUserErrorI18nKey(kind));
+  }
+  if (!text) return '';
+  const kind = classifyCoworkError(text).kind;
+  if (kind !== CoworkErrorKind.Unknown) return i18nService.t(getUserErrorI18nKey(kind));
+
+  const unwrapped = extractUserFacingErrorMessage(text);
+  if (unwrapped !== text) {
+    const unwrappedKind = classifyCoworkError(unwrapped).kind;
+    if (unwrappedKind !== CoworkErrorKind.Unknown) {
+      return i18nService.t(getUserErrorI18nKey(unwrappedKind));
+    }
+  }
+  if (CONTAINS_CJK.test(unwrapped)) return unwrapped;
+  // 2026/10/08  持久化的失败文本（活动流、运行历史、终端气泡）不展示英文原文：
+  // 分类不出时给中文通用句，原文只进日志；实时错误的详情保留策略不受影响。
+  console.error('[ErrorNormalization] untranslated stored error:', unwrapped);
+  return i18nService.t('operationFailed');
 }
 
 export function reportError(error: unknown): string {

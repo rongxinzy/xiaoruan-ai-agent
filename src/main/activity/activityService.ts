@@ -6,13 +6,23 @@ import {
   ActivityRetention,
   ActivityStatus,
 } from '../../shared/activity/constants';
+import { classifyCoworkError, CoworkErrorKind } from '../../common/coworkError';
 import { shouldAcceptActivityUpdate } from '../../shared/activity/ordering';
 import type { ActivityRun, ActivityRunUpdate } from '../../shared/activity/types';
+
+/**
+ * Stored code for a run failure. `unknown` is never persisted: surfaces then
+ * fall back to classifying the message themselves.
+ */
+function classifyActivityErrorCode(message: string): string | undefined {
+  const kind = classifyCoworkError(message).kind;
+  return kind === CoworkErrorKind.Unknown ? undefined : kind;
+}
 
 type ActivityRow = {
   id: string; source: ActivityRun['source']; status: ActivityRun['status']; started_at: number; updated_at: number;
   session_id: string | null; platform: string | null; conversation_id: string | null; task_name: string | null;
-  input_preview: string | null; reply_preview: string | null; error_message: string | null;
+  input_preview: string | null; reply_preview: string | null; error_message: string | null; error_code: string | null;
 };
 
 export class ActivityService {
@@ -22,11 +32,19 @@ export class ActivityService {
         id TEXT PRIMARY KEY, source TEXT NOT NULL, status TEXT NOT NULL,
         started_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
         session_id TEXT, platform TEXT, conversation_id TEXT, task_name TEXT,
-        input_preview TEXT, reply_preview TEXT, error_message TEXT
+        input_preview TEXT, reply_preview TEXT, error_message TEXT, error_code TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_zhiyuan_activity_runs_updated
         ON zhiyuan_activity_runs(updated_at DESC);
     `);
+    this.migrateErrorCodeColumn();
+  }
+
+  /** Existing databases predate `error_code`; the column is additive and nullable. */
+  private migrateErrorCodeColumn(): void {
+    const columns = this.db.prepare('PRAGMA table_info(zhiyuan_activity_runs)').all() as Array<{ name: string }>;
+    if (columns.some(column => column.name === 'error_code')) return;
+    this.db.exec('ALTER TABLE zhiyuan_activity_runs ADD COLUMN error_code TEXT');
   }
 
   list(limit = 100): ActivityRun[] {
@@ -51,13 +69,15 @@ export class ActivityService {
     return this.db
       .prepare(
         `UPDATE zhiyuan_activity_runs
-         SET status = ?, updated_at = ?, error_message = COALESCE(error_message, ?)
+         SET status = ?, updated_at = ?, error_message = COALESCE(error_message, ?),
+             error_code = COALESCE(error_code, ?)
          WHERE status = ?`,
       )
       .run(
         ActivityStatus.Failed,
         nowMs,
         'Run was interrupted when the application closed.',
+        CoworkErrorKind.SchedulerInterrupted,
         ActivityStatus.Running,
       ).changes;
   }
@@ -80,16 +100,22 @@ export class ActivityService {
       inputPreview: update.inputPreview ?? existing?.input_preview ?? undefined,
       replyPreview: update.replyPreview ?? existing?.reply_preview ?? undefined,
       errorMessage: update.errorMessage ?? existing?.error_message ?? undefined,
+      errorCode:
+        update.errorCode ??
+        (update.errorMessage ? classifyActivityErrorCode(update.errorMessage) : undefined) ??
+        existing?.error_code ??
+        undefined,
     };
     this.db.prepare(`INSERT INTO zhiyuan_activity_runs (
-      id, source, status, started_at, updated_at, session_id, platform, conversation_id, task_name, input_preview, reply_preview, error_message
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, source, status, started_at, updated_at, session_id, platform, conversation_id, task_name, input_preview, reply_preview, error_message, error_code
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET source=excluded.source, status=excluded.status, started_at=excluded.started_at,
       updated_at=excluded.updated_at, session_id=excluded.session_id, platform=excluded.platform,
       conversation_id=excluded.conversation_id, task_name=excluded.task_name, input_preview=excluded.input_preview,
-      reply_preview=excluded.reply_preview, error_message=excluded.error_message`).run(
+      reply_preview=excluded.reply_preview, error_message=excluded.error_message, error_code=excluded.error_code`).run(
       run.id, run.source, run.status, run.startedAt, run.updatedAt, run.sessionId ?? null, run.platform ?? null,
-      run.conversationId ?? null, run.taskName ?? null, run.inputPreview ?? null, run.replyPreview ?? null, run.errorMessage ?? null,
+      run.conversationId ?? null, run.taskName ?? null, run.inputPreview ?? null, run.replyPreview ?? null,
+      run.errorMessage ?? null, run.errorCode ?? null,
     );
     for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send(ActivityIpc.Updated, run);
     return run;
@@ -108,6 +134,6 @@ export class ActivityService {
     return { id: row.id, source: row.source, status: row.status, startedAt: row.started_at, updatedAt: row.updated_at,
       sessionId: row.session_id ?? undefined, platform: row.platform ?? undefined, conversationId: row.conversation_id ?? undefined,
       taskName: row.task_name ?? undefined, inputPreview: row.input_preview ?? undefined, replyPreview: row.reply_preview ?? undefined,
-      errorMessage: row.error_message ?? undefined };
+      errorMessage: row.error_message ?? undefined, errorCode: row.error_code ?? undefined };
   }
 }

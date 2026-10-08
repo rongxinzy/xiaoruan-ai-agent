@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { i18nService } from './i18n';
-import { cleanErrorReason, normalizeError } from './errorNormalization';
+import {
+  appErrorTextFromStored,
+  cleanErrorReason,
+  normalizeError,
+} from './errorNormalization';
 
 describe('error normalization', () => {
   beforeEach(() => i18nService.setLanguage('zh', { persist: false }));
@@ -47,5 +51,47 @@ describe('error normalization', () => {
     expect(cleaned).not.toContain('secret.test');
     expect(cleaned).not.toContain('token');
     expect(cleaned).not.toContain('internal.js');
+  });
+});
+
+describe('stored error text (activity rows, run history, terminal bubbles)', () => {
+  beforeEach(() => i18nService.setLanguage('zh', { persist: false }));
+
+  test('translates the platform pool failure behind the reported activity row', () => {
+    expect(
+      appErrorTextFromStored(
+        '503: {"message":"No running instances available","code":503,"type":"ServiceUnavailable"}',
+      ),
+    ).toBe(i18nService.t('coworkErrorServerError'));
+  });
+
+  test('translates scheduler wording written by the main process', () => {
+    expect(appErrorTextFromStored('Scheduled task Pi run timed out after 3600000ms')).toBe(
+      i18nService.t('coworkErrorScheduledTaskTimeout'),
+    );
+    expect(appErrorTextFromStored('Scheduler interrupted before Pi completion')).toBe(
+      i18nService.t('coworkErrorSchedulerInterrupted'),
+    );
+  });
+
+  test('prefers the stored error code over the stored wording', () => {
+    expect(appErrorTextFromStored('anything at all', 'scheduled_task_timeout')).toBe(
+      i18nService.t('coworkErrorScheduledTaskTimeout'),
+    );
+  });
+
+  test('keeps text that is already Chinese untouched', () => {
+    const chinese = '无法连接 AISphere 平台，请检查平台地址和网络后重试。';
+    expect(appErrorTextFromStored(chinese)).toBe(chinese);
+  });
+
+  test('never returns English for an unclassified upstream message', () => {
+    const result = appErrorTextFromStored('Widget could not be loaded');
+    expect(result).toBe(i18nService.t('operationFailed'));
+    expect(/[A-Za-z]{4,}/.test(result)).toBe(false);
+  });
+
+  test('returns an empty string when nothing was stored', () => {
+    expect(appErrorTextFromStored(undefined)).toBe('');
   });
 });

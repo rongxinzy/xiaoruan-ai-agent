@@ -2170,6 +2170,9 @@ const translations: Record<LanguageType, Record<string, string>> = {
       '该会话使用的模型供应商已停用或模型已被移除。请到设置中重新启用供应商或切换其他模型后重试。',
     coworkErrorGatewayDisconnected: 'AI 引擎连接中断，请重试。如果问题持续，请尝试重启应用。',
     coworkErrorServiceRestart: 'AI 引擎正在重启，请稍后重试。',
+    coworkErrorScheduledTaskTimeout: '定时任务执行超时，本次运行已中止。请检查任务耗时或适当调整超时设置。',
+    coworkErrorSchedulerInterrupted:
+      '应用重启中断了本次运行；定时任务会在下次调度时重新执行。',
     coworkErrorGatewayDraining: 'AI 引擎正在重启中，请稍等片刻后重试。',
     coworkErrorNetworkError: '网络连接失败，请检查网络设置后重试。',
     coworkErrorRateLimit: '请求过于频繁，请稍后再试。',
@@ -5872,6 +5875,10 @@ const translations: Record<LanguageType, Record<string, string>> = {
     coworkErrorGatewayDisconnected:
       'AI engine connection lost. Please retry. If the issue persists, try restarting the app.',
     coworkErrorServiceRestart: 'AI engine is restarting. Please try again later.',
+    coworkErrorScheduledTaskTimeout:
+      'The scheduled task timed out and this run was stopped. Check how long it takes or raise its timeout.',
+    coworkErrorSchedulerInterrupted:
+      'The app restarted while this run was in progress; scheduled tasks run again on their next schedule.',
     coworkErrorGatewayDraining: 'AI engine is restarting. Please wait a moment and try again.',
     coworkErrorNetworkError:
       'Network connection failed. Please check your network settings and try again.',

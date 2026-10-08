@@ -30,6 +30,8 @@ import type {
 import type { Workspace } from '../../../shared/workspace';
 import { CoworkSessionSource } from '../../../shared/cowork/constants';
 import { i18nService } from '../../services/i18n';
+// 2026/10/08  提交失败正文走错误管道，界面不出现上游英文
+import { appErrorText } from '../../services/appErrorText';
 import { getLastPathSegment } from '../../utils/path';
 import { coworkService } from '../../services/cowork';
 import { scheduledTaskService } from '../../services/scheduledTask';
@@ -789,7 +791,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
         <Alert variant="destructive" className="mb-2">
           <CircleAlert />
           <AlertTitle>{i18nService.t('scheduledTasksFormSubmitError')}</AlertTitle>
-          <AlertDescription>{submitError}</AlertDescription>
+          <AlertDescription>{appErrorText(submitError)}</AlertDescription>
           <AlertAction>
             <Button
               type="button"

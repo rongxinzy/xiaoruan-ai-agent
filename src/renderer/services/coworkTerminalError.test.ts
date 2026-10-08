@@ -1,10 +1,11 @@
-import { describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 
 import { CoworkErrorKind, ENGINE_NOT_READY_CODE } from '../../common/coworkError';
 import type { CoworkMessage, CoworkSession } from '../types/cowork';
+import { extractUserFacingErrorMessage } from './errorNormalization';
+import { i18nService } from './i18n';
 import {
   createCoworkTerminalErrorMessage,
-  extractUserFacingErrorMessage,
   getTerminalErrorDisplayText,
   hasMatchingLatestTerminalError,
   isCoworkTerminalErrorMessage,
@@ -18,6 +19,8 @@ const sessionWithMessages = (messages: CoworkMessage[]): CoworkSession =>
   }) as CoworkSession;
 
 describe('cowork terminal errors', () => {
+  beforeEach(() => i18nService.setLanguage('zh', { persist: false }));
+
   test('creates a canonical system message that remains identifiable after reload', () => {
     const error = {
       kind: CoworkErrorKind.RateLimited,
@@ -104,7 +107,16 @@ describe('cowork terminal errors', () => {
       timestamp: 1,
     };
     expect(isCoworkTerminalErrorMessage(legacy)).toBe(true);
-    expect(getTerminalErrorDisplayText(legacy)).toBe(providerMessage);
+    // 2026/10/08  未分类的错误也要出中文：原文只进日志，不再贴进气泡
+    expect(getTerminalErrorDisplayText(legacy)).toBe(i18nService.t('operationFailed'));
+  });
+
+  test('shows the localized copy for a classified provider failure', () => {
+    const message = createCoworkTerminalErrorMessage(
+      { kind: CoworkErrorKind.ServerError, message: '503 service unavailable', raw: '503 service unavailable' },
+      7,
+    );
+    expect(getTerminalErrorDisplayText(message)).toBe(i18nService.t('coworkErrorServerError'));
   });
 
   test('extracts message from status-prefixed API error payloads', () => {

@@ -6,8 +6,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivitySource, ActivityStatus } from '../../../shared/activity/constants';
 import { PlatformRegistry, type Platform } from '../../../shared/platform';
 import { i18nService } from '../../services/i18n';
-// 2026/09/23 活动失败行复用对话侧的 JSON message 提取，避免直接展示原始 payload
-import { extractUserFacingErrorMessage } from '../../services/coworkTerminalError';
+// 2026/10/08  失败正文统一走错误管道：优先用主进程存的错误码，其次按原文分类，最后中文兜底
+import { appErrorTextFromStored } from '../../services/errorNormalization';
 import type { ActivityRun } from '../../../shared/activity/types';
 import { compactMarkdownClass } from '../compactMarkdownClass';
 import MarkdownContent from '../MarkdownContent';
@@ -42,7 +42,7 @@ const ActivityRunRow: React.FC<ActivityRunRowProps> = ({ run, animateEntrance })
   // 进行中/成功用 replyPreview；失败用提取后的 errorMessage
   const bodyText = isFailed
     ? run.errorMessage
-      ? extractUserFacingErrorMessage(run.errorMessage)
+      ? appErrorTextFromStored(run.errorMessage, run.errorCode)
       : i18nService.t('activityStatusFailed')
     : run.replyPreview?.trim() || '';
   const hasBody = bodyText.length > 0;

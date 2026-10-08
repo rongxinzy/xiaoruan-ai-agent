@@ -58,7 +58,23 @@ test('recovers interrupted running snapshots during startup', async () => {
       status: ActivityStatus.Failed,
       updatedAt: 20,
       errorMessage: 'Run was interrupted when the application closed.',
+      errorCode: 'scheduler_interrupted',
     }),
     expect.objectContaining({ id: 'done', status: ActivityStatus.Completed, updatedAt: 11 }),
   ]);
+});
+
+test('stores the classified code next to the raw failure wording', async () => {
+  const { ActivityService } = await import('./activityService');
+  const service = new ActivityService(new Database(':memory:'));
+  service.upsert({ id: 'timeout', source: ActivitySource.ScheduledTask, status: ActivityStatus.Failed, errorMessage: 'Scheduled task Pi run timed out after 3600000ms', updatedAt: 1 });
+  service.upsert({ id: 'platform', source: ActivitySource.ScheduledTask, status: ActivityStatus.Failed, errorMessage: '503: {"message":"No running instances available","code":503,"type":"ServiceUnavailable"}', updatedAt: 2 });
+  service.upsert({ id: 'chinese', source: ActivitySource.ScheduledTask, status: ActivityStatus.Failed, errorMessage: '无法连接 AISphere 平台，请检查平台地址。', updatedAt: 3 });
+
+  const runs = service.list();
+  expect(runs[2]).toMatchObject({ id: 'timeout', errorCode: 'scheduled_task_timeout' });
+  expect(runs[1]).toMatchObject({ id: 'platform', errorCode: 'server_error' });
+  // Already-localized copy stays unclassified so surfaces keep its own wording.
+  expect(runs[0]).toMatchObject({ id: 'chinese' });
+  expect(runs[0].errorCode).toBeUndefined();
 });

@@ -74,6 +74,8 @@ import {
   PasswordEncryptedPayload,
 } from '../services/encryption';
 import { i18nService, LanguageType } from '../services/i18n';
+// 2026/10/08  连接测试失败正文走错误管道，界面不出现上游英文
+import { appErrorText } from '../services/appErrorText';
 import { imService } from '../services/im';
 import { reconcileDefaultModelConfig } from '../services/modelConfigReconciliation';
 import { mergeDiscoveredProviderModels } from '../services/providerModelDiscovery';
@@ -2374,7 +2376,7 @@ const Settings: React.FC<SettingsProps> = ({
     const subject = modelLabel ?? providerLabel;
     const message = result.success
       ? `${subject}: ${i18nService.t('connectionSuccess')}`
-      : `${subject}: ${result.message}`;
+      : `${subject}: ${appErrorText(result.message, 'connectionFailed')}`;
     window.dispatchEvent(
       new CustomEvent('app:showToast', {
         detail: {

@@ -58,6 +58,10 @@ export const CoworkErrorKind = {
   MaxIterations: 'max_iterations',
   /** Service restart in progress */
   ServiceRestart: 'service_restart',
+  /** The scheduler aborted a scheduled task that exceeded its run budget */
+  ScheduledTaskTimeout: 'scheduled_task_timeout',
+  /** The app restarted while a scheduled task was running */
+  SchedulerInterrupted: 'scheduler_interrupted',
   /** PDF processing failure */
   CouldNotProcessPdf: 'could_not_process_pdf',
   /** Unclassified / unknown error */
@@ -144,7 +148,8 @@ const RULES: ErrorRule[] = [
   // ── Provider unavailable (disabled or model removed since the session ran) ──
   {
     kind: CoworkErrorKind.ProviderUnavailable,
-    pattern: /provider\s+\S.*\bis not enabled\b|no enabled provider found/i,
+    pattern:
+      /provider\s+\S.*\bis not enabled\b|no enabled provider found|no available model configured/i,
   },
 
   // ── Content filtered ────────────────────────────────────────────────────
@@ -198,7 +203,11 @@ const RULES: ErrorRule[] = [
   // ── Server ──────────────────────────────────────────────────────────────
   {
     kind: CoworkErrorKind.ServerError,
-    pattern: /internal.server.error|bad.gateway|service.unavailable|\b50[023]\b/i,
+    // `no running instance` is how the platform answers when its model pool is
+    // empty: the 503 body carries the wording without a status code in the
+    // unwrapped text, so match it here as well.
+    pattern:
+      /internal.server.error|bad.gateway|service.unavailable|no running instance|model validation failed|\b50[023]\b/i,
     extract: (error: string) => {
       const m = error.match(/\b(50[023])\b/);
       return m ? { statusCode: parseInt(m[1], 10) } : {};
@@ -217,7 +226,7 @@ const RULES: ErrorRule[] = [
     // An abort or a dropped stream. Deliberately narrow: matching a bare
     // "terminated" would swallow unrelated upstream wording.
     pattern:
-      /\baborted\b|operation was aborted|socket hang up|premature close|stream (?:was )?(?:closed|interrupted)|ECONNRESET/i,
+      /\baborted\b|operation was aborted|socket hang up|premature close|stream (?:was )?(?:closed|interrupted)|session stopped before completion|ECONNRESET/i,
   },
 
   // ── Turn timeout / truncated writes ─────────────────────────────────────
@@ -226,11 +235,25 @@ const RULES: ErrorRule[] = [
   // strings) classified instead of leaking English to the UI.
   {
     kind: CoworkErrorKind.TurnTimeout,
-    pattern: /produced no output for|turn exceeded .* without finishing|turn was stopped/i,
+    pattern:
+      /produced no output for|turn exceeded .* without finishing|turn was stopped|model validation timed out/i,
   },
   {
     kind: CoworkErrorKind.FileWriteTruncated,
     pattern: /file mutation payload was truncated|chunked-write guidance/i,
+  },
+
+  // ── Scheduled task (our own scheduler wording) ──────────────────────────
+  // Both messages are authored by the main process (piScheduledTaskExecutor,
+  // sqliteScheduledTaskStore) and land in the activity feed and run history, so
+  // they must classify into localized copy instead of leaking English.
+  {
+    kind: CoworkErrorKind.ScheduledTaskTimeout,
+    pattern: /scheduled task\b[^\n]*timed out/i,
+  },
+  {
+    kind: CoworkErrorKind.SchedulerInterrupted,
+    pattern: /scheduler interrupted|interrupted when the application closed/i,
   },
 
   // ── Tool timeout ────────────────────────────────────────────────────────
@@ -254,7 +277,8 @@ const RULES: ErrorRule[] = [
   // ── Engine not ready ────────────────────────────────────────────────────
   {
     kind: CoworkErrorKind.EngineNotReady,
-    pattern: /engine.*not.*ready|gateway.*not.*ready|not.*running/i,
+    pattern:
+      /engine.*not.*ready|gateway.*not.*ready|not.*running|store is not initialized|application config not found|compatibility proxy .*unavailable/i,
   },
 
   // ── Unknown (catch-all from upstream wrappers) ──────────────────────────
@@ -337,11 +361,13 @@ export function getErrorLogLevel(kind: CoworkErrorKind): ErrorLogLevel {
     case CoworkErrorKind.GatewayDisconnected:
     case CoworkErrorKind.GatewayDraining:
     case CoworkErrorKind.ServiceRestart:
+    case CoworkErrorKind.ScheduledTaskTimeout:
     case CoworkErrorKind.ToolTimeout:
       return 'warn';
 
     // Expected states — informational
     case CoworkErrorKind.EngineNotReady:
+    case CoworkErrorKind.SchedulerInterrupted:
     case CoworkErrorKind.MaxIterations:
       return 'info';
 
@@ -423,6 +449,10 @@ export function getUserErrorI18nKey(kind: CoworkErrorKind): string {
       return 'coworkErrorMaxIterations';
     case CoworkErrorKind.ServiceRestart:
       return 'coworkErrorServiceRestart';
+    case CoworkErrorKind.ScheduledTaskTimeout:
+      return 'coworkErrorScheduledTaskTimeout';
+    case CoworkErrorKind.SchedulerInterrupted:
+      return 'coworkErrorSchedulerInterrupted';
     case CoworkErrorKind.CouldNotProcessPdf:
       return 'coworkErrorCouldNotProcessPdf';
     case CoworkErrorKind.Unknown:
