@@ -90,6 +90,13 @@ export class ActivityService {
       const candidate = { ...current, ...update, startedAt: update.startedAt ?? current.startedAt, updatedAt: now };
       if (!shouldAcceptActivityUpdate(current, candidate)) return current;
     }
+    // 2026/10/08  界面只显示中文，原始英文只在日志里可查：每次写入新的失败文案记一条带上下文的 warn
+    const nextErrorMessage = update.errorMessage ?? existing?.error_message ?? undefined;
+    if (nextErrorMessage && nextErrorMessage !== existing?.error_message) {
+      console.warn(
+        `[Activity] run ${update.id} (${update.source}${update.taskName ? `/${update.taskName}` : ''}) reported: ${nextErrorMessage}`,
+      );
+    }
     const run: ActivityRun = {
       id: update.id, source: update.source, status: update.status,
       startedAt: update.startedAt ?? existing?.started_at ?? now, updatedAt: now,

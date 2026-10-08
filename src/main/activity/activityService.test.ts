@@ -64,6 +64,25 @@ test('recovers interrupted running snapshots during startup', async () => {
   ]);
 });
 
+test('logs the raw failure wording once per distinct message so the English stays retrievable', async () => {
+  const warnings: string[] = [];
+  const spy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+    warnings.push(args.map(String).join(' '));
+  });
+  try {
+    const { ActivityService } = await import('./activityService');
+    const service = new ActivityService(new Database(':memory:'));
+    service.upsert({ id: 'run', source: ActivitySource.ScheduledTask, status: ActivityStatus.Failed, taskName: '天气预报', errorMessage: 'No running instances available', updatedAt: 1 });
+    service.upsert({ id: 'run', source: ActivitySource.ScheduledTask, status: ActivityStatus.Failed, taskName: '天气预报', errorMessage: 'No running instances available', updatedAt: 2 });
+
+    const logged = warnings.filter(line => line.includes('No running instances available'));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('[Activity] run run (scheduledTask/天气预报) reported:');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
 test('stores the classified code next to the raw failure wording', async () => {
   const { ActivityService } = await import('./activityService');
   const service = new ActivityService(new Database(':memory:'));
