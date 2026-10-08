@@ -2171,8 +2171,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     coworkErrorGatewayDisconnected: 'AI 引擎连接中断，请重试。如果问题持续，请尝试重启应用。',
     coworkErrorServiceRestart: 'AI 引擎正在重启，请稍后重试。',
     coworkErrorScheduledTaskTimeout: '定时任务执行超时，本次运行已中止。请检查任务耗时或适当调整超时设置。',
-    coworkErrorSchedulerInterrupted:
-      '应用重启中断了本次运行；定时任务会在下次调度时重新执行。',
+    coworkErrorSchedulerInterrupted: '应用重启中断了本次定时任务运行；如需重试请手动运行或等待下次调度。',
+    coworkErrorAppInterrupted: '应用重启中断了本次运行。',
     coworkErrorGatewayDraining: 'AI 引擎正在重启中，请稍等片刻后重试。',
     coworkErrorNetworkError: '网络连接失败，请检查网络设置后重试。',
     coworkErrorRateLimit: '请求过于频繁，请稍后再试。',
@@ -5878,7 +5878,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     coworkErrorScheduledTaskTimeout:
       'The scheduled task timed out and this run was stopped. Check how long it takes or raise its timeout.',
     coworkErrorSchedulerInterrupted:
-      'The app restarted while this run was in progress; scheduled tasks run again on their next schedule.',
+      'The app restarted while this scheduled task was running. Run it again manually or wait for the next schedule.',
+    coworkErrorAppInterrupted: 'The app restarted while this run was in progress.',
     coworkErrorGatewayDraining: 'AI engine is restarting. Please wait a moment and try again.',
     coworkErrorNetworkError:
       'Network connection failed. Please check your network settings and try again.',

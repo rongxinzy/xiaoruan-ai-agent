@@ -85,6 +85,18 @@ describe('stored error text (activity rows, run history, terminal bubbles)', () 
     expect(appErrorTextFromStored(chinese)).toBe(chinese);
   });
 
+  test('sanitizes upstream Chinese text before showing it', () => {
+    const noisy =
+      '保存失败：{\\"token\\":\\"secret\\"} https://platform.test/a?token=secret C:\\Users\\me\\secret.json\n    at C:\\app\\main.js:10';
+    const result = appErrorTextFromStored(noisy);
+
+    expect(result.startsWith('保存失败')).toBe(true);
+    expect(result).not.toContain('platform.test');
+    expect(result).not.toContain('secret.json');
+    expect(result).not.toContain('main.js');
+    expect(result).not.toContain('token');
+  });
+
   test('never returns English for an unclassified upstream message', () => {
     const result = appErrorTextFromStored('Widget could not be loaded');
     expect(result).toBe(i18nService.t('operationFailed'));

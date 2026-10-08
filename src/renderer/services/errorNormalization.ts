@@ -179,7 +179,12 @@ export function appErrorTextFromStored(raw: string | undefined, storedKind?: str
       return i18nService.t(getUserErrorI18nKey(unwrappedKind));
     }
   }
-  if (CONTAINS_CJK.test(unwrapped)) return unwrapped;
+  if (CONTAINS_CJK.test(unwrapped)) {
+    // 我们自己的文案原样保留；上游的中文原文先清洗（URL、路径、堆栈、JSON 载荷、长度），
+    // 否则一段中文前缀会把后面的整条技术细节带进活动行、失败详情或气泡。
+    if (isLocalizedAppErrorText(unwrapped)) return unwrapped;
+    return cleanErrorReason(unwrapped) || i18nService.t('operationFailed');
+  }
   // 2026/10/08  持久化的失败文本（活动流、运行历史、终端气泡）不展示英文原文：
   // 分类不出时给中文通用句。原文可查两处：主进程写库时的 [Activity] warn 日志、
   // 以及数据库里的原始字段（如 zhiyuan_activity_runs.error_message）。

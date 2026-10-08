@@ -62,6 +62,8 @@ export const CoworkErrorKind = {
   ScheduledTaskTimeout: 'scheduled_task_timeout',
   /** The app restarted while a scheduled task was running */
   SchedulerInterrupted: 'scheduler_interrupted',
+  /** The app restarted while a run (any source) was in flight */
+  AppInterrupted: 'app_interrupted',
   /** PDF processing failure */
   CouldNotProcessPdf: 'could_not_process_pdf',
   /** Unclassified / unknown error */
@@ -253,7 +255,13 @@ const RULES: ErrorRule[] = [
   },
   {
     kind: CoworkErrorKind.SchedulerInterrupted,
-    pattern: /scheduler interrupted|interrupted when the application closed/i,
+    pattern: /scheduler interrupted/i,
+  },
+  {
+    // Written by ActivityService.recoverInterruptedRuns for rows of any source,
+    // so the copy must not promise another scheduled execution.
+    kind: CoworkErrorKind.AppInterrupted,
+    pattern: /interrupted when the application closed/i,
   },
 
   // ── Tool timeout ────────────────────────────────────────────────────────
@@ -368,6 +376,7 @@ export function getErrorLogLevel(kind: CoworkErrorKind): ErrorLogLevel {
     // Expected states — informational
     case CoworkErrorKind.EngineNotReady:
     case CoworkErrorKind.SchedulerInterrupted:
+    case CoworkErrorKind.AppInterrupted:
     case CoworkErrorKind.MaxIterations:
       return 'info';
 
@@ -453,6 +462,8 @@ export function getUserErrorI18nKey(kind: CoworkErrorKind): string {
       return 'coworkErrorScheduledTaskTimeout';
     case CoworkErrorKind.SchedulerInterrupted:
       return 'coworkErrorSchedulerInterrupted';
+    case CoworkErrorKind.AppInterrupted:
+      return 'coworkErrorAppInterrupted';
     case CoworkErrorKind.CouldNotProcessPdf:
       return 'coworkErrorCouldNotProcessPdf';
     case CoworkErrorKind.Unknown:

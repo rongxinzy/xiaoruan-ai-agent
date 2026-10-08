@@ -77,7 +77,7 @@ export class ActivityService {
         ActivityStatus.Failed,
         nowMs,
         'Run was interrupted when the application closed.',
-        CoworkErrorKind.SchedulerInterrupted,
+        CoworkErrorKind.AppInterrupted,
         ActivityStatus.Running,
       ).changes;
   }

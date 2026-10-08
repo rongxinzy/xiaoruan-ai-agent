@@ -97,8 +97,9 @@ test('scheduler wording written by the main process classifies into localized ki
   expect(classifyCoworkError('Scheduler interrupted before Pi completion').kind).toBe(
     CoworkErrorKind.SchedulerInterrupted,
   );
+  // Activity recovery covers every source, so it must not reuse the scheduler copy.
   expect(classifyCoworkError('Run was interrupted when the application closed.').kind).toBe(
-    CoworkErrorKind.SchedulerInterrupted,
+    CoworkErrorKind.AppInterrupted,
   );
   expect(
     classifyCoworkError('Scheduled task Pi session stopped before completion: session-1').kind,
@@ -114,6 +115,7 @@ test('a platform pool answer without a status code still classifies as ServerErr
 test('scheduler kinds expose log level and their own i18n keys', () => {
   expect(getErrorLogLevel(CoworkErrorKind.ScheduledTaskTimeout)).toBe('warn');
   expect(getErrorLogLevel(CoworkErrorKind.SchedulerInterrupted)).toBe('info');
+  expect(getErrorLogLevel(CoworkErrorKind.AppInterrupted)).toBe('info');
   expect(isTransient(CoworkErrorKind.ScheduledTaskTimeout)).toBe(false);
   expect(getUserErrorI18nKey(CoworkErrorKind.ScheduledTaskTimeout)).toBe(
     'coworkErrorScheduledTaskTimeout',
@@ -121,6 +123,7 @@ test('scheduler kinds expose log level and their own i18n keys', () => {
   expect(getUserErrorI18nKey(CoworkErrorKind.SchedulerInterrupted)).toBe(
     'coworkErrorSchedulerInterrupted',
   );
+  expect(getUserErrorI18nKey(CoworkErrorKind.AppInterrupted)).toBe('coworkErrorAppInterrupted');
 });
 
 test('config resolution wording from claudeSettings classifies instead of leaking English', () => {
