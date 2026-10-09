@@ -13,16 +13,6 @@ const offlineComponentValidatorPath = path.resolve(
 );
 
 describe('NSIS offline resource and local inference flow', () => {
-  test('checks the custom package installation directory during installer smoke', () => {
-    const smokeScript = fs.readFileSync(installerSmokeScriptPath, 'utf8');
-    const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8')) as { name: string };
-    const installDirectory = smokeScript.match(
-      /\$installRoot = Join-Path \$env:LOCALAPPDATA 'Programs\\([^']+)'/,
-    );
-    expect(installDirectory?.[1]).toBe(packageJson.name);
-    expect(smokeScript).not.toContain('zhiyuan-agent');
-  });
-
   test('declares the installer as DPI-aware for high-DPI displays', () => {
     const installerScript = fs.readFileSync(installerScriptPath, 'utf8');
 
@@ -50,10 +40,13 @@ describe('NSIS offline resource and local inference flow', () => {
     expect(
       installerScript.match(/-File "\$PLUGINSDIR\\validate-offline-components\.ps1"/g),
     ).toHaveLength(2);
+    expect(
+      installerScript.match(/-TimingLogPath "\$APPDATA\\XiaoruanAgent\\install-timing\.log"/g),
+    ).toHaveLength(2);
     expect(installerScript).toContain('-Mode cache');
     expect(installerScript).toContain('-Mode expand');
     expect(installerScript).toContain('component-${KEY}.cache-valid');
-    expect(installerScript).toContain('ComponentBatchHashFailed:');
+    expect(installerScript).not.toContain('ComponentBatchHashFailed');
     expect(installerScript).not.toContain('Get-FileHash -LiteralPath \\"$R2\\${SENTINEL}\\"');
     expect(installerScript).not.toContain('validate-component-archive.ps1');
     expect(installerScript).not.toContain('File /oname=win-resources.tar');
@@ -73,7 +66,55 @@ describe('NSIS offline resource and local inference flow', () => {
     expect(validatorScript).toContain("$value -and $value -ne '-'");
     expect(validatorScript).toContain("[ValidateSet('cache', 'expand')]");
     expect(validatorScript).toContain('Get-FileHash -LiteralPath $sentinel');
-    expect(validatorScript).toContain('Stop-WithCode 2 "hash-mismatch:$($component.Key)"');
+    // Full-archive hashing was removed: staged archives come from the
+    // installer payload and 7z verifies per-entry CRCs during extraction,
+    // while the sentinel hash plus manifest binding pin the content.
+    expect(validatorScript).not.toContain('Get-FileHash -LiteralPath $archivePath');
+    expect(validatorScript).not.toContain('hash-mismatch:');
+  });
+
+  test('measures component trees with long-path-safe enumeration', () => {
+    const validatorScript = fs.readFileSync(offlineComponentValidatorPath, 'utf8');
+
+    // Get-ChildItem is not long-path aware under Windows PowerShell 5.1 and
+    // throws DirectoryNotFoundException on trees deeper than 260 characters,
+    // so the measurement must go through .NET with an extended-length path.
+    expect(validatorScript).not.toContain('Get-ChildItem -LiteralPath $Root -Recurse');
+    expect(validatorScript).toContain(
+      '[System.IO.DirectoryInfo]::new((ConvertTo-LongPath $rootFull))',
+    );
+    expect(validatorScript).toContain(
+      "EnumerateFiles('*', [System.IO.SearchOption]::AllDirectories)",
+    );
+    expect(validatorScript).toContain(
+      "if ($Path.StartsWith('\\\\')) { return '\\\\?\\UNC\\' + $Path.Substring(2) }",
+    );
+    expect(validatorScript).toContain("return '\\\\?\\' + $Path");
+    // The completion record must stay excluded from the measurement.
+    expect(validatorScript).toContain('if ($file.FullName -eq $completeFull) { continue }');
+    expect(validatorScript.match(/Measure-ComponentTree \$target/g)).toHaveLength(2);
+    // The full audit is opt-in: re-walking every cached file on each upgrade
+    // costs minutes under real-time scanners, while the cheap checks already
+    // reject anything an interrupted install can produce.
+    expect(validatorScript).toContain('[switch]$DeepAudit');
+    expect(validatorScript).toContain(
+      '$measured = Measure-ComponentTree $target\n          if ($measured.FileCount',
+    );
+    // NSIS relays stdout into a single-line dialog and log field.
+    expect(validatorScript).toContain("Write-Output ($Message -replace '[\\r\\n]+', ' ')");
+  });
+
+  test('reports the failing component when offline component extraction fails', () => {
+    const installerScript = fs.readFileSync(installerScriptPath, 'utf8');
+    const failureBlock = installerScript.slice(
+      installerScript.indexOf('ComponentBatchExtractFailed:'),
+      installerScript.indexOf('ComponentBatchVerificationFailed:'),
+    );
+
+    expect(failureBlock).not.toContain('StrTrimNewLines');
+    expect(failureBlock).toContain('离线组件展开失败：$1。请检查磁盘空间或安全软件后重试。');
+    expect(failureBlock).not.toContain('"离线组件展开失败。请检查磁盘空间或安全软件后重试。"');
+    expect(failureBlock).toContain('Goto OfflineComponentInstallFailed');
   });
 
   test('uses per-user installation and rolls back pointer changes after normal failures', () => {
@@ -166,7 +207,7 @@ describe('NSIS offline resource and local inference flow', () => {
     expect(installerScript).not.toMatch(
       /^\s*FileOpen \$\d+ "\$APPDATA\\XiaoruanAgent\\install-timing\.log" a$/m,
     );
-    expect(installerScript.match(/!insertmacro OpenTimingLogForAppend \$[28]/g)).toHaveLength(11);
+    expect(installerScript.match(/!insertmacro OpenTimingLogForAppend \$[28]/g)).toHaveLength(15);
   });
 
   test('records optional local inference intent via an options checkbox instead of a popup', () => {
@@ -223,9 +264,142 @@ describe('NSIS offline resource and local inference flow', () => {
     expect(installerScript).toContain('Get-ChildItem -Path "$INSTDIR.old*"');
   });
 
+  test('stops processes by install-root path prefix so orphaned sidecars cannot block setup', () => {
+    const installerScript = fs.readFileSync(installerScriptPath, 'utf8');
+
+    expect(installerScript.indexOf('!macro StopAppProcesses')).toBeGreaterThan(-1);
+    expect(installerScript.indexOf('!macro StopAppProcesses')).toBeLessThan(
+      installerScript.indexOf('!macro customInit'),
+    );
+    expect(installerScript.match(/!insertmacro StopAppProcesses/g)).toHaveLength(3);
+
+    const macroStart = installerScript.indexOf('!macro StopAppProcesses');
+    const macroBlock = installerScript.slice(
+      macroStart,
+      installerScript.indexOf('!macroend', macroStart),
+    );
+    expect(macroBlock).toContain('Get-CimInstance Win32_Process');
+    expect(macroBlock).toContain('$$roots = @(\\"$INSTDIR\\"');
+    expect(macroBlock).toContain('$LOCALAPPDATA\\XiaoruanAgent\\runtimes');
+    expect(macroBlock).toContain('StartsWith($$roots[0]');
+    expect(macroBlock).toContain('StartsWith($$roots[1]');
+    expect(macroBlock).toContain('CurrentCultureIgnoreCase');
+    expect(macroBlock).toContain('Stop-Process -Id $$proc.ProcessId -Force');
+    // An in-place uninstaller runs from $INSTDIR and must not kill itself.
+    expect(macroBlock).toContain('GetCurrentProcessId');
+    expect(macroBlock).toContain('$$_.ProcessId -ne $$selfPid');
+
+    const customInitBlock = installerScript.slice(
+      installerScript.indexOf('!macro customInit'),
+      installerScript.indexOf('!macroend', installerScript.indexOf('!macro customInit')),
+    );
+    expect(customInitBlock).not.toContain('!insertmacro StopAppProcesses');
+    const prepareMacroStart = installerScript.indexOf('!macro PrepareExistingInstallForExtraction');
+    const prepareMacroBlock = installerScript.slice(
+      prepareMacroStart,
+      installerScript.indexOf('!macroend', prepareMacroStart),
+    );
+    expect(prepareMacroBlock).toContain('!insertmacro StopAppProcesses');
+    // Silent installs never show pages, so the committed-work macro must run
+    // straight from .onInit; interactive installs defer it to the page leave.
+    expect(customInitBlock).toContain('${If} ${Silent}');
+    expect(customInitBlock).toContain('!insertmacro PrepareExistingInstallForExtraction SILENT');
+    const pageLeaveStart = installerScript.indexOf('Function LocalInferencePageLeave');
+    const pageLeaveBlock = installerScript.slice(
+      pageLeaveStart,
+      installerScript.indexOf('FunctionEnd', pageLeaveStart),
+    );
+    expect(pageLeaveBlock).toContain(
+      '!insertmacro PrepareExistingInstallForExtraction INTERACTIVE',
+    );
+    // Re-preparing only when the directory changed keeps the guard useful when
+    // the user goes back, changes $INSTDIR and leaves again.
+    expect(prepareMacroBlock).toContain('${If} $preparedInstallRoot != $INSTDIR');
+    const customUnInitBlock = installerScript.slice(
+      installerScript.indexOf('!macro customUnInit'),
+      installerScript.indexOf('!macroend', installerScript.indexOf('!macro customUnInit')),
+    );
+    expect(customUnInitBlock).toContain('!insertmacro StopAppProcesses');
+
+    expect(installerScript).not.toContain('Stop-Process -Name 晓软智能体');
+    expect(installerScript).not.toContain('Get-Process node');
+  });
+
+  test('keeps every destructive pre-flight step out of the interactive init path', () => {
+    const installerScript = fs.readFileSync(installerScriptPath, 'utf8');
+    const customInitBlock = installerScript.slice(
+      installerScript.indexOf('!macro customInit'),
+      installerScript.indexOf('!macroend', installerScript.indexOf('!macro customInit')),
+    );
+
+    // Cancelling at any wizard page must leave the running application and
+    // its installation directory untouched; those steps only run once the
+    // user commits (see PrepareExistingInstallForExtraction).
+    for (const destructive of ['StopAppProcesses', 'Detaching previous application version']) {
+      expect(customInitBlock).not.toContain(destructive);
+    }
+    expect(customInitBlock).not.toContain('skill-migration-complete');
+
+    // The timing log appends across runs with an explicit run marker, and the
+    // previously uninstrumented application-files span gets its own marker.
+    expect(customInitBlock).toContain('phase=run-start');
+    expect(customInitBlock).toContain('!insertmacro OpenTimingLogForAppend $8');
+    expect(installerScript).not.toMatch(
+      /FileOpen \$8 "\$APPDATA\\XiaoruanAgent\\install-timing\.log" w/,
+    );
+    const customInstallBlock = installerScript.slice(
+      installerScript.indexOf('!macro customInstall'),
+      installerScript.indexOf('CustomInstallStartMarked:'),
+    );
+    expect(customInstallBlock).toContain('phase=custom-install-start app_files_ms=$R6');
+    // Long nsExec spans must stay visible to the user instead of freezing
+    // the progress page.
+    expect(installerScript).toContain('ShowInstDetails show');
+    expect(installerScript).not.toContain('ShowInstDetails nevershow');
+  });
+
+  test('distinguishes a locked install directory from a running app with translated messages', () => {
+    const installerScript = fs.readFileSync(installerScriptPath, 'utf8');
+
+    // A failed detach must be diagnosed: processes are counted first, and the
+    // retry dialog uses cause-specific LangStrings instead of the misleading
+    // electron-builder "cannot be closed" message. Labels carry the macro
+    // token because the macro is compiled once per invocation mode.
+    expect(installerScript).toContain('!macro CountInstallDirProcesses RESULT');
+    expect(installerScript).toContain('OldInstallDetachRetry_${TOKEN}');
+    expect(installerScript).toContain('!insertmacro CountInstallDirProcesses $R0');
+    expect(installerScript).toContain('MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(XR_APP_UNCLOSABLE)"');
+    expect(installerScript).toContain('MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(XR_DIR_OCCUPIED)"');
+    // Cancelling must leave the installer outright; Abort inside a page-leave
+    // callback would only cancel the page change.
+    const detachStart = installerScript.indexOf('Detaching previous application version');
+    const detachBlock = installerScript.slice(
+      detachStart,
+      installerScript.indexOf('!insertmacro ForgetOldInstallRegistry', detachStart),
+    );
+    expect(detachBlock).toContain('Quit');
+
+    // Messages ship translations for every installer language: zh-CN, zh-TW,
+    // and English for the remaining configured languages.
+    for (const message of ['XR_APP_UNCLOSABLE', 'XR_DIR_OCCUPIED']) {
+      for (const lcid of ['2052', '1028', '1033', '1041', '1042', '1036', '3082', '2058']) {
+        expect(installerScript).toContain(`LangString ${message} ${lcid} `);
+      }
+    }
+
+    // The detached previous version is unregistered so electron-builder skips
+    // the legacy uninstaller whose exit code 2 caused the misleading dialog;
+    // any uninstaller it still launches must not abort the installation.
+    expect(installerScript).toContain('!macro ForgetOldInstallRegistry');
+    expect(installerScript).toContain('!insertmacro ForgetOldInstallRegistry');
+    expect(installerScript).toContain('DeleteRegKey HKCU "${UNINSTALL_REGISTRY_KEY}"');
+    expect(installerScript).toContain('!macro customUnInstallCheck');
+    expect(installerScript).toContain('!macro customUnInstallCheckCurrentUser');
+  });
+
   test('detaches expanded runtime caches before deleting them asynchronously', () => {
     const installerScript = fs.readFileSync(installerScriptPath, 'utf8');
-    const uninstallBlock = installerScript.slice(installerScript.indexOf('!macro customUnInstall'));
+    const uninstallBlock = installerScript.slice(installerScript.indexOf('!macro customUnInstall\n'));
 
     expect(uninstallBlock).toContain('StrCpy $3 "$LOCALAPPDATA\\XiaoruanAgent\\runtimes"');
     expect(uninstallBlock).toContain('StrCpy $4 "$3.uninstall.$4"');
@@ -249,6 +423,16 @@ describe('NSIS offline resource and local inference flow', () => {
     ).toBeGreaterThan(
       smokeScript.indexOf("Invoke-Installer $uninstallers[0].FullName 'uninstall'"),
     );
+  });
+
+  test('checks the custom package installation directory during installer smoke', () => {
+    const smokeScript = fs.readFileSync(installerSmokeScriptPath, 'utf8');
+    const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8')) as { name: string };
+    const installDirectory = smokeScript.match(
+      /\$installRoot = Join-Path \$env:LOCALAPPDATA 'Programs\\([^']+)'/,
+    );
+    expect(installDirectory?.[1]).toBe(packageJson.name);
+    expect(smokeScript).not.toContain('zhiyuan-agent');
   });
 });
 
