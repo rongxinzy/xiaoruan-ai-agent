@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 export const CUSTOM_BUCKET = 'xiaoruan-releases';
 export const CUSTOM_PUBLIC_BASE_URL = 'https://pub-d84d8bc650334c12afc7ce47bc8fcdda.r2.dev';
 const CUSTOM_REPOSITORY = 'rongxinzy/xiaoruan-ai-agent';
-// The central signing pipeline in RongxinAI rebuilds and signs the Xiaoruan
-// package from a pinned Xiaoruan main commit, then uploads the result to R2.
+// The central signing pipeline rebuilds and signs the Xiaoruan package from a
+// pinned Xiaoruan main commit, then uploads the result to R2.
 const SIGNING_REPOSITORY = 'rongxinzy/RongxinAI';
 const PACKAGE_EXTENSIONS = new Set(['.exe', '.dmg', '.deb', '.appimage']);
 const MAX_OBJECT_BYTES = 5 * 1024 ** 3;
