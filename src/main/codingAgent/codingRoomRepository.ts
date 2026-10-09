@@ -137,6 +137,17 @@ export class CodingRoomRepository {
   getDatabase(): Database.Database {
     return this.db;
   }
+  /** Preserve live stream payloads when a bounded database window is published. */
+  overlayPendingStreamEvents(events: CodingEvent[]): CodingEvent[] {
+    if (this.pendingStreamWrites.size === 0 || events.length === 0) return events;
+    const pendingById = new Map(
+      [...this.pendingStreamWrites.values()].map(event => [event.id, event]),
+    );
+    return events.map(event => {
+      const pending = pendingById.get(event.id);
+      return pending ? { ...event, payload: pending.payload } : event;
+    });
+  }
   listRooms(): CodingRoom[] {
     return (
       this.db

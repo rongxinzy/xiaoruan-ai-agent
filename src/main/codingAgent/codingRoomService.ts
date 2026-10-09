@@ -189,7 +189,10 @@ export class CodingRoomService extends EventEmitter {
   ) {
     super();
     this.git = new CodingGitController(repository);
-    this.eventWindowReader = new CodingEventWindowReader(repository.getDatabase());
+    this.eventWindowReader = new CodingEventWindowReader(
+      repository.getDatabase(),
+      events => repository.overlayPendingStreamEvents(events),
+    );
     this.eventDeltaBatcher = new CodingEventDeltaBatcher(delta =>
       this.emit('eventDelta', delta),
     );

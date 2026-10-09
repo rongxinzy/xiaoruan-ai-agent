@@ -17,7 +17,11 @@ const rowEvent = (row: Record<string, unknown>): CodingEvent => ({
 });
 
 export class CodingEventWindowReader {
-  constructor(private readonly db: Database.Database) {}
+  constructor(
+    private readonly db: Database.Database,
+    private readonly overlayStreamEvents: (events: CodingEvent[]) => CodingEvent[] = events =>
+      events,
+  ) {}
 
   listRecent(laneIds: string[], pageSize = CodingEventWindowPageSize): {
     events: CodingEvent[];
@@ -49,7 +53,7 @@ export class CodingEventWindowReader {
         ? left.sequence - right.sequence
         : left.laneId.localeCompare(right.laneId),
     );
-    return { events, windows };
+    return { events: this.overlayStreamEvents(events), windows };
   }
 
   loadPage(
@@ -76,7 +80,7 @@ export class CodingEventWindowReader {
             )
             .all(laneId, beforeSequence, pageSize + 1) as Record<string, unknown>[]);
     const hasMore = rows.length > pageSize;
-    const events = rows.slice(0, pageSize).map(rowEvent).reverse();
+    const events = this.overlayStreamEvents(rows.slice(0, pageSize).map(rowEvent).reverse());
     return {
       laneId,
       events,
