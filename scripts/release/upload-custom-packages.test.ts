@@ -36,11 +36,16 @@ async function fixture() {
 test('rejects the original bucket, other repositories, PRs, and missing credentials', () => {
   for (const override of [
     { R2_BUCKET: 'zhiyuan-releases' },
-    { GITHUB_REPOSITORY: 'rongxinzy/RongxinAI' },
+    { GITHUB_REPOSITORY: 'rongxinzy/some-other-repo' },
     { GITHUB_REF: 'refs/pull/1/merge' },
     { AWS_SECRET_ACCESS_KEY: '' },
     { XIAORUAN_R2_ACCOUNT_ID: 'invalid' },
   ]) expect(() => uploadIdentity({ ...env, ...override })).toThrow();
+});
+
+test('accepts the central signing repository main branch', () => {
+  const identity = uploadIdentity({ ...env, GITHUB_REPOSITORY: 'rongxinzy/RongxinAI' });
+  expect(identity.prefix).toBe(`builds/${'a'.repeat(40)}/123/1`);
 });
 
 test('keeps each workflow run and rerun in a distinct immutable prefix', () => {

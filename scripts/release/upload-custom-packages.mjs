@@ -8,13 +8,22 @@ import { fileURLToPath } from 'node:url';
 export const CUSTOM_BUCKET = 'xiaoruan-releases';
 export const CUSTOM_PUBLIC_BASE_URL = 'https://pub-d84d8bc650334c12afc7ce47bc8fcdda.r2.dev';
 const CUSTOM_REPOSITORY = 'rongxinzy/xiaoruan-ai-agent';
+// The central signing pipeline rebuilds and signs the Xiaoruan package from a
+// pinned Xiaoruan main commit, then uploads the result to R2.
+const SIGNING_REPOSITORY = 'rongxinzy/RongxinAI';
 const PACKAGE_EXTENSIONS = new Set(['.exe', '.dmg', '.deb', '.appimage']);
 const MAX_OBJECT_BYTES = 5 * 1024 ** 3;
 
 export function uploadIdentity(env) {
   const sourceCommit = env.PACKAGE_SOURCE_COMMIT || env.GITHUB_SHA;
-  if (env.GITHUB_REPOSITORY !== CUSTOM_REPOSITORY || env.GITHUB_REF !== 'refs/heads/main') {
-    throw new Error('Custom package uploads require the Xiaoruan repository main branch');
+  const repository = env.GITHUB_REPOSITORY || '';
+  if (
+    (repository !== CUSTOM_REPOSITORY && repository !== SIGNING_REPOSITORY) ||
+    env.GITHUB_REF !== 'refs/heads/main'
+  ) {
+    throw new Error(
+      'Custom package uploads require the Xiaoruan or central signing repository main branch',
+    );
   }
   if (env.R2_BUCKET !== CUSTOM_BUCKET) throw new Error('Only xiaoruan-releases is allowed');
   if (!/^[a-f0-9]{32}$/.test(env.XIAORUAN_R2_ACCOUNT_ID || '')) {
