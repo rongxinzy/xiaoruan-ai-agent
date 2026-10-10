@@ -5,6 +5,108 @@
 !define ELEVATED_ACTION_SCRIPT "nsis-elevated-actions.ps1"
 !define ELEVATED_ACTION_RESULT "elevated-action-result.txt"
 
+; PrepareExistingInstallForExtraction is inserted from LocalInferencePageLeave,
+; which lives in this include file — ahead of multiUser.nsh, where electron-
+; builder defines these keys with the same /ifndef fallback values. Mirror the
+; defaults here so registry macros expand correctly at that earlier point.
+!define /ifndef INSTALL_REGISTRY_KEY "Software\${APP_GUID}"
+!define /ifndef UNINSTALL_REGISTRY_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}"
+
+; electron-builder's CHECK_APP_RUNNING treats any process whose image path
+; starts with $INSTDIR as "app still running". Sidecars (cc-connect,
+; llama-server, python, git) survive a force-killed main process, so kill by
+; install-root/runtime-cache path prefix instead of by process name; otherwise
+; orphaned sidecars keep the "cannot be closed" retry dialog up forever.
+; The caller itself is excluded: an in-place uninstaller runs from $INSTDIR.
+!macro StopAppProcesses
+  System::Call 'kernel32::GetCurrentProcessId()i .r9'
+  nsExec::ExecToLog 'powershell -NoProfile -NonInteractive -Command "\
+    $$roots = @(\"$INSTDIR\", \"$LOCALAPPDATA\XiaoruanAgent\runtimes\");\
+    $$selfPid = $9;\
+    $$isTarget = { param($$p) $$p -and ($$p.StartsWith($$roots[0], \"CurrentCultureIgnoreCase\") -or $$p.StartsWith($$roots[1], \"CurrentCultureIgnoreCase\")) };\
+    $$stopped = 0;\
+    foreach ($$proc in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$_.ProcessId -ne $$selfPid -and (& $$isTarget $$_.Path) })) {\
+      Stop-Process -Id $$proc.ProcessId -Force -ErrorAction SilentlyContinue;\
+      $$stopped += 1;\
+    };\
+    $$remaining = @();\
+    for ($$i = 0; $$i -lt 20; $$i++) {\
+      $$remaining = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$_.ProcessId -ne $$selfPid -and (& $$isTarget $$_.Path) });\
+      if ($$remaining.Count -eq 0) { break };\
+      Start-Sleep -Milliseconds 500;\
+    };\
+    Write-Output \"stopped=$$stopped remaining=$$($$remaining.Count)\""'
+  Pop $0
+!macroend
+
+; Counts processes whose image path starts with $INSTDIR (the count is the
+; PowerShell exit code, so no stdout parsing is needed). After a failed
+; detach this distinguishes "app still running" from "directory held by
+; another program" — electron-builder reports both as "cannot be closed".
+!macro CountInstallDirProcesses RESULT
+  nsExec::ExecToStack 'powershell -NoProfile -NonInteractive -Command "$$c = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $$_.Path -and $$_.Path.StartsWith(\"$INSTDIR\", \"CurrentCultureIgnoreCase\") }).Count; if ($$c -gt 200) { $$c = 200 }; exit $$c"'
+  Pop ${RESULT}
+  Pop $R0
+!macroend
+
+; electron-builder's uninstallOldVersion launches the previous uninstaller and
+; treats any non-zero exit as "cannot be closed", retrying five times before
+; quitting the install. The previous version is already detached (renamed
+; away) here, so that uninstaller is redundant — and when the detach could not
+; run, a locked file makes the old uninstaller exit with code 2, producing
+; exactly that misleading dialog. Remove the old registration so
+; uninstallOldVersion returns early; only entries pointing at $INSTDIR are
+; touched, an installation in a different directory keeps its entry and is
+; removed by electron-builder as usual.
+!macro ForgetOldInstallRegistry TOKEN
+  ReadRegStr $R7 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+  StrCmp $R7 "" ForgetOldInstallRegistry_Do_${TOKEN}
+  StrCmp $R7 $INSTDIR ForgetOldInstallRegistry_Do_${TOKEN} ForgetOldInstallRegistry_Done_${TOKEN}
+  ForgetOldInstallRegistry_Do_${TOKEN}:
+    SetRegView 64
+    DeleteRegKey HKCU "${UNINSTALL_REGISTRY_KEY}"
+    DeleteRegKey HKCU "${INSTALL_REGISTRY_KEY}"
+    DeleteRegKey HKLM "${UNINSTALL_REGISTRY_KEY}"
+    DeleteRegKey HKLM "${INSTALL_REGISTRY_KEY}"
+    SetRegView 32
+    DeleteRegKey HKCU "${UNINSTALL_REGISTRY_KEY}"
+    DeleteRegKey HKCU "${INSTALL_REGISTRY_KEY}"
+    DeleteRegKey HKLM "${UNINSTALL_REGISTRY_KEY}"
+    DeleteRegKey HKLM "${INSTALL_REGISTRY_KEY}"
+    SetRegView 64
+    !ifdef UNINSTALL_REGISTRY_KEY_2
+      SetRegView 32
+      DeleteRegKey HKCU "${UNINSTALL_REGISTRY_KEY_2}"
+      DeleteRegKey HKLM "${UNINSTALL_REGISTRY_KEY_2}"
+      SetRegView 64
+    !endif
+  ForgetOldInstallRegistry_Done_${TOKEN}:
+!macroend
+
+; Safety net for any path where electron-builder still runs the previous
+; uninstaller (e.g. it lives in a different install directory). The stock
+; handler quits the whole installation on a non-zero exit code after showing
+; the "cannot be closed" dialog — even when the failure is a locked file,
+; not a running process. Files the old uninstaller could not remove are
+; overwritten in place by the extraction that follows, so a failed legacy
+; uninstall must never abort the install.
+!macro customUnInstallCheck
+  IfErrors 0 +3
+    DetailPrint "[Installer] Previous uninstaller could not be launched; continuing with in-place upgrade"
+    Return
+  ${if} $R0 != 0
+    DetailPrint "[Installer] Previous uninstaller exited with code $R0; continuing with in-place upgrade"
+    !insertmacro OpenTimingLogForAppend $8
+    FileWrite $8 "phase=previous-uninstall-ignored exit=$R0$\r$\n"
+    FileClose $8
+  ${endIf}
+  Return
+!macroend
+
+!macro customUnInstallCheckCurrentUser
+  !insertmacro customUnInstallCheck
+!macroend
+
 ; electron-builder compiles the uninstaller before the installer. Its assisted
 ; template does not insert installation pages while BUILD_UNINSTALLER is set,
 ; so keep the page state and callbacks out of that compilation pass.
@@ -13,6 +115,7 @@ Var /GLOBAL installLocalInference
 Var /GLOBAL localInferenceDialog
 Var /GLOBAL localInferenceCheckbox
 Var /GLOBAL localInferenceLabel
+Var /GLOBAL preparedInstallRoot
 
 !macro OpenTimingLogForAppend HANDLE
   ; NSIS append mode preserves existing data but starts at offset zero.
@@ -23,6 +126,103 @@ Var /GLOBAL localInferenceLabel
 !macro ExtractElevatedActionScript
   SetOutPath "$PLUGINSDIR"
   File /oname=${ELEVATED_ACTION_SCRIPT} "${PROJECT_DIR}\scripts\nsis-elevated-actions.ps1"
+!macroend
+
+; Destructive pre-extraction steps: stop the running application, migrate
+; user-created Skills, detach the previous installation. They must NOT run
+; from .onInit — the wizard has not been shown yet, and a cancel on any page
+; would leave the user with a killed app and a renamed install directory.
+; Interactive installs run this when the options page is left (the user has
+; committed to installing); silent installs (/S, e.g. the auto-updater) skip
+; pages entirely, so .onInit invokes it directly. The prepared root is
+; remembered so returning to the directory page and leaving again only
+; re-runs the steps when the target directory actually changed.
+!macro PrepareExistingInstallForExtraction TOKEN
+  ${If} $preparedInstallRoot != $INSTDIR
+    StrCpy $preparedInstallRoot $INSTDIR
+
+    DetailPrint "[Installer] Stopping running 晓软智能体 processes"
+    System::Call 'kernel32::GetTickCount()i .r7'
+    !insertmacro StopAppProcesses
+    System::Call 'kernel32::GetTickCount()i .r6'
+    IntOp $5 $6 - $7
+    !insertmacro OpenTimingLogForAppend $8
+    FileWrite $8 "phase=process-stop-complete elapsed_ms=$5 exit=$0$\r$\n"
+    FileClose $8
+
+    DetailPrint "[Installer] Migrating user-created Skills"
+    System::Call 'kernel32::GetTickCount()i .r7'
+    nsExec::ExecToStack 'powershell -NoProfile -NonInteractive -Command "\
+      $$source = \"$INSTDIR\resources\SKILLs\";\
+      $$destination = \"$APPDATA\XiaoruanAgent\SKILLs\";\
+      $$config = Join-Path $$source \"skills.config.json\";\
+      if (Test-Path $$source) {\
+        New-Item -ItemType Directory -Path $$destination -Force | Out-Null;\
+        $$bundled = @(try {\
+          if (Test-Path $$config) {\
+            (Get-Content $$config -Raw | ConvertFrom-Json).defaults.PSObject.Properties.Name\
+          }\
+        } catch { });\
+        Get-ChildItem -Path $$source -Directory | Where-Object { $$bundled -notcontains $$_.Name } | ForEach-Object {\
+          $$target = Join-Path $$destination $$_.Name;\
+          if (-not (Test-Path $$target)) { Copy-Item -Path $$_.FullName -Destination $$target -Recurse -Force }\
+        };\
+      }"'
+    Pop $0
+    Pop $1
+    System::Call 'kernel32::GetTickCount()i .r6'
+    IntOp $5 $6 - $7
+    !insertmacro OpenTimingLogForAppend $8
+    FileWrite $8 "phase=skill-migration-complete elapsed_ms=$5 exit=$0 output=$1$\r$\n"
+    FileClose $8
+
+    ; Rename the old application quickly. Its directory junctions do not copy the
+    ; shared resource pack, and physical cleanup is delayed until installation ends.
+    DetailPrint "[Installer] Detaching previous application version"
+    System::Call 'kernel32::GetTickCount()i .r7'
+    OldInstallDetachRetry_${TOKEN}:
+    ${If} ${FileExists} "$INSTDIR\*.*"
+      System::Call 'kernel32::GetTickCount()i .r4'
+      StrCpy $3 "$INSTDIR.old.$4"
+      ClearErrors
+      Rename "$INSTDIR" "$3"
+      ${If} ${Errors}
+        ; A failed rename is a sharing violation, not a running app. Report the
+        ; actual cause instead of electron-builder's blanket "cannot be closed".
+        !insertmacro CountInstallDirProcesses $R0
+        ${If} $R0 > 0
+          DetailPrint "[Installer] Detach blocked by $R0 running app processes"
+          !insertmacro StopAppProcesses
+          MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(XR_APP_UNCLOSABLE)" /SD IDCANCEL IDRETRY OldInstallDetachRetry_${TOKEN}
+        ${Else}
+          DetailPrint "[Installer] Detach blocked: install directory is in use by another program"
+          MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(XR_DIR_OCCUPIED)" /SD IDCANCEL IDRETRY OldInstallDetachRetry_${TOKEN}
+        ${EndIf}
+        StrCpy $3 "result=detach-aborted processes=$R0"
+        !insertmacro OpenTimingLogForAppend $8
+        FileWrite $8 "phase=old-install-detach-aborted $3$\r$\n"
+        FileClose $8
+        ; Matches electron-builder's own cancel handling in CHECK_APP_RUNNING.
+        ; Abort would only cancel the page leave in interactive installs.
+        Quit
+      ${EndIf}
+      FileOpen $8 "$APPDATA\XiaoruanAgent\old-install-path.txt" w
+      FileWrite $8 "$3"
+      FileClose $8
+      StrCpy $3 "result=detached path=$3"
+    ${Else}
+      StrCpy $3 "result=no-previous-install"
+    ${EndIf}
+    System::Call 'kernel32::GetTickCount()i .r6'
+    IntOp $5 $6 - $7
+    !insertmacro OpenTimingLogForAppend $8
+    FileWrite $8 "phase=old-install-detached elapsed_ms=$5 $3$\r$\n"
+    FileClose $8
+    ; The old installation is detached or absent at this point; drop its
+    ; registration so electron-builder skips the redundant legacy uninstaller
+    ; whose exit code 2 would surface as a bogus "cannot be closed" dialog.
+    !insertmacro ForgetOldInstallRegistry ${TOKEN}
+  ${EndIf}
 !macroend
 
 !macro RunElevatedAction TOKEN ACTION TARGET
@@ -44,11 +244,74 @@ Var /GLOBAL localInferenceLabel
   ; The application and immutable runtime cache are per-user. Elevated helper
   ; processes are used only for the VC++ runtime installer below.
   RequestExecutionLevel user
-  ShowInstDetails nevershow
+  ; Long spans of this installer run inside nsExec helpers (process stop,
+  ; component validation and expansion). Hiding the details view leaves the
+  ; progress page motionless for minutes, which users read as a hang.
+  ShowInstDetails show
   ; NSIS startup CRC check reads the entire installer before the UI appears.
-  ; Every payload is already covered by per-component SHA-256 and 7z CRC, so
-  ; the extra full-file scan is redundant and slow for a multi-gigabyte exe.
+  ; Payload integrity is covered by per-entry 7z CRCs during extraction plus
+  ; sentinel SHA-256 verification, so the extra full-file scan is redundant.
   CRCCheck off
+  ; Detach-failure messages. electron-builder only knows "cannot be closed",
+  ; which blames a running app even when the blocker is a directory handle
+  ; held by another program (typically an Explorer window); keep the two
+  ; causes in separate, translated strings. LCIDs are numeric because the
+  ; LANG_* constants are not defined at this point in the generated script.
+  ; The build loads every bundled NSIS language, and makensis promotes an
+  ; unset-per-language LangString (warning 6040) to an error, so every
+  ; bundled language gets an entry; untranslated ones fall back to English.
+  LangString XR_APP_UNCLOSABLE 2052 "检测到晓软智能体进程仍在运行，且无法自动关闭。$\r$\n$\r$\n可能是以管理员身份运行的。请手动退出晓软智能体（右键点击任务栏托盘图标并选择退出），然后点击“重试”。"
+  LangString XR_APP_UNCLOSABLE 1028 "偵測到知遠處理程序仍在執行，且無法自動關閉。$\r$\n$\r$\n可能是以系統管理員身分執行的。請手動結束知遠（在工作列通知區域圖示上按一下右鍵並選擇結束），然後按一下「重試」。"
+  LangString XR_APP_UNCLOSABLE 1033 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1031 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1036 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 3082 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1041 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1042 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1040 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1043 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1030 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1053 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1044 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1035 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1049 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 2070 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1046 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1045 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1058 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1029 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1051 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1038 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1025 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1055 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1054 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_APP_UNCLOSABLE 1066 "Xiaoruan Agent is still running and could not be closed automatically.$\r$\n$\r$\nIt may have been started with administrator rights. Exit Xiaoruan Agent manually (right-click its system tray icon and choose Exit), then click Retry."
+  LangString XR_DIR_OCCUPIED 2052 "无法更新安装目录，目录正被其他程序占用。$\r$\n$\r$\n未检测到正在运行的晓软智能体进程。最常见的原因是文件资源管理器正在浏览该目录：$\r$\n$INSTDIR$\r$\n$\r$\n请关闭占用该目录的窗口或程序，然后点击“重试”。"
+  LangString XR_DIR_OCCUPIED 1028 "無法更新安裝目錄，目錄正被其他程式佔用。$\r$\n$\r$\n未偵測到正在執行的知遠處理程序。最常見的原因是檔案總管正在瀏覽該目錄：$\r$\n$INSTDIR$\r$\n$\r$\n請關閉佔用該目錄的視窗或程式，然後按一下「重試」。"
+  LangString XR_DIR_OCCUPIED 1033 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1031 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1036 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 3082 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1041 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1042 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1040 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1043 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1030 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1053 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1044 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1035 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1049 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 2070 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1046 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1045 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1058 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1029 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1051 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1038 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1025 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1055 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1054 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
+  LangString XR_DIR_OCCUPIED 1066 "The installation directory cannot be updated because it is in use by another program.$\r$\n$\r$\nNo running Xiaoruan Agent process was detected. The most common cause is a File Explorer window browsing this directory:$\r$\n$INSTDIR$\r$\n$\r$\nClose the window or program using this directory, then click Retry."
 !macroend
 
 !macro customWelcomePage
@@ -87,6 +350,9 @@ FunctionEnd
 
 Function LocalInferencePageLeave
   ${NSD_GetState} $localInferenceCheckbox $installLocalInference
+  ; Leaving the options page commits the user to installing, so the
+  ; destructive pre-extraction steps run here rather than in .onInit.
+  !insertmacro PrepareExistingInstallForExtraction INTERACTIVE
 FunctionEnd
 
 !macro customPageAfterChangeDir
@@ -101,72 +367,22 @@ FunctionEnd
   FileOpen $8 "$APPDATA\XiaoruanAgent\install-start-tick.txt" w
   FileWrite $8 "$9"
   FileClose $8
-  FileOpen $8 "$APPDATA\XiaoruanAgent\install-timing.log" w
-  FileWrite $8 "phase=custom-init-start tick_ms=$9 instdir=$INSTDIR$\r$\n"
+  ; The timing log appends across runs (bounded by the run-start markers) so
+  ; repeated install attempts on a user machine stay diagnosable.
+  StrCpy $5 "interactive"
+  ${If} ${Silent}
+    StrCpy $5 "silent"
+  ${EndIf}
+  !insertmacro OpenTimingLogForAppend $8
+  FileWrite $8 "phase=run-start tick_ms=$9 mode=$5 instdir=$INSTDIR$\r$\n"
   FileClose $8
 
-  DetailPrint "[Installer] Stopping running 晓软智能体 processes"
-  System::Call 'kernel32::GetTickCount()i .r7'
-  nsExec::ExecToLog 'powershell -NoProfile -NonInteractive -Command "\
-    Stop-Process -Name 晓软智能体 -Force -ErrorAction SilentlyContinue;\
-    Get-Process node -ErrorAction SilentlyContinue | Where-Object { $$_.Path -like \"*XiaoruanAgent*\" -or $$_.Path -like \"*晓软智能体*\" } | Stop-Process -Force -ErrorAction SilentlyContinue;\
-    for ($$i = 0; $$i -lt 15; $$i++) {\
-      $$appProcesses = @(Get-Process -Name 晓软智能体 -ErrorAction SilentlyContinue);\
-      $$nodeProcesses = @(Get-Process node -ErrorAction SilentlyContinue | Where-Object { $$_.Path -like \"*XiaoruanAgent*\" -or $$_.Path -like \"*晓软智能体*\" });\
-      if (($$appProcesses.Count + $$nodeProcesses.Count) -eq 0) { break };\
-      Start-Sleep -Milliseconds 500;\
-    }"'
-  Pop $0
-  System::Call 'kernel32::GetTickCount()i .r6'
-  IntOp $5 $6 - $7
-  !insertmacro OpenTimingLogForAppend $8
-  FileWrite $8 "phase=process-stop-complete elapsed_ms=$5 exit=$0$\r$\n"
-  FileClose $8
-
-  DetailPrint "[Installer] Migrating user-created Skills"
-  System::Call 'kernel32::GetTickCount()i .r7'
-  nsExec::ExecToStack 'powershell -NoProfile -NonInteractive -Command "\
-    $$source = \"$INSTDIR\resources\SKILLs\";\
-    $$destination = \"$APPDATA\XiaoruanAgent\SKILLs\";\
-    $$config = Join-Path $$source \"skills.config.json\";\
-    if (Test-Path $$source) {\
-      New-Item -ItemType Directory -Path $$destination -Force | Out-Null;\
-      $$bundled = @(try {\
-        if (Test-Path $$config) {\
-          (Get-Content $$config -Raw | ConvertFrom-Json).defaults.PSObject.Properties.Name\
-        }\
-      } catch { });\
-      Get-ChildItem -Path $$source -Directory | Where-Object { $$bundled -notcontains $$_.Name } | ForEach-Object {\
-        $$target = Join-Path $$destination $$_.Name;\
-        if (-not (Test-Path $$target)) { Copy-Item -Path $$_.FullName -Destination $$target -Recurse -Force }\
-      };\
-    }"'
-  Pop $0
-  Pop $1
-  System::Call 'kernel32::GetTickCount()i .r6'
-  IntOp $5 $6 - $7
-  !insertmacro OpenTimingLogForAppend $8
-  FileWrite $8 "phase=skill-migration-complete elapsed_ms=$5 exit=$0 output=$1$\r$\n"
-  FileClose $8
-
-  ; Rename the old application quickly. Its directory junctions do not copy the
-  ; shared resource pack, and physical cleanup is delayed until installation ends.
-  DetailPrint "[Installer] Detaching previous application version"
-  System::Call 'kernel32::GetTickCount()i .r7'
-  IfFileExists "$INSTDIR\*.*" 0 OldInstallDetachDone
-    System::Call 'kernel32::GetTickCount()i .r4'
-    StrCpy $3 "$INSTDIR.old.$4"
-    Rename "$INSTDIR" "$3"
-    IfErrors OldInstallDetachDone
-    FileOpen $8 "$APPDATA\XiaoruanAgent\old-install-path.txt" w
-    FileWrite $8 "$3"
-    FileClose $8
-  OldInstallDetachDone:
-  System::Call 'kernel32::GetTickCount()i .r6'
-  IntOp $5 $6 - $7
-  !insertmacro OpenTimingLogForAppend $8
-  FileWrite $8 "phase=old-install-detached elapsed_ms=$5 path=$3$\r$\n"
-  FileClose $8
+  ; Silent installs never show pages, so no leave callback will fire; prepare
+  ; for extraction right here. Interactive installs defer the same steps to
+  ; the options-page leave, after the user has committed to installing.
+  ${If} ${Silent}
+    !insertmacro PrepareExistingInstallForExtraction SILENT
+  ${EndIf}
 !macroend
 
 !macro StageOfflineComponentMetadata KEY
@@ -213,6 +429,19 @@ FunctionEnd
 !macro customInstall
   CreateDirectory "$APPDATA\XiaoruanAgent"
   CreateDirectory "$LOCALAPPDATA\XiaoruanAgent\runtimes"
+  ; Marks the end of the application file extraction span (customInit up to
+  ; here is otherwise uninstrumented, which hid the slowest phase on user
+  ; machines behind a motionless progress page).
+  FileOpen $2 "$APPDATA\XiaoruanAgent\install-start-tick.txt" r
+  IfErrors CustomInstallStartMarked
+  FileRead $2 $R5
+  FileClose $2
+  System::Call 'kernel32::GetTickCount()i .r6'
+  IntOp $R6 $6 - $R5
+  !insertmacro OpenTimingLogForAppend $2
+  FileWrite $2 "phase=custom-install-start app_files_ms=$R6$\r$\n"
+  FileClose $2
+  CustomInstallStartMarked:
   SetOutPath "$PLUGINSDIR"
   !insertmacro ExtractElevatedActionScript
   File /oname=7za.exe "${PROJECT_DIR}\node_modules\7zip-bin\win\x64\7za.exe"
@@ -251,7 +480,7 @@ FunctionEnd
 
   ; Verify all reusable cache entries in one PowerShell process before deciding
   ; which archives NSIS needs to unpack from the installer.
-  nsExec::ExecToStack 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\validate-offline-components.ps1" -Mode cache -PluginDir "$PLUGINSDIR" -RuntimeRoot "$LOCALAPPDATA\XiaoruanAgent\runtimes" -ComponentTargetsPath "$PLUGINSDIR\component-targets.json" -SevenZipPath "$PLUGINSDIR\7za.exe"'
+  nsExec::ExecToStack 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\validate-offline-components.ps1" -Mode cache -PluginDir "$PLUGINSDIR" -RuntimeRoot "$LOCALAPPDATA\XiaoruanAgent\runtimes" -ComponentTargetsPath "$PLUGINSDIR\component-targets.json" -SevenZipPath "$PLUGINSDIR\7za.exe" -TimingLogPath "$APPDATA\XiaoruanAgent\install-timing.log"'
   Pop $0
   Pop $1
   StrCmp $0 "0" ComponentCacheValidated
@@ -267,29 +496,29 @@ FunctionEnd
   !insertmacro QueueOfflineComponent SKILL_PYTHON "skill-python" "Skill Python dependency layer"
   !insertmacro QueueOfflineComponent UV "uv" "uv 离线运行环境"
 
-  ; The changed archives are now present in $PLUGINSDIR. Validate their hashes,
-  ; entries and sentinels, then extract them in one PowerShell batch. This keeps
-  ; cache hits fast while eliminating a PowerShell startup per component.
+  ; The changed archives are now present in $PLUGINSDIR. Validate their entries
+  ; and sentinels, then extract them in one PowerShell batch. This keeps cache
+  ; hits fast while eliminating a PowerShell startup per component; the
+  ; per-component phases land in the timing log via -TimingLogPath.
   DetailPrint "[Installer] Validating and expanding offline components"
-  nsExec::ExecToStack 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\validate-offline-components.ps1" -Mode expand -PluginDir "$PLUGINSDIR" -RuntimeRoot "$LOCALAPPDATA\XiaoruanAgent\runtimes" -ComponentTargetsPath "$PLUGINSDIR\component-targets.json" -SevenZipPath "$PLUGINSDIR\7za.exe"'
+  nsExec::ExecToStack 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\validate-offline-components.ps1" -Mode expand -PluginDir "$PLUGINSDIR" -RuntimeRoot "$LOCALAPPDATA\XiaoruanAgent\runtimes" -ComponentTargetsPath "$PLUGINSDIR\component-targets.json" -SevenZipPath "$PLUGINSDIR\7za.exe" -TimingLogPath "$APPDATA\XiaoruanAgent\install-timing.log"'
   Pop $0
   Pop $1
   StrCmp $0 "0" ComponentBatchExpanded
-  StrCmp $0 "2" ComponentBatchHashFailed
   StrCmp $0 "3" ComponentBatchArchiveUnsafe
   StrCmp $0 "4" ComponentBatchExtractFailed
   StrCmp $0 "5" ComponentBatchVerificationFailed
     StrCpy $R9 "离线组件批处理失败：$1"
     Goto OfflineComponentInstallFailed
 
-  ComponentBatchHashFailed:
-    StrCpy $R9 "离线组件归档 SHA-256 校验失败，安装包可能不完整。"
-    Goto OfflineComponentInstallFailed
   ComponentBatchArchiveUnsafe:
     StrCpy $R9 "离线组件归档包含不安全路径或链接元数据。"
     Goto OfflineComponentInstallFailed
   ComponentBatchExtractFailed:
-    StrCpy $R9 "离线组件展开失败。请检查磁盘空间或安全软件后重试。"
+    ; Keep the failing component key and the 7za exit code or exception detail
+    ; from the validator in the dialog and the install timing log. The validator
+    ; already folds newlines, so $1 is a single line.
+    StrCpy $R9 "离线组件展开失败：$1。请检查磁盘空间或安全软件后重试。"
     Goto OfflineComponentInstallFailed
   ComponentBatchVerificationFailed:
     StrCpy $R9 "离线组件健康检查失败，哨兵文件缺失或校验不匹配。"
@@ -558,10 +787,8 @@ FunctionEnd
 !macroend
 
 !macro customUnInit
-  nsExec::ExecToLog 'powershell -NoProfile -NonInteractive -Command "\
-    Stop-Process -Name 晓软智能体 -Force -ErrorAction SilentlyContinue;\
-    Get-Process node -ErrorAction SilentlyContinue | Where-Object { $$_.Path -like \"*XiaoruanAgent*\" -or $$_.Path -like \"*晓软智能体*\" } | Stop-Process -Force -ErrorAction SilentlyContinue"'
-  Pop $0
+  DetailPrint "[Uninstaller] Stopping running 晓软智能体 processes"
+  !insertmacro StopAppProcesses
 !macroend
 
 !macro customUnInstall
